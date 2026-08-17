@@ -193,7 +193,7 @@ if (curl_errno($ch)) {
 }
 curl_close($ch);
 ?>
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="es">
 <head>
     <meta charset="UTF-8">

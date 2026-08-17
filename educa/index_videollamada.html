@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Videoconferencia, Chat y Pizarra</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="../images/ico.png">
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    
+    <!-- Estilos Unificados -->
+    <style>
+        .video-wrapper:-webkit-full-screen { width: 100%; height: 100%; background: #0f172a; }
+        .video-wrapper:-moz-full-screen { width: 100%; height: 100%; background: #0f172a; }
+        .video-wrapper:fullscreen { width: 100%; height: 100%; background: #0f172a; }
+        .resizable-video-container { transition: width 0.1s ease; }
+    </style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-between p-4">
+
+    <!-- Cabecera y Notas Informativas -->
+    <header class="w-full max-w-6xl text-center py-4 flex flex-col gap-4">
+        <div id="alert-box-pc" class="bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs sm:text-sm p-3 rounded-xl text-left flex flex-col gap-1 shadow-md relative">
+            <div class="flex items-start justify-between gap-2">
+                <span class="font-semibold flex items-center gap-1.5 text-amber-300">
+                    ⚠️ Nota importante (PC): Si no se activa su Cámara o Micrófono:
+                </span>
+                <button onclick="cerrarAlerta('alert-box-pc')" class="text-amber-300 hover:text-white font-bold text-base px-1.5 py-0.5 rounded transition cursor-pointer leading-none" title="Cerrar advertencia">×</button>
+            </div>
+            <p>
+                Para activar la cámara y el micrófono en Chrome, ingrese a 
+                <a href="chrome://flags/#unsafely-treat-insecure-origin-as-secure" target="_blank" class="text-blue-400 underline hover:text-blue-300 font-mono font-medium">chrome://flags/#unsafely-treat-insecure-origin-as-secure</a> 
+                en el explorador. Verás una opción resaltada llamada <strong>"Insecure origins treated as secure"</strong>. Cámbiala a <strong>Enabled (Habilitado)</strong>. Aparecerá un cuadro de texto abajo: escribe la dirección exacta de tu servidor y da clic en reiniciar.
+            </p>
+        </div>
+
+        
+    </header>
+
+    <!-- Contenedor Principal -->
+    <main class="w-full max-w-6xl flex-1 flex flex-col items-center justify-center">
+
+        <!-- Vista de Sala -->
+        <div id="room-container" class="w-full hidden flex flex-col gap-4">
+            
+            <!-- Barra de Enlace -->
+            <div class="bg-slate-800 p-3 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-2 border border-slate-700">
+                <div class="flex items-center gap-2 w-full sm:w-auto flex-1">
+                    <span class="text-xs text-slate-400 shrink-0">Enlace de la sala:</span>
+                    <input type="text" id="share-link" readonly class="bg-slate-900 text-blue-300 text-sm px-3 py-1 rounded w-full sm:w-auto flex-1 border border-slate-700 select-all">
+                </div>
+                <div class="flex items-center gap-2">
+                    <div id="recording-indicator" class="hidden items-center gap-2 bg-red-500/20 border border-red-500/40 text-red-300 px-3 py-1 rounded text-xs font-medium animate-pulse">
+                        <span class="w-2.5 h-2.5 rounded-full bg-red-500">Grabando...</span>
+                        <span id="recording-timer">00:00</span>
+                    </div>
+                    <button onclick="copiarEnlace()" class="bg-blue-600 hover:bg-blue-500 px-4 py-1.5 text-sm font-medium rounded transition cursor-pointer">Copiar Enlace</button>
+                </div>
+            </div>
+
+            <!-- Contenido Principal -->
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 w-full">
+                
+                <div id="video-grid" class="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 w-full content-start">
+                    <div id="container-local" class="video-wrapper resizable-video-container relative bg-slate-800 rounded-xl overflow-hidden aspect-video shadow-lg border border-slate-700 flex items-center justify-center">
+                        <video id="local-video" autoplay muted playsinline class="w-full h-full object-cover"></video>
+                        <div class="absolute top-2 left-2 flex items-center gap-1.5 bg-black/50 px-2 py-1 rounded-lg backdrop-blur z-20">
+                            <span class="text-[10px] text-slate-300">Tamaño:</span>
+                            <input type="range" min="200" max="1000" value="400" oninput="ajustarTamanoVideo('container-local', this.value)" class="w-16 h-1 accent-blue-500 cursor-pointer">
+                        </div>
+                        <button onclick="toggleFullScreen('container-local')" class="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full backdrop-blur z-10 transition cursor-pointer" title="Pantalla completa">⛶</button>
+                        <span id="local-label" class="absolute bottom-2 left-2 bg-black/60 text-xs px-2 py-1 rounded backdrop-blur">Tú</span>
+                        <div class="absolute bottom-2 right-2 flex items-end gap-0.5 h-4 bg-black/60 px-2 py-1 rounded backdrop-blur">
+                            <span class="w-1 bg-slate-500 rounded-full transition-all duration-75 h-1" id="local-bar-1"></span>
+                            <span class="w-1 bg-slate-500 rounded-full transition-all duration-75 h-1" id="local-bar-2"></span>
+                            <span class="w-1 bg-slate-500 rounded-full transition-all duration-75 h-1" id="local-bar-3"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel Lateral: Participantes, Archivos y Chat -->
+                <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 flex flex-col h-[600px] lg:h-auto gap-4 lg:col-span-2">
+                    
+                    <!-- Pestañas de Navegación del Panel Lateral -->
+                    <div class="flex border-b border-slate-700 pb-2 gap-2">
+                        <button onclick="cambiarPestana('participantes')" id="tab-btn-participantes" class="bg-blue-600 text-xs px-3 py-1.5 rounded-lg font-medium transition cursor-pointer flex-1">👥 Participantes (<span id="participant-count">1</span>)</button>
+                        <button onclick="cambiarPestana('archivos')" id="tab-btn-archivos" class="bg-slate-700 hover:bg-slate-600 text-xs px-3 py-1.5 rounded-lg font-medium transition cursor-pointer flex-1">📁 Archivos</button>
+                        <button onclick="cambiarPestana('chat')" id="tab-btn-chat" class="bg-slate-700 hover:bg-slate-600 text-xs px-3 py-1.5 rounded-lg font-medium transition cursor-pointer flex-1">💬 Chat</button>
+                    </div>
+
+                    <!-- Contenido 1: Participantes -->
+                    <div id="panel-participantes" class="flex flex-col flex-1 overflow-y-auto space-y-2 pr-1">
+                        <ul id="participants-list" class="space-y-2">
+                            <li class="flex items-center justify-between text-sm bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                                <div class="flex items-center gap-2 truncate">
+                                    <div class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></div>
+                                    <span class="truncate" id="self-display-name">Tú</span>
+                                </div>
+                                <div class="flex items-center gap-1.5 text-xs text-slate-400 shrink-0">
+                                    <span id="self-mic-status">🎤</span>
+                                    <span id="self-cam-status">📹</span>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Contenido 2: Archivos (Oculto por defecto) -->
+                    <div id="panel-archivos" class="hidden flex flex-col flex-1 gap-2">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs text-slate-400">Archivos en la sala</span>
+                            <label class="bg-blue-600 hover:bg-blue-500 text-xs px-2.5 py-1.5 rounded font-medium transition cursor-pointer flex items-center gap-1">
+                                <span>➕ Subir Archivo</span>
+                                <input type="file" id="file-input" onchange="manejarSeleccionArchivo(event)" class="hidden">
+                            </label>
+                        </div>
+                        <div id="files-list" class="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
+                            <span class="text-slate-500 italic">No hay archivos compartidos aún.</span>
+                        </div>
+                    </div>
+
+                    <!-- Contenido 3: Chat Grupal (Oculto por defecto) -->
+                    <div id="panel-chat" class="hidden flex flex-col flex-1 justify-between gap-2">
+                        <div id="chat-messages" class="flex-1 overflow-y-auto space-y-2 pr-1 text-xs bg-slate-900/40 p-2 rounded border border-slate-700/50 flex flex-col">
+                            <span class="text-slate-500 italic text-center my-auto">El chat está vacío. ¡Envía un saludo!</span>
+                        </div>
+                        <div class="flex gap-2 mt-1">
+                            <input type="text" id="chat-input" placeholder="Escribe un mensaje..." onkeydown="if(event.key === 'Enter') enviarMensajeChat()" class="bg-slate-900 text-white text-xs px-3 py-2 rounded-lg border border-slate-700 outline-none focus:border-blue-500 flex-1">
+                            <button onclick="enviarMensajeChat()" class="bg-blue-600 hover:bg-blue-500 text-xs px-4 py-2 rounded-lg font-medium transition cursor-pointer">Enviar</button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Controles de la llamada -->
+            <div class="flex justify-center gap-4 mt-4 flex-wrap">
+                <button onclick="toggleAudio()" id="btn-audio" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-full font-medium transition cursor-pointer">Silenciar</button>
+                <button onclick="toggleVideo()" id="btn-video" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-full font-medium transition cursor-pointer">Apagar Cámara</button>
+                <button onclick="toggleScreenShare()" id="btn-screen" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-full font-medium transition cursor-pointer">🖥️ Pantalla</button>
+                <button onclick="toggleRecording()" id="btn-record" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-full font-medium transition cursor-pointer">🔴 Grabar</button>
+                <button onclick="abrirPizarra()" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-full font-medium transition cursor-pointer">🎨 Abrir Pizarra</button>
+                <button onclick="colgarLlamada()" class="bg-red-600 hover:bg-red-500 px-6 py-2 rounded-full font-medium transition cursor-pointer">Salir</button>
+            </div>
+        </div>
+
+        <!-- Vista de Inicio -->
+        <div id="lobby-container" class="bg-slate-800 p-8 rounded-2xl shadow-xl flex flex-col items-center gap-6 max-w-md w-full border border-slate-700 text-center">
+            <div>
+		    <img src="educa.png" width="840" height="834" alt=""/> </div>
+            <div>
+                <h2 id="lobby-title" class="text-xl font-semibold">Crea una sala de videoconferencia</h2>
+                <p id="lobby-desc" class="text-slate-400 text-sm mt-1">Ingresa tu nombre para iniciar.</p>
+            </div>
+            <div class="w-full flex flex-col gap-1 text-left">
+                <label class="text-xs text-slate-400 font-medium">Tu Nombre:</label>
+                <input type="text" id="user-name-input" placeholder="Ej. Juan Pérez" class="bg-slate-900 text-white text-sm px-3 py-2 rounded-xl border border-slate-700 outline-none focus:border-blue-500">
+            </div>
+            <button id="lobby-btn" onclick="manejarAccionLobby()" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-semibold transition cursor-pointer shadow-lg shadow-blue-600/30">
+                Crear Nueva Sala
+            </button>
+        </div>
+
+    </main>
+
+    <footer class="text-xs text-slate-500 py-4"></footer>
+
+    <!-- LOGICA JS CENTRALIZADA -->
+    <script>
+        let peer; let myStream; let screenStream = null; let isSharingScreen = false;
+        let peersConectados = {}; let audioContexts = {}; let miNombre = "";
+        let nombresParticipantes = {}; let estadosParticipantes = {}; 
+        let conexionesDatos = {}; let miIdUnico = ""; let archivosCompartidos = [];
+        let mediaRecorder; let recordedChunks = []; let isRecording = false; 
+        let recordingInterval; let recordingSeconds = 0;
+
+        // Variables globales de Pizarra
+        let ventanaPizarra = null; let canvasPizarra = null; let ctxPizarra = null;
+        let dibujando = false; let posX = 0; let posY = 0;
+        let colorPizarra = '#000000'; let grosorPizarra = 3;
+
+        function cerrarAlerta(id) {
+            const alerta = document.getElementById(id);
+            if (alerta) alerta.style.display = 'none';
+        }
+
+        function cambiarPestana(pestana) {
+            const btnPart = document.getElementById('tab-btn-participantes');
+            const btnArch = document.getElementById('tab-btn-archivos');
+            const btnChat = document.getElementById('tab-btn-chat');
+            const panPart = document.getElementById('panel-participantes');
+            const panArch = document.getElementById('panel-archivos');
+            const panChat = document.getElementById('panel-chat');
+
+            // Resetear estilos de pestañas
+            btnPart.className = "bg-slate-700 hover:bg-slate-600 text-xs px-3 py-1.5 rounded-lg font-medium transition cursor-pointer flex-1";
+            btnArch.className = "bg-slate-700 hover:bg-slate-600 text-xs px-3 py-1.5 rounded-lg font-medium transition cursor-pointer flex-1";
+            btnChat.className = "bg-slate-700 hover:bg-slate-600 text-xs px-3 py-1.5 rounded-lg font-medium transition cursor-pointer flex-1";
+
+            panPart.classList.add('hidden');
+            panArch.classList.add('hidden');
+            panChat.classList.add('hidden');
+
+            if (pestana === 'participantes') {
+                btnPart.className = "bg-blue-600 text-xs px-3 py-1.5 rounded-lg font-medium transition cursor-pointer flex-1";
+                panPart.classList.remove('hidden');
+            } else if (pestana === 'archivos') {
+                btnArch.className = "bg-blue-600 text-xs px-3 py-1.5 rounded-lg font-medium transition cursor-pointer flex-1";
+                panArch.classList.remove('hidden');
+            } else if (pestana === 'chat') {
+                btnChat.className = "bg-blue-600 text-xs px-3 py-1.5 rounded-lg font-medium transition cursor-pointer flex-1";
+                panChat.classList.remove('hidden');
+            }
+        }
+
+        function toggleFullScreen(elementId) {
+            const elem = document.getElementById(elementId);
+            if (!document.fullscreenElement) {
+                if (elem.requestFullscreen) elem.requestFullscreen();
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        }
+
+        function ajustarTamanoVideo(elementId, valor) {
+            const container = document.getElementById(elementId);
+            if (container) {
+                container.style.width = valor + 'px';
+                container.style.maxWidth = '100%';
+                container.style.aspectRatio = '16 / 9';
+            }
+        }
+
+        function generarIdUnico() { return 'sala-' + Math.random().toString(36).substring(2, 9); }
+
+        async function iniciarMedia() {
+            try {
+                myStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                document.getElementById('local-video').srcObject = myStream;
+                configurarDetectorVoz(myStream, 'local');
+                return true;
+            } catch (error) {
+                alert('No se pudo acceder a la cámara o micrófono.');
+                return false;
+            }
+        }
+
+        function configurarDetectorVoz(stream, id) {
+            try {
+                if (audioContexts[id]) audioContexts[id].close();
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                audioContexts[id] = audioContext;
+                const source = audioContext.createMediaStreamSource(stream);
+                const analyzer = audioContext.createAnalyser();
+                analyzer.fftSize = 256;
+                source.connect(analyzer);
+                const dataArray = new Uint8Array(analyzer.frequencyBinCount);
+
+                function monitorizarAudio() {
+                    if (!audioContexts[id] || audioContexts[id].state === 'closed') return;
+                    analyzer.getByteFrequencyData(dataArray);
+                    let sum = 0;
+                    for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+                    let average = sum / dataArray.length;
+                    actualizarBarras(id, average);
+                    requestAnimationFrame(monitorizarAudio);
+                }
+                monitorizarAudio();
+            } catch (e) {}
+        }
+
+        function actualizarBarras(id, nivel) {
+            const b1 = document.getElementById(`${id}-bar-1`);
+            const b2 = document.getElementById(`${id}-bar-2`);
+            const b3 = document.getElementById(`${id}-bar-3`);
+            if (!b1 || !b2 || !b3) return;
+            if (nivel > 5) {
+                b1.style.height = `${Math.min(16, Math.max(4, nivel * 0.4))}px`;
+                b2.style.height = `${Math.min(16, Math.max(4, nivel * 0.8))}px`;
+                b3.style.height = `${Math.min(16, Math.max(4, nivel * 0.6))}px`;
+                b1.className = b2.className = b3.className = "w-1 bg-emerald-400 rounded-full transition-all duration-75";
+            } else {
+                b1.style.height = b2.style.height = b3.style.height = '4px';
+                b1.className = b2.className = b3.className = "w-1 bg-slate-500 rounded-full transition-all duration-75";
+            }
+        }
+
+        async function manejarAccionLobby() {
+            const inputNombre = document.getElementById('user-name-input').value.trim();
+            if (!inputNombre) return alert('Ingresa tu nombre.');
+            miNombre = inputNombre;
+            document.getElementById('self-display-name').innerText = miNombre + " (Tú)";
+            document.getElementById('local-label').innerText = miNombre + " (Tú)";
+            
+            const permisoConcedido = await iniciarMedia();
+            if (!permisoConcedido) return;
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const salaId = urlParams.get('sala');
+            miIdUnico = generarIdUnico();
+
+            if (salaId) inicializarPeer(miIdUnico, false, salaId);
+            else inicializarPeer(miIdUnico, true, miIdUnico);
+        }
+
+        function inicializarPeer(id, esCreador, salaId) {
+            peer = new Peer(id);
+            peer.on('open', (id) => {
+                document.getElementById('lobby-container').classList.add('hidden');
+                document.getElementById('room-container').classList.remove('hidden');
+                document.getElementById('share-link').value = window.location.origin + window.location.pathname + '?sala=' + salaId;
+                if (!esCreador) conectarConSala(salaId);
+            });
+
+            peer.on('connection', (conn) => configurarCanalDatos(conn));
+            peer.on('call', (call) => {
+                call.answer(myStream);
+                call.on('stream', (remoteStream) => agregarVideoRemoto(call.peer, remoteStream));
+                call.on('close', () => removerVideoRemoto(call.peer));
+                peersConectados[call.peer] = call;
+                if (!conexionesDatos[call.peer]) {
+                    const conn = peer.connect(call.peer);
+                    configurarCanalDatos(conn);
+                }
+            });
+        }
+
+        function conectarConSala(salaId) {
+            const conn = peer.connect(salaId);
+            configurarCanalDatos(conn);
+            const call = peer.call(salaId, myStream);
+            if (call) {
+                call.on('stream', (remoteStream) => agregarVideoRemoto(salaId, remoteStream));
+                call.on('close', () => removerVideoRemoto(salaId));
+                peersConectados[salaId] = call;
+            }
+        }
+
+        function configurarCanalDatos(conn) {
+            conexionesDatos[conn.peer] = conn;
+            conn.on('open', () => enviarMiEstadoYNombre(conn));
+            
+            conn.on('data', (data) => {
+                if (data.tipo === 'INFO_ESTADO') {
+                    nombresParticipantes[conn.peer] = data.nombre;
+                    estadosParticipantes[conn.peer] = { mic: data.mic, cam: data.cam };
+                    actualizarListaParticipantes();
+                    actualizarEtiquetaVideo(conn.peer, data.nombre);
+                } else if (data.tipo === 'ARCHIVO_COMPARTIDO') {
+                    archivosCompartidos.push(data);
+                    actualizarListaArchivos();
+                } else if (data.tipo === 'CHAT_MENSAJE') {
+                    agregarMensajeChatUI(data.remitente, data.mensaje, false);
+                } else if (data.tipo === 'PIZARRA_TRAZO') {
+                    dibujarLineaRemota(data.x0, data.y0, data.x1, data.y1, data.color, data.grosor);
+                } else if (data.tipo === 'PIZARRA_LIMPIAR') {
+                    limpiarLienzoLocal();
+                }
+            });
+            conn.on('close', () => removerVideoRemoto(conn.peer));
+        }
+
+        function enviarMiEstadoYNombre(conn = null) {
+            const audioTrack = myStream ? myStream.getAudioTracks()[0] : null;
+            const videoTrack = myStream ? myStream.getVideoTracks()[0] : null;
+            const payload = {
+                tipo: 'INFO_ESTADO', nombre: miNombre,
+                mic: audioTrack ? audioTrack.enabled : false,
+                cam: videoTrack ? videoTrack.enabled : false
+            };
+            if (conn) conn.send(payload);
+            else {
+                for (let peerId in conexionesDatos) {
+                    if (conexionesDatos[peerId] && conexionesDatos[peerId].open) conexionesDatos[peerId].send(payload);
+                }
+            }
+        }
+
+        // --- FUNCIONES DE CHAT ---
+        function enviarMensajeChat() {
+            const input = document.getElementById('chat-input');
+            const texto = input.value.trim();
+            if (!texto) return;
+
+            agregarMensajeChatUI("Tú", texto, true);
+            input.value = '';
+
+            const payload = {
+                tipo: 'CHAT_MENSAJE',
+                remitente: miNombre,
+                mensaje: texto
+            };
+
+            for (let peerId in conexionesDatos) {
+                if (conexionesDatos[peerId] && conexionesDatos[peerId].open) {
+                    conexionesDatos[peerId].send(payload);
+                }
+            }
+        }
+
+        function agregarMensajeChatUI(remitente, mensaje, esMio) {
+            const chatContainer = document.getElementById('chat-messages');
+            // Quitar mensaje de "chat vacío" si existe
+            if (chatContainer.querySelector('.italic')) {
+                chatContainer.innerHTML = '';
+            }
+
+            const div = document.createElement('div');
+            div.className = `flex flex-col mb-2 ${esMio ? 'items-end' : 'items-start'}`;
+            
+            div.innerHTML = `
+                <span class="text-[10px] text-slate-400 mb-0.5">${remitente}</span>
+                <div class="px-3 py-2 rounded-xl max-w-[85%] break-words text-xs ${esMio ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-700 text-slate-200 rounded-bl-none'}">
+                    ${escapeHtml(mensaje)}
+                </div>
+            `;
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        function manejarSeleccionArchivo(event) {
+            const archivo = event.target.files[0];
+            if (!archivo) return;
+            const lector = new FileReader();
+            lector.onload = function(e) {
+                const archivoData = {
+                    tipo: 'ARCHIVO_COMPARTIDO', nombreArchivo: archivo.name,
+                    tamanioArchivo: archivo.size, contenido: e.target.result,
+                    remitente: miNombre + " (Tú)"
+                };
+                archivosCompartidos.push(archivoData);
+                actualizarListaArchivos();
+                for (let peerId in conexionesDatos) {
+                    if (conexionesDatos[peerId] && conexionesDatos[peerId].open) conexionesDatos[peerId].send(archivoData);
+                }
+            };
+            lector.readAsDataURL(archivo);
+            event.target.value = '';
+        }
+
+        function actualizarListaArchivos() {
+            const contenedor = document.getElementById('files-list');
+            if (archivosCompartidos.length === 0) {
+                contenedor.innerHTML = '<span class="text-slate-500 italic">No hay archivos compartidos aún.</span>'; return;
+            }
+            let html = '';
+            archivosCompartidos.forEach((item, index) => {
+                let tamanioLegible = item.tamanioArchivo > 1024 * 1024 ? (item.tamanioArchivo / (1024 * 1024)).toFixed(1) + ' MB' : (item.tamanioArchivo / 1024).toFixed(1) + ' KB';
+                html += `<div class="bg-slate-900/60 p-2 rounded border border-slate-700/60 flex items-center justify-between gap-2">
+                        <div class="truncate flex-1"><p class="font-medium text-blue-300 truncate">${item.nombreArchivo}</p>
+                        <p class="text-[10px] text-slate-400">Por: ${item.remitente} • ${tamanioLegible}</p></div>
+                        <button onclick="descargarArchivo(${index})" class="bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1 rounded transition shrink-0 cursor-pointer font-medium">⬇️ Descargar</button>
+                    </div>`;
+            });
+            contenedor.innerHTML = html;
+        }
+
+        function descargarArchivo(index) {
+            const item = archivosCompartidos[index];
+            if (!item) return;
+            const enlace = document.createElement('a');
+            enlace.href = item.contenido; enlace.download = item.nombreArchivo;
+            document.body.appendChild(enlace); enlace.click(); document.body.removeChild(enlace);
+        }
+
+        function agregarVideoRemoto(peerId, stream) {
+            if (document.getElementById(`video-${peerId}`)) return;
+            const grid = document.getElementById('video-grid');
+            const div = document.createElement('div');
+            div.id = `video-${peerId}`;
+            div.className = "video-wrapper resizable-video-container relative bg-slate-800 rounded-xl overflow-hidden aspect-video shadow-lg border border-slate-700 flex items-center justify-center";
+            
+            div.innerHTML = `
+                <video srcObject autoplay playsinline class="w-full h-full object-cover" id="vid-elem-${peerId}"></video>
+                <div class="absolute top-2 left-2 flex items-center gap-1.5 bg-black/50 px-2 py-1 rounded-lg backdrop-blur z-20">
+                    <span class="text-[10px] text-slate-300">Tamaño:</span>
+                    <input type="range" min="200" max="1000" value="400" oninput="ajustarTamanoVideo('video-${peerId}', this.value)" class="w-16 h-1 accent-blue-500 cursor-pointer">
+                </div>
+                <button onclick="toggleFullScreen('video-${peerId}')" class="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full backdrop-blur z-10 transition cursor-pointer" title="Pantalla completa">⛶</button>
+                <span id="label-${peerId}" class="absolute bottom-2 left-2 bg-black/60 text-xs px-2 py-1 rounded backdrop-blur">${nombresParticipantes[peerId] || "Conectando..."}</span>
+                <div class="absolute bottom-2 right-2 flex items-end gap-0.5 h-4 bg-black/60 px-2 py-1 rounded backdrop-blur">
+                    <span class="w-1 bg-slate-500 rounded-full transition-all duration-75 h-1" id="${peerId}-bar-1"></span>
+                    <span class="w-1 bg-slate-500 rounded-full transition-all duration-75 h-1" id="${peerId}-bar-2"></span>
+                    <span class="w-1 bg-slate-500 rounded-full transition-all duration-75 h-1" id="${peerId}-bar-3"></span>
+                </div>`;
+            
+            grid.appendChild(div);
+            document.getElementById(`vid-elem-${peerId}`).srcObject = stream;
+            configurarDetectorVoz(stream, peerId);
+            if (!conexionesDatos[peerId] || !conexionesDatos[peerId].open) configurarCanalDatos(peer.connect(peerId));
+            else enviarMiEstadoYNombre(conexionesDatos[peerId]);
+            actualizarListaParticipantes();
+        }
+
+        function actualizarEtiquetaVideo(peerId, nombre) {
+            const label = document.getElementById(`label-${peerId}`);
+            if (label) label.innerText = nombre;
+            actualizarListaParticipantes();
+        }
+
+        function removerVideoRemoto(peerId) {
+            const el = document.getElementById(`video-${peerId}`);
+            if (el) el.remove();
+            delete peersConectados[peerId]; delete audioContexts[peerId];
+            delete nombresParticipantes[peerId]; delete estadosParticipantes[peerId]; delete conexionesDatos[peerId];
+            actualizarListaParticipantes();
+        }
+
+        function actualizarListaParticipantes() {
+            const lista = document.getElementById('participants-list');
+            document.getElementById('participant-count').innerText = 1 + Object.keys(peersConectados).length;
+            const micEnabled = myStream?.getAudioTracks()[0]?.enabled;
+            const camEnabled = myStream?.getVideoTracks()[0]?.enabled;
+            document.getElementById('self-mic-status').innerHTML = micEnabled ? '🎤' : '<span class="text-red-400">🔇</span>';
+            document.getElementById('self-cam-status').innerHTML = camEnabled ? '📹' : '<span class="text-red-400">📷❌</span>';
+
+            let html = `<li class="flex items-center justify-between text-sm bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                    <div class="flex items-center gap-2 truncate"><div class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></div><span class="truncate">${miNombre || "Tú"} (Tú)</span></div>
+                    <div class="flex items-center gap-1.5 text-xs text-slate-400 shrink-0"><span>${micEnabled ? '🎤' : '<span class="text-red-400">🔇</span>'}</span><span>${camEnabled ? '📹' : '<span class="text-red-400">📷❌</span>'}</span></div>
+                </li>`;
+
+            for (let peerId in peersConectados) {
+                let nombre = nombresParticipantes[peerId] || "Conectando...";
+                let estado = estadosParticipantes[peerId] || { mic: true, cam: true };
+                html += `<li class="flex items-center justify-between text-sm bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                        <div class="flex items-center gap-2 truncate"><div class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></div><span class="truncate">${nombre}</span></div>
+                        <div class="flex items-center gap-1.5 text-xs text-slate-400 shrink-0"><span>${estado.mic ? '🎤' : '<span class="text-red-400">🔇</span>'}</span><span>${estado.cam ? '📹' : '<span class="text-red-400">📷❌</span>'}</span></div>
+                    </li>`;
+            }
+            lista.innerHTML = html;
+        }
+
+        function copiarEnlace() {
+            const input = document.getElementById('share-link');
+            input.select(); navigator.clipboard.writeText(input.value); alert('Enlace copiado');
+        }
+
+        function toggleAudio() {
+            const track = myStream.getAudioTracks()[0]; if (!track) return;
+            track.enabled = !track.enabled;
+            const btn = document.getElementById('btn-audio');
+            btn.innerText = track.enabled ? 'Silenciar' : 'Activar Audio'; btn.classList.toggle('bg-red-600', !track.enabled);
+            enviarMiEstadoYNombre(); actualizarListaParticipantes();
+        }
+
+        function toggleVideo() {
+            if (isSharingScreen) return alert('Detén compartir pantalla primero.');
+            const track = myStream.getVideoTracks()[0]; if (!track) return;
+            track.enabled = !track.enabled;
+            const btn = document.getElementById('btn-video');
+            btn.innerText = track.enabled ? 'Apagar Cámara' : 'Encender Cámara'; btn.classList.toggle('bg-red-600', !track.enabled);
+            enviarMiEstadoYNombre(); actualizarListaParticipantes();
+        }
+
+        async function toggleScreenShare() {
+            const btnScreen = document.getElementById('btn-screen');
+            if (!isSharingScreen) {
+                try {
+                    screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                    isSharingScreen = true; btnScreen.innerText = '🛑 Detener Pantalla'; btnScreen.classList.add('bg-blue-600');
+                    document.getElementById('local-video').srcObject = screenStream;
+                    const screenTrack = screenStream.getVideoTracks()[0];
+                    for (let pId in peersConectados) {
+                        const call = peersConectados[pId];
+                        if (call?.peerConnection) call.peerConnection.getSenders().find(s => s.track?.kind === 'video')?.replaceTrack(screenTrack);
+                    }
+                    screenTrack.onended = () => detenerCompartirPantalla();
+                } catch (e) { console.error('Error pantalla:', e); }
+            } else detenerCompartirPantalla();
+        }
+
+        function detenerCompartirPantalla() {
+            if (!isSharingScreen) return;
+            if (screenStream) screenStream.getTracks().forEach(t => t.stop());
+            screenStream = null; isSharingScreen = false;
+            document.getElementById('btn-screen').innerText = '🖥️ Pantalla'; document.getElementById('btn-screen').classList.remove('bg-blue-600');
+            const vTrack = myStream?.getVideoTracks()[0];
+            if (vTrack) document.getElementById('local-video').srcObject = new MediaStream([vTrack, myStream.getAudioTracks()[0]]);
+            for (let pId in peersConectados) {
+                const call = peersConectados[pId];
+                if (call?.peerConnection && vTrack) call.peerConnection.getSenders().find(s => s.track?.kind === 'video')?.replaceTrack(vTrack);
+            }
+        }
+
+        async function toggleRecording() {
+            const btn = document.getElementById('btn-record'); const ind = document.getElementById('recording-indicator');
+            if (!isRecording) {
+                try {
+                    const disp = await navigator.mediaDevices.getDisplayMedia({ video: { mediaSource: "screen" }, audio: true });
+                    let mix = disp;
+                    if (myStream && myStream.getAudioTracks().length > 0) {
+                        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                        const dest = ctx.createMediaStreamDestination();
+                        ctx.createMediaStreamSource(disp).connect(dest); ctx.createMediaStreamSource(myStream).connect(dest);
+                        mix = new MediaStream([...disp.getVideoTracks(), ...dest.stream.getAudioTracks()]);
+                    }
+                    recordedChunks = [];
+                    mediaRecorder = new MediaRecorder(mix, { mimeType: 'video/webm; codecs=vp9,opus' });
+                    mediaRecorder.ondataavailable = e => { if (e.data?.size > 0) recordedChunks.push(e.data); };
+                    mediaRecorder.onstop = () => {
+                        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a'); a.style.display = 'none'; a.href = url; a.download = `grabacion-${new Date().toISOString().slice(0,10)}.webm`;
+                        document.body.appendChild(a); a.click(); setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+                    };
+                    mediaRecorder.start(); isRecording = true;
+                    btn.innerText = '⏹️ Detener'; btn.classList.add('bg-red-600', 'hover:bg-red-500');
+                    ind.classList.replace('hidden', 'flex'); recordingSeconds = 0; document.getElementById('recording-timer').innerText = "00:00";
+                    recordingInterval = setInterval(() => {
+                        recordingSeconds++;
+                        document.getElementById('recording-timer').innerText = `${Math.floor(recordingSeconds/60).toString().padStart(2,'0')}:${(recordingSeconds%60).toString().padStart(2,'0')}`;
+                    }, 1000);
+                    disp.getVideoTracks()[0].onended = () => detenerGrabacion();
+                } catch (e) { alert('No se pudo iniciar grabación.'); }
+            } else detenerGrabacion();
+        }
+
+        function detenerGrabacion() {
+            if (!isRecording) return;
+            mediaRecorder.stop(); mediaRecorder.stream?.getTracks().forEach(t => t.stop());
+            isRecording = false; clearInterval(recordingInterval);
+            const btn = document.getElementById('btn-record'); btn.innerText = '🔴 Grabar'; btn.classList.remove('bg-red-600', 'hover:bg-red-500');
+            document.getElementById('recording-indicator').classList.replace('flex', 'hidden');
+        }
+
+        function colgarLlamada() {
+            if (isRecording) detenerGrabacion();
+            if (screenStream) screenStream.getTracks().forEach(t => t.stop());
+            if (myStream) myStream.getTracks().forEach(t => t.stop());
+            if (peer) peer.destroy();
+            Object.values(audioContexts).forEach(ctx => ctx.close());
+            window.location.search = ''; window.location.reload();
+        }
+
+        window.addEventListener('load', () => {
+            const salaId = new URLSearchParams(window.location.search).get('sala');
+            if (salaId) {
+                document.getElementById('lobby-title').innerText = "Únete a la videoconferencia";
+                document.getElementById('lobby-desc').innerText = "Ingresa tu nombre y otorga permisos.";
+                document.getElementById('lobby-btn').innerText = "Unirme a la Sala";
+            }
+        });
+
+        // -----------------------------------------------------------
+        // --- MOTOR DE PIZARRA EN NUEVA VENTANA ---
+        // -----------------------------------------------------------
+
+        function abrirPizarra() {
+            if (ventanaPizarra && !ventanaPizarra.closed) {
+                ventanaPizarra.focus();
+                return;
+            }
+
+            ventanaPizarra = window.open("", "PizarraWebRTC", "width=1100,height=700");
+            
+            const htmlPizarra = `
+                <!DOCTYPE html>
+                <html lang="es">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                    <title>Pizarra Colaborativa</title>
+                    <style>
+                        * { margin: 0; padding: 0; box-sizing: border-box; }
+                        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #ffffff; font-family: sans-serif; }
+                        #canvas-colaborativo { position: absolute; top: 0; left: 0; display: block; touch-action: none; cursor: crosshair; z-index: 1; }
+                        
+                        .toolbar { 
+                            position: absolute; top: 20px; left: 50%; transform: translateX(-50%); 
+                            background: white; padding: 10px 20px; border-radius: 12px; 
+                            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); display: flex; gap: 15px; align-items: center; z-index: 10; border: 1px solid #e5e7eb;
+                        }
+                        .tool-group { display: flex; gap: 8px; align-items: center; }
+                        .color-btn { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: transform 0.1s; }
+                        .color-btn:hover { transform: scale(1.1); }
+                        .color-btn.active { border-color: #333; box-shadow: 0 0 0 2px white inset; }
+                        
+                        input[type="range"] { cursor: pointer; }
+                        button.action-btn { background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+                        button.action-btn:hover { background: #dc2626; }
+                    </style>
+                </head>
+                <body>
+                    <div class="toolbar">
+                        <div class="tool-group">
+                            <div class="color-btn active" style="background: #000000;" data-color="#000000"></div>
+                            <div class="color-btn" style="background: #ef4444;" data-color="#ef4444"></div>
+                            <div class="color-btn" style="background: #3b82f6;" data-color="#3b82f6"></div>
+                            <div class="color-btn" style="background: #22c55e;" data-color="#22c55e"></div>
+                            <div class="color-btn" style="background: #ffffff; border: 1px solid #ccc;" data-color="#ffffff" title="Borrador"></div>
+                        </div>
+                        <div class="tool-group" style="border-left: 1px solid #e5e7eb; padding-left: 15px;">
+                            <label style="font-size: 12px; color: #4b5563;">Grosor:</label>
+                            <input type="range" id="grosor-pizarra" min="1" max="30" value="3">
+                        </div>
+                        <div class="tool-group" style="border-left: 1px solid #e5e7eb; padding-left: 15px;">
+                            <button class="action-btn" id="btn-limpiar">Limpiar Pizarra</button>
+                        </div>
+                    </div>
+                    <canvas id="canvas-colaborativo"></canvas>
+                </body>
+                </html>
+            `;
+
+            ventanaPizarra.document.write(htmlPizarra);
+            ventanaPizarra.document.close();
+
+            canvasPizarra = ventanaPizarra.document.getElementById('canvas-colaborativo');
+            ctxPizarra = canvasPizarra.getContext('2d');
+
+            const redimensionarPizarra = () => {
+                let imgData = null;
+                if (canvasPizarra.width > 0 && canvasPizarra.height > 0) {
+                    imgData = ctxPizarra.getImageData(0, 0, canvasPizarra.width, canvasPizarra.height);
+                }
+                canvasPizarra.width = ventanaPizarra.innerWidth;
+                canvasPizarra.height = ventanaPizarra.innerHeight;
+                ctxPizarra.fillStyle = '#ffffff';
+                ctxPizarra.fillRect(0, 0, canvasPizarra.width, canvasPizarra.height);
+                if (imgData) ctxPizarra.putImageData(imgData, 0, 0);
+            };
+            ventanaPizarra.addEventListener('resize', redimensionarPizarra);
+            redimensionarPizarra();
+
+            const docPiz = ventanaPizarra.document;
+            docPiz.querySelectorAll('.color-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    docPiz.querySelector('.color-btn.active').classList.remove('active');
+                    e.target.classList.add('active');
+                    colorPizarra = e.target.dataset.color;
+                });
+            });
+
+            docPiz.getElementById('grosor-pizarra').addEventListener('input', (e) => {
+                grosorPizarra = e.target.value;
+            });
+
+            docPiz.getElementById('btn-limpiar').addEventListener('click', () => {
+                limpiarLienzoLocal();
+                enviarDatosPizarra({ tipo: 'PIZARRA_LIMPIAR' });
+            });
+
+            const obtenerPosicion = (e) => {
+                const rect = canvasPizarra.getBoundingClientRect();
+                let clientX = e.clientX; let clientY = e.clientY;
+                if (e.touches && e.touches.length > 0) {
+                    clientX = e.touches[0].clientX; clientY = e.touches[0].clientY;
+                }
+                return { x: clientX - rect.left, y: clientY - rect.top };
+            };
+
+            const iniciarTrazo = (e) => {
+                dibujando = true;
+                const pos = obtenerPosicion(e);
+                posX = pos.x; posY = pos.y;
+                ctxPizarra.beginPath();
+                ctxPizarra.arc(posX, posY, grosorPizarra / 2, 0, Math.PI * 2);
+                ctxPizarra.fillStyle = colorPizarra;
+                ctxPizarra.fill();
+                ctxPizarra.beginPath();
+            };
+
+            const trazar = (e) => {
+                if (!dibujando) return;
+                const pos = obtenerPosicion(e);
+                
+                dibujarLineaRemota(posX, posY, pos.x, pos.y, colorPizarra, grosorPizarra);
+                
+                enviarDatosPizarra({
+                    tipo: 'PIZARRA_TRAZO',
+                    x0: posX, y0: posY, x1: pos.x, y1: pos.y,
+                    color: colorPizarra, grosor: grosorPizarra
+                });
+                
+                posX = pos.x; posY = pos.y;
+            };
+
+            const detenerTrazo = () => { dibujando = false; };
+
+            canvasPizarra.addEventListener('mousedown', iniciarTrazo);
+            canvasPizarra.addEventListener('mousemove', trazar);
+            ventanaPizarra.addEventListener('mouseup', detenerTrazo);
+            
+            canvasPizarra.addEventListener('touchstart', iniciarTrazo, { passive: false });
+            canvasPizarra.addEventListener('touchmove', trazar, { passive: false });
+            ventanaPizarra.addEventListener('touchend', detenerTrazo);
+
+            ventanaPizarra.onbeforeunload = () => {
+                ventanaPizarra = null; canvasPizarra = null; ctxPizarra = null;
+            };
+        }
+
+        function dibujarLineaRemota(x0, y0, x1, y1, color, grosor) {
+            if (!ctxPizarra) return;
+            ctxPizarra.beginPath();
+            ctxPizarra.moveTo(x0, y0);
+            ctxPizarra.lineTo(x1, y1);
+            ctxPizarra.strokeStyle = color;
+            ctxPizarra.lineWidth = grosor;
+            ctxPizarra.lineCap = 'round';
+            ctxPizarra.lineJoin = 'round';
+            ctxPizarra.stroke();
+        }
+
+        function limpiarLienzoLocal() {
+            if (!ctxPizarra) return;
+            ctxPizarra.fillStyle = '#ffffff';
+            ctxPizarra.fillRect(0, 0, canvasPizarra.width, canvasPizarra.height);
+        }
+
+        function enviarDatosPizarra(datos) {
+            for (let peerId in conexionesDatos) {
+                if (conexionesDatos[peerId] && conexionesDatos[peerId].open) {
+                    conexionesDatos[peerId].send(datos);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

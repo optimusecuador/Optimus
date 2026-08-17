@@ -1,0 +1,200 @@
+############################################
+# RESET TOTAL
+############################################
+/system reset-configuration no-defaults=yes skip-backup=yes
+
+############################################
+# LIMPIEZA INICIAL
+############################################
+/ip address remove [find]
+/ip dhcp-client remove [find]
+/ip dhcp-server remove [find]
+/ip pool remove [find]
+/ip firewall nat remove [find]
+/ip firewall filter remove [find]
+/ip firewall mangle remove [find]
+/ip route remove [find]
+/queue simple remove [find]
+/queue tree remove [find]
+
+############################################
+# RENOMBRAR INTERFACES
+############################################
+/interface ethernet
+set ether1 name=WAN1
+set ether2 name=WAN2
+set ether3 name=LAN
+
+############################################
+# DHCP CLIENTES WAN
+############################################
+/ip dhcp-client
+add interface=WAN1 add-default-route=yes use-peer-dns=no disabled=no
+add interface=WAN2 add-default-route=yes use-peer-dns=no disabled=no
+
+############################################
+# RED LAN 10.10.0.0/24
+############################################
+/ip address
+add address=10.10.0.1/24 interface=LAN comment="Gateway Clientes"
+
+############################################
+# DHCP LAN
+############################################
+/ip pool
+add name=POOL-LAN ranges=10.10.0.10-10.10.0.254
+
+/ip dhcp-server
+add name=DHCP-LAN interface=LAN address-pool=POOL-LAN disabled=no
+
+/ip dhcp-server network
+add address=10.10.0.0/24 gateway=10.10.0.1 dns-server=8.8.8.8,1.1.1.1
+
+############################################
+# DNS ROUTER
+############################################
+/ip dns
+set allow-remote-requests=yes servers=8.8.8.8,1.1.1.1
+
+############################################
+# NAT INTERNET
+############################################
+/ip firewall nat
+add chain=srcnat out-interface=WAN1 action=masquerade
+add chain=srcnat out-interface=WAN2 action=masquerade
+
+############################################
+# FIREWALL BASICO
+############################################
+/ip firewall filter
+add chain=input connection-state=established,related action=accept
+add chain=input connection-state=invalid action=drop
+add chain=input in-interface=LAN action=accept
+add chain=input action=drop
+
+############################################
+# SUSPENSION CLIENTES
+############################################
+/ip firewall address-list
+add list=CLIENTES-SUSPENDIDOS address=0.0.0.0
+/ip firewall address-list remove [find address=0.0.0.0]
+
+/ip firewall filter
+add chain=forward src-address-list=CLIENTES-SUSPENDIDOS \
+action=drop comment="SUSPENSION-INTERNET"
+
+############################################
+# AGREGAR TODAS LAS IPS A SUSPENSION
+############################################
+:for i from=2 to=254 do={
+/ip firewall address-list add \
+list=CLIENTES-SUSPENDIDOS \
+address=("10.10.0.".$i)
+}
+
+############################################
+# ACTIVAR ROUTER PRUEBA
+############################################
+/ip firewall address-list remove [find address=10.10.0.254]
+
+############################################
+# DHCP IP FIJA
+############################################
+/ip dhcp-server lease make-static [find address=10.10.0.254]
+
+############################################
+# LIMITADOR CLIENTE PRUEBA
+############################################
+/queue simple
+add name="CLIENTE-PRUEBA" target=10.10.0.254 max-limit=200M/200M
+
+############################################
+# QOS PRIORIDAD GAMING Y STREAMING
+############################################
+/ip firewall mangle
+add chain=forward protocol=tcp dst-port=80,443 \
+action=mark-packet new-packet-mark=STREAMING passthrough=yes
+
+add chain=forward protocol=udp dst-port=3074,3478-3480,27000-27200,5000-5500 \
+action=mark-packet new-packet-mark=GAMING passthrough=yes
+
+add chain=forward action=mark-packet \
+new-packet-mark=NORMAL passthrough=no
+
+############################################
+# QUEUE TREE
+############################################
+/queue tree
+add name=DOWNLOAD parent=global queue=default
+add name=GAMING-DOWN parent=DOWNLOAD packet-mark=GAMING priority=1
+add name=STREAMING-DOWN parent=DOWNLOAD packet-mark=STREAMING priority=3
+add name=NORMAL-DOWN parent=DOWNLOAD packet-mark=NORMAL priority=8
+
+add name=UPLOAD parent=global queue=default
+add name=GAMING-UP parent=UPLOAD packet-mark=GAMING priority=1
+add name=STREAMING-UP parent=UPLOAD packet-mark=STREAMING priority=3
+add name=NORMAL-UP parent=UPLOAD packet-mark=NORMAL priority=8
+
+############################################
+# FAILOVER WAN INTELIGENTE
+############################################
+/system script
+add name=FAILOVER-WAN source={
+
+:local ok1 [/ping 8.8.8.8 interface=WAN1 count=3]
+
+:if ($ok1=0) do={
+/ip route disable [find gateway~"WAN1"]
+:log warning "WAN1 CAIDA - USANDO WAN2"
+} else={
+/ip route enable [find gateway~"WAN1"]
+}
+
+}
+
+/system scheduler
+add name=CHECK-WAN interval=30s on-event=FAILOVER-WAN
+
+############################################
+# REINICIO AUTOMATICO 14 DIAS
+############################################
+/system scheduler
+add name=REINICIO-AUTOMATICO interval=2w \
+on-event="/system reboot" start-time=03:00:00
+
+############################################
+# CONFIGURAR CORREO YAHOO
+############################################
+/tool e-mail set \
+server=smtp.mail.yahoo.com \
+port=587 \
+from=nelo416@yahoo.com \
+user=nelo416@yahoo.com \
+password=pmylkbjcdglyaktv \
+tls=starttls
+
+############################################
+# SINCRONIZAR HORA
+############################################
+/system ntp client set enabled=yes \
+servers=pool.ntp.org,europe.pool.ntp.org
+
+/system clock set time-zone-name=America/Bogota
+
+############################################
+# CORREO PRUEBA
+############################################
+/tool e-mail send \
+to=soldaniela416@gmail.com \
+subject="MIKROTIK OK" \
+body="Router ISP configurado correctamente"
+
+############################################
+# MENSAJE FINAL
+############################################
+:put "===== ISP CONFIGURADO CORRECTAMENTE ====="
+
+############################################
+# REINICIAR ROUTER
+############################################
+/system reboot force=yes

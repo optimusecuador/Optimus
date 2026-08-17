@@ -1,0 +1,1990 @@
+<!DOCTYPE html>
+<!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7" lang=""> <![endif]-->
+<!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8" lang=""> <![endif]-->
+<!--[if IE 8]>         <html class="no-js lt-ie9" lang=""> <![endif]-->
+<!--[if gt IE 8]><!-->
+<html lang="en"><!-- InstanceBegin template="/Templates/sistema.dwt" codeOutsideHTMLIsLocked="false" -->
+<head>
+<?php
+if(isset($_COOKIE['usuario']))
+{
+}
+else
+{
+header("Location: http://45.70.237.242/acceso/accesodos.php?cerrar=cerrar");
+//exit;
+}
+date_default_timezone_set('America/Guayaquil');
+session_start(); 
+//setlocale(LC_TIME, 'es_ES', 'esp_esp');
+setlocale(LC_ALL, 'es_ES');
+setlocale(LC_TIME, 'es_ES.UTF-8'); //Linux
+require('../conectar.php');
+$pagina = $_SERVER['REQUEST_URI']; 
+$dispositivo = $_SESSION['dispositivo'];
+//-- ENCERAR VARIABLES DE USUARIO
+$alerta = 0;
+$verificarpago = "0";
+//$uno="si";
+//$dos="si";
+//$tres="si";
+//$cuatro="si";
+//$cinco="si";
+//$seis="si";
+//$siete="si";
+//$ocho="si";
+//$nueve="si";
+//$diez ="si";
+//$once ="si";
+//$doce ="si";
+//$trece="si";
+//$catorce ="si";
+//$quince="si";
+//$diezyseis ="si";
+//$diezysiete="si";
+//$diezyocho ="si";
+//$diezynueve ="si";
+//$veinte ="si";
+//$veinteyuno="si";
+//$veinteydos="si";
+//$veinteytres="si";
+//$veinteycuatro="si";
+//$veinteycinco ="si";
+//$veinteyseis ="si";
+//$veinteysiete="si";
+//$veinteyocho ="si";
+//$veinteynueve ="si";
+//$treinta ="si";
+//$treintayuno ="si";
+//$treintaydos ="si";
+//$treintaytres="si";
+//$treintaycuatro="si";
+//$treintaycinco="si";
+//$treintayseis="si";
+//$treintaysiete="si";
+//$treintayocho ="si";
+//$treintaynueve ="si";
+//$cuarenta ="si";
+//$cuarentayuno="si";
+//$cuarentaydos ="si";
+//$cuarentaytres ="si";
+//$cuarentaycuatro ="si";
+//$cuarentaycinco ="si";
+//$cuarentayseis ="si";
+//$cuarentaysiete ="si";
+//$cuarentayocho ="si";
+//$cuarentaynueve ="si";
+//$cincuenta ="si";
+//$cincuentayuno ="si";
+//$cincuentaydos ="si";
+//$cincuentaytres ="si";
+////-- SI NO INICIA SESION ENVIA A PAGUNA DE ACCESO DENEGADO
+$ingresoexitoso='../images/ingresoexitoso.mp3';
+$vacio= " Vacio";
+$vacioint = 0;
+$alerta = 0;
+$notificacion_app;
+$notificacion_asignar;
+$notificacion_peliculas;
+$notificacion_pagos;
+$sistema = "Vacio";
+$menu = "Vacio";
+$personal_app = "0";
+$verificarpago = "0";	 
+$pagocierre = date("Y")."-".date("m");
+$sql = "SELECT * from `pagos` WHERE `mes` LIKE '$pagocierre' order by mes DESC";
+$resultpa = mysqli_query($con, $sql);
+while($crowp = mysqli_fetch_assoc($resultpa))
+{	
+	$verificarpago = $crowp['mes'];
+}
+
+if(isset($_SESSION['app_cliente']))
+	{
+	$personal_app = $_SESSION['codigo_app'];
+	$puesto_personal = "cliente";
+	$sistema = "clienteapp";
+	}
+	else
+	{
+		//$_SESSION['app_cliente'] = "0";   
+	}
+if(isset($_SESSION['password']))
+	{
+
+//--BUSCO EL NOMBRE DE LA EMPRESA Y EL LOGO
+		$sqlem = "SELECT * from `configuracion` order by ruc DESC";
+		$resultem = mysqli_query($con, $sqlem);
+		while($crowem = mysqli_fetch_assoc($resultem))
+        {
+			$_SESSION['empresamail']=$crowem['empresa'];
+			$empresa = $crowem['empresa'];
+			$logo = $crowem['logo'];
+			$colorfondo = $crowem['colorfondo'];
+			$carpeta = $crowem['carpeta'];
+			$tipoempresacontrol = $crowem['tipoempresa'];
+			$ip = $crowem['ip'];
+			$actualizacionanterior = $crowem['actualizacion'];
+			$ivadecimal =(100+$crowem['iva'])/100;
+			//#24a5dd
+		}
+//--BUSCO ACTUALIZACION NUEVA
+		$sqlac = "SELECT * from `actualizacion` order by fecha ASC";
+		$resultac = mysqli_query($conactualizacion, $sqlac);
+		while($crowac = mysqli_fetch_assoc($resultac))
+        {
+			$actualizacionnueva = $crowac['fecha'];
+			
+		}
+	
+	$personal = $_SESSION['password']; 
+	
+	//--BUSCAR DATOS DE CLIENTE PARA LA APP
+	$sqlcl = "SELECT * from `clientes` WHERE `codigo` LIKE '$personal_app' order by codigo DESC";
+	$resultcl = mysqli_query($con, $sqlcl);
+	while($crowcl = mysqli_fetch_assoc($resultcl))
+    {
+		$clienteapp = $crowcl['nombres'];
+		$clientecodigo = $crowcl['codigo'];
+		$direccionapp = $crowcl['direccion'];
+		$telefono1app = $crowcl['telefono1'];
+		$telefono2app = $crowcl['telefono2'];
+		$mailapp = $crowcl['mail'];
+		$sistema = "clienteapp";
+	}
+	$contrasenapersonal = $_SESSION['password'];
+	$sqlp = "SELECT * from `personal` WHERE `contrasena` LIKE '$contrasenapersonal' order by codigo DESC";
+	$resultp = mysqli_query($con, $sqlp);
+	while($crowp = mysqli_fetch_assoc($resultp))
+    {	
+		$sistema = "software";
+		$menu = $crowp['puesto'];	
+		if ($crowp['puesto'] == "instalador")
+		{
+			$sistema = "instalador";
+		}
+		$puesto_personal=$crowp['puesto'];
+		$usuarionombre=$crowp['nombres']." ".$crowp['apellidos'];
+		$usuarionombre2=$crowp['nombres'];
+		$foto=$crowp['foto'];
+		$uno=$crowp['uno'];
+		$dos=$crowp['dos'];
+		$tres=$crowp['tres'];
+		$cuatro=$crowp['cuatro'];
+		$cinco 	=$crowp['cinco'];
+		$seis 	=$crowp['seis'];
+		$siete=$crowp['siete'];
+		$ocho=$crowp['ocho'];
+		$nueve 	=$crowp['nueve'];
+		$diez =$crowp['diez'];
+		$once =$crowp['once'];
+		$doce =$crowp['doce'];
+		$trece=$crowp['trece'];
+		$catorce =$crowp['catorce'];
+		$quince=$crowp['quince'];
+		$diezyseis =$crowp['diezyseis'];
+		$diezysiete=$crowp['diezysiete'];
+		$diezyocho =$crowp['diezyocho'];
+		$diezynueve =$crowp['diezynueve'];
+		$veinte =$crowp['veinte'];
+		$veinteyuno=$crowp['veinteyuno'];
+		$veinteydos=$crowp['veinteydos'];
+		$veinteytres=$crowp['veinteytres'];
+		$veinteycuatro=$crowp['veinteycuatro'];
+		$veinteycinco =$crowp['veinteycinco'];
+		$veinteyseis =$crowp['veinteyseis'];
+		$veinteysiete=$crowp['veinteysiete'];
+		$veinteyocho =$crowp['veinteyocho'];
+		$veinteynueve =$crowp['veinteynueve'];
+		$treinta =$crowp['treinta'];
+		$treintayuno =$crowp['treintayuno'];
+		$treintaydos =$crowp['treintaydos'];
+		$treintaytres=$crowp['treintaytres'];
+		$treintaycuatro=$crowp['treintaycuatro'];
+		$treintaycinco=$crowp['treintaycinco'];
+		$treintayseis=$crowp['treintayseis'];
+		$treintaysiete=$crowp['treintaysiete'];
+		$treintayocho =$crowp['treintayocho'];
+		$treintaynueve =$crowp['treintaynueve'];
+		$cuarenta =$crowp['cuarenta'];
+		$cuarentayuno=$crowp['cuarentayuno'];
+		$cuarentaydos =$crowp['cuarentaydos'];
+		$cuarentaytres =$crowp['cuarentaytres'];
+		$cuarentaycuatro =$crowp['cuarentaycuatro'];
+		$cuarentaycinco =$crowp['cuarentaycinco'];
+		$cuarentayseis =$crowp['cuarentayseis'];
+		$cuarentaysiete =$crowp['cuarentaysiete'];
+		$cuarentayocho =$crowp['cuarentayocho'];
+		$cuarentaynueve =$crowp['cuarentaynueve'];
+		$cincuenta =$crowp['cincuenta'];
+		$cincuentayuno =$crowp['cincuentayuno'];
+		$cincuentaydos =$crowp['cincuentaydos'];
+		$cincuentaytres =$crowp['cincuentaytres'];
+		$exportar =$crowp['exportar'];
+		$cambiarprecio =$crowp['cambiarprecio'];
+	}
+	// PHP program to get IP address of client
+	$IP = $_SERVER['REMOTE_ADDR'];
+	// PHP code to get the MAC address of Client
+	$MAC = exec('getmac');
+	$nombre = gethostbyaddr($_SERVER['REMOTE_ADDR']);
+  	// Storing 'getmac' value in $MAC
+	$MAC = strtok($MAC, ' ');
+	$fecha = date("Y-m-d (H:i:s)", time());
+	$url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "s") . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
+	//$sql = " INSERT INTO `acceso` ( `usuario`, `fecha`, `url`, `ip`, `mac`, `nombre`) VALUES ( '$personal', '$fecha', '$url', '$IP', '$MAC', '$nombre')"; 
+	//mysqli_query($con, $sql);
+
+	}
+	else
+	{
+		//$redireccionar = "http://".$ip."/acceso/acceso.php";
+		//header('http://45.70.237.242/');
+		?>
+		<script>
+		function redireccionar(){window.location="http://45.70.237.242/";}
+		setTimeout ("redireccionar()", 5);
+		</script>
+		<?php
+		echo "no hay usuario";
+	}
+$array = array(); 
+$array2 = array();
+$array3 = array();
+$cerrar = "http://".$ip."/acceso/accesodos.php?cerrar=cerrar";
+$cerrarapp = "http://".$ip."/acceso/accesodos.php?cerrar=cerrar";
+//SACAR FECHA DE PAGO
+$sql = "SELECT * from `pagos` WHERE `mes` LIKE '$pagocierre' order by mes DESC";
+$resultpa = mysqli_query($con, $sql);
+while($crowp = mysqli_fetch_assoc($resultpa))
+{	
+	$verificarpago = $crowp['mes'];
+}
+$dia = date("d");
+
+if ($puesto_personal != "admin" AND $puesto_personal != "instalador")
+	
+	?>
+	<?php 
+				$estado="pendiente";
+				$sqlapp = "SELECT * from `app_cliente` WHERE `estado` LIKE '$estado' order by cliente DESC";
+				$resultapp = mysqli_query($con, $sqlapp);
+				$numfilas = $resultapp->num_rows;
+				$alerta = $numfilas;
+				$notificacion_app = $numfilas;
+				$estado="pendiente";
+				$sqlapp = "SELECT * from `clienteasignar` WHERE `estado` LIKE '$estado' order by cliente DESC";
+				$resultapp = mysqli_query($con, $sqlapp);
+				$numfilas = $resultapp->num_rows;
+				$alerta = $numfilas + $alerta;
+				$notificacion_asignar = $numfilas;
+				$sqlpel = "SELECT * from `solicitud_peliculas`order by id_solicitud DESC";
+				$resultpel = mysqli_query($con, $sqlpel);
+				$numfilas = $resultpel->num_rows; 
+				$alerta = $numfilas + $alerta;
+				$notificacion_peliculas = $numfilas;
+				$sqlpel = "SELECT * from `registro_pagos`order by id DESC";
+				$resultpel = mysqli_query($con, $sqlpel);
+				$numfilas = $resultpel->num_rows; 
+				$notificacion_pagos = $numfilas;
+				$alerta = $numfilas + $alerta;
+
+				?>
+    <meta charset="utf-8" />
+	<link href="../complementos/estilos.css" rel="stylesheet" type="text/css">
+    <link rel="apple-touch-icon" sizes="76x76" href="../assets/img/apple-icon.png">
+    <link rel="icon" type="image/png" href="../assets/img/favicon.ico">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+    <title>OPTIMUS SOFTWARE 6.0</title>
+    <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no' name='viewport' />
+    <!--     Fonts and icons     -->
+    <link href="https://fonts.googleapis.com/css?family=Montserrat:400,700,200" rel="stylesheet" />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/latest/css/font-awesome.min.css" />
+    <!-- CSS Files -->
+    <link href="../assets/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="../assets/css/light-bootstrap-dashboard.css?v=2.0.0%20" rel="stylesheet" />
+    <!-- CSS Just for demo purpose, don't include it in your project -->
+    <link href="../assets/css/demo.css" rel="stylesheet" />
+	
+</head>
+
+<body>
+    <div class="wrapper">
+        <div class="sidebar" data-image="../assets/img/sidebar-5.jpg">
+            <!--
+        Tip 1: You can change the color of the sidebar using: data-color="purple | blue | green | orange | red"
+        Tip 2: you can also add an image using data-image tag
+    -->
+            <div class="sidebar-wrapper">
+                <div class="logo">
+                    <a href="http://www.optimusecuador.com" class="simple-text"><img src="../images/android-chrome-192x192.png" width="42" height="56" alt=""/> OPTIMUS SOFTWARE </a>
+                </div>
+                <ul class="nav">
+                    <?php 
+					if ($sistema == "instalador")
+						{
+					?>
+                        	<li>
+                        <a class="nav-link" href="../serviciotecnico/clientes.php">
+                            <i class="nc-icon nc-chart-pie-35"></i>
+                            <p>Dashboard</p>
+                        </a>
+                    </li>
+						<?php 
+						}
+						else
+						{ 
+						?>
+					<li>
+                        <a class="nav-link" href="panel.php">
+                            <i class="nc-icon nc-chart-pie-35"></i>
+                            <p>Dashboard</p>
+                        </a>
+                    </li>
+					<?php } ?>
+                     <?php if ($sistema == "instalador")
+						{?>  
+				
+                    <li>
+                        <a class="nav-link" href="../serviciotecnico/solicitar_producto.php?cliente=<?php echo $personal;?>">
+                            <i class="nc-icon nc-circle-09"></i>
+                            <p>Sol. Producto</p>
+                        </a>
+                    </li>
+					 <li class="nav-item active">
+                        <a class="nav-link" href="../serviciotecnico/devolucion_producto.php?cliente=<?php echo $personal;?>">
+                            <i class="nc-icon nc-notes"></i>
+                            <p>Dev. Producto</p>
+                        </a>
+                    </li>
+					 <li>
+                        <a class="nav-link" href="../serviciotecnico/reportecasos.php?cliente=<?php echo $personal;?>">
+                            <i class="nc-icon nc-paper-2"></i>
+                            <p>Formularios</p>
+                        </a>
+                    </li>
+				  <li>
+                        <a class="nav-link" href="../bodegas/kardex2.php?cliente=<?php echo $personal;?>">
+                            <i class="nc-icon nc-atom"></i>
+                            <p>Inventario</p>
+                        </a>
+                    </li>
+				 
+				  <?php 
+						}
+						else
+						{ 
+						?>
+					<li>
+                        <a class="nav-link" href="clientes.php">
+                            <i class="nc-icon nc-circle-09"></i>
+                            <p>Clientes</p>
+                        </a>
+                    </li>
+					
+                    <li class="nav-item active">
+                        <a class="nav-link" href="proveerores.php">
+                            <i class="nc-icon nc-notes"></i>
+                            <p>Proveedores</p>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link" href="inventario.php">
+                            <i class="nc-icon nc-paper-2"></i>
+                            <p>Inventario</p>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link" href="bodegas.php">
+                            <i class="nc-icon nc-atom"></i>
+                            <p>Bodegas</p>
+                        </a>
+                    </li>
+					<li>
+                      <a class="nav-link" href="personal.php">
+                            <i class="nc-icon nc-circle-09"></i>
+                            <p>Personal</p>
+                        </a>
+                    </li>
+                    <li>
+						
+                      <a class="nav-link" href="servicio_tecnico.php">
+                            <i class="nc-icon nc-pin-3"></i>
+                            <p>Serv. Tecnico</p>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link" href="reportes.php">
+                            <i class="nc-icon nc-bell-55"></i>
+                            <p>Reportes</p>
+                        </a>
+                    </li>
+					<li>
+                        <a class="nav-link" href="administrador.php">
+                            <i class="nc-icon nc-chart-pie-35"></i>
+                            <p>Admin</p>
+                        </a>
+                    </li>
+					
+                    <li class="nav-item active active-pro">
+                        <a class="nav-link active" href="configuraciones.php">
+                            <i class="nc-icon nc-alien-33"></i>
+                            <p>Configuraciones</p>
+                        </a>
+                    </li>
+					<?php } ?>
+                </ul>
+            </div>
+        </div>
+        <div class="main-panel">
+            <!-- Navbar -->
+            <nav class="navbar navbar-expand-lg " color-on-scroll="500">
+                <div class="container-fluid">
+                    <a class="navbar-brand" href="#pablo"> <?php echo $usuarionombre2; ?> </a>
+                    <button href="" class="navbar-toggler navbar-toggler-right" type="button" data-toggle="collapse" aria-controls="navigation-index" aria-expanded="false" aria-label="Toggle navigation">
+                        <span class="navbar-toggler-bar burger-lines"></span>
+                        <span class="navbar-toggler-bar burger-lines"></span>
+                        <span class="navbar-toggler-bar burger-lines"></span>
+                    </button>
+                    <div class="collapse navbar-collapse justify-content-end" id="navigation">
+                        <ul class="nav navbar-nav mr-auto">
+                            <?php 
+							if ($sistema == "instalador")
+						{ ?>
+						<li class="nav-item">
+                                <a href="../serviciotecnico/clientes.php" class="nav-link" data-toggle="dropdown">
+                                    <i class="nc-icon nc-palette"></i>
+                                    <span class="d-lg-none">Dashboard</span>
+                                </a>
+                            </li>
+						<?php }
+						else
+						{ ?>
+							<li class="nav-item">
+                                <a href="panel.php" class="nav-link" data-toggle="dropdown">
+                                    <i class="nc-icon nc-palette"></i>
+                                    <span class="d-lg-none">Dashboard</span>
+                                </a>
+                            </li>
+							<?php } ?>
+                            <li class="dropdown nav-item">
+                                <a href="#" class="dropdown-toggle nav-link" data-toggle="dropdown">
+                                    <i class="nc-icon nc-planet"></i>
+                                    <span class="notification">5</span>
+                                    <span class="d-lg-none">Alertas</span>
+                                </a>
+                                <ul class="dropdown-menu">
+                                    <a class="dropdown-item" href="#">Solicitudes App</a>
+                                    <a class="dropdown-item" href="#">Solicitud Multimedia</a>
+                                    <a class="dropdown-item" href="#">Pagos App</a>
+                                    <a class="dropdown-item" href="#">Contratos incompletos</a>
+                                    <a class="dropdown-item" href="#">Otras Notificaciones</a>
+                                </ul>
+                            </li>
+                            
+                        </ul>
+                        <ul class="navbar-nav ml-auto">
+                            <li class="nav-item">
+                                <a class="nav-link" href="#pablo">
+                                    <span class="no-icon">Cuenta</span>
+                                </a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="http://example.com" id="navbarDropdownMenuLink" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                    <span class="no-icon">Sistema</span>
+                                </a>
+                                <div class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
+                                    <a class="dropdown-item" href="../contratos/corte_diario.php">Corte Semiatomatico</a>
+                                    <a class="dropdown-item" href="../contratos/corte_diario.php">Corte por Fecha</a>
+                                    <a class="dropdown-item" href="#">Activacion Semiautomatica</a>
+                                    
+                                    <div class="divider"></div>
+                                    <a class="dropdown-item" href="#">Registro de Pago Sistema</a>
+                                </div>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="<?php echo $cerrar;?>">
+                                    <span class="no-icon">Log out</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </nav>
+            <!-- End Navbar -->
+            <div class="content">
+                <div class="container-fluid">
+                  <div class="row">
+                    <div class="col-md-12">
+                      <div class="card strpied-tabled-with-hover">
+                                <div class="card-header ">
+                                   <!-- InstanceBeginEditable name="EditRegion1" -->
+<?php
+$propios= "0";
+$arrendados= "0";
+$port = 22;				
+if ($actualizacionanterior != $actualizacionnueva) { ?>
+<script type="text/javascript">
+var dialog = confirm("Existe una actualizacion para el sistema");
+if (dialog) {
+    location.href ='../generar/actualizar.php';
+}
+</script>
+<?php }?>
+				  <?php 
+				  if($puesto_personal == "admin")
+				  {
+				
+				  $recaudadohoy = 0;
+				  $recaudadoayer = 0;
+				  $accionr = "pago";
+				  $fechahoy = date('Y-m-d');
+				  $fechaayer = date("Y-m-d",strtotime($fechahoy."- 1 days"));
+				  $sqlreg = "SELECT * from registro WHERE (`fecha` LIKE '%$fechaayer%') AND (`accion` LIKE '$accionr')";
+					$resultreg = mysqli_query($con, $sqlreg); 
+					while($crowreg = mysqli_fetch_assoc($resultreg))
+            		
+					{
+						$recaudadoayer = $recaudadoayer + $crowreg['saldo'];
+						
+					}
+				   $sqlreg = "SELECT * from registro WHERE (`fecha` LIKE '%$fechahoy%') AND (`accion` LIKE '$accionr')";
+					$resultreg = mysqli_query($con, $sqlreg); 
+					while($crowreg = mysqli_fetch_assoc($resultreg))
+            		
+					{
+						$recaudadohoy = $recaudadohoy + $crowreg['saldo'];
+						
+					}
+				  $recaudadoayer = round($recaudadoayer, 2, PHP_ROUND_HALF_UP);
+				  $recaudadohoy = round($recaudadohoy, 2, PHP_ROUND_HALF_UP);
+				  
+					  
+				  ?>
+				  
+				  <?php 	  
+				  }
+				  ?>
+  <div id="optimus">
+				    <h3 id="optimus">INFORMACION    <?php
+						
+						
+						
+						
+$result = $con->query("SHOW COLUMNS FROM `clientes`");
+$posicion = 0;
+if ($result->num_rows > 0) {
+    while ($row = $result->fetch_assoc()) {                
+        //echo $matriz[$posicion] =$row['Field'].'<br/>';
+		$posicion = $posicion +1;
+    }
+}
+//echo $matriz[2] ;
+?>
+				    </h3>
+				  </div>
+
+					
+          <p>
+            <?php 
+			$ano = date("Y");
+			$mesactual = date("m");
+			$fechaactual = $ano."-".$mesactual;
+			$fechaanterior = $ano."-".$mesactual-1;
+			$enero = 0;
+			$febrero = 0;
+			$marzo = 0;
+			$abril = 0;
+			$mayo = 0;
+			$junio = 0;
+			$julio = 0;
+			$agosto = 0;
+			$septiembre = 0;
+			$octubre = 0;
+			$noviembre = 0;
+			$diciembre = 0;
+			$eneroanterior = 0;
+			$febreroanterior = 0;
+			$marzoanterior = 0;
+			$abrilanterior = 0;
+			$mayoanterior = 0;
+			$junioanterior = 0;
+			$julioanterior = 0;
+			$agostoanterior = 0;
+			$septiembreanterior = 0;
+			$octubreanterior = 0;
+			$noviembreanterior = 0;
+			$diciembreanterior = 0;
+			$stenero = 0;
+			$stfebrero = 0;
+			$stmarzo = 0;
+			$stabril = 0;
+			$stmayo = 0;
+			$stjunio = 0;
+			$stjulio = 0;
+			$stagosto = 0;
+			$stseptiembre = 0;
+			$stoctubre = 0;
+			$stnoviembre = 0;
+			$stdiciembre = 0;
+			$eneroin = 0;
+			$febreroin = 0;
+			$marzoin = 0;
+			$abrilin = 0;
+			$mayoin = 0;
+			$junioin = 0;
+			$julioin = 0;
+			$agostoin = 0;
+			$septiembrein = 0;
+			$octubrein = 0;
+			$noviembrein = 0;
+			$diciembrein = 0;
+			$enerocd = 0;
+			$febrerocd = 0;
+			$marzocd = 0;
+			$abrilcd = 0;
+			$mayocd = 0;
+			$juniocd = 0;
+			$juliocd = 0;
+			$agostocd = 0;
+			$septiembrecd = 0;
+			$octubrecd = 0;
+			$noviembrecd = 0;
+			$diciembrecd = 0;
+			$eneropr = 0;
+			$febreropr = 0;
+			$marzopr = 0;
+			$abrilpr = 0;
+			$mayopr = 0;
+			$juniopr = 0;
+			$juliopr = 0;
+			$agostopr = 0;
+			$septiembrepr = 0;
+			$octubrepr = 0;
+			$noviembrepr = 0;
+			$diciembrepr = 0;
+			$eneropbv = 0;
+			$febrerobv = 0;
+			$marzobv = 0;
+			$abrilbv = 0;
+			$mayobv = 0;
+			$juniobv = 0;
+			$juliobv = 0;
+			$agostobv = 0;
+			$septiembrebv = 0;
+			$octubrebv = 0;
+			$noviembrebv = 0;
+			$diciembrebv = 0;
+			$corte = 0;
+			$valorcobrado = 0;
+			$clientesretirados = 0;
+			$clientessincaja = 0;
+			$clientessuspendidos = 0;
+			$clientessinip = 0;
+			$estadovv = "pendiente";
+			$estadocontrato = "activo";
+			//sacar valor cobrado del mes
+			$estadocc = "pago";
+			$sqlcc = "SELECT * from `registro` WHERE `accion` LIKE '$estadocc' AND `fecha` LIKE '%$fechaactual%' order by fecha DESC";
+			$resulcc = mysqli_query($con, $sqlcc);
+			while($crowcc = mysqli_fetch_assoc($resulcc))
+        	{
+						
+				$valorcobrado = $valorcobrado + $crowcc['saldo'];
+						
+			}		 
+			//SACAR CLIENTES PROPIOS
+			$propiosb = "no";
+			$sqlbasep = "SELECT * from `contratos` WHERE `asignado` LIKE '$propiosb' AND `estado` LIKE '$estadocontrato'";
+			$resulbasep = mysqli_query($con, $sqlbasep);
+			while($crowbasep = mysqli_fetch_assoc($resulbasep))
+        	{
+						
+				$propios = $propios + 1;
+						
+			}
+			//SACAR CLIENTES ARRENDADOS
+			$arrendadosb = "no";
+			$sqlbasea = "SELECT * from `contratos` WHERE `asignado` NOT LIKE '$arrendadosb' AND `estado` LIKE '$estadocontrato'";
+			$resulbasea = mysqli_query($con, $sqlbasea);
+			while($crowbasea = mysqli_fetch_assoc($resulbasea))
+        	{
+						
+				$arrendados = $arrendados + 1;
+						
+			}
+			//SACAR CLIENTES SIN IP
+			$buscarbase = 0;
+			$sqlbase = "SELECT * from `contratos` WHERE `ip` LIKE '$buscarbase' AND `estado` LIKE '$estadocontrato'";
+			$resulbase = mysqli_query($con, $sqlbase);
+			while($crowbase = mysqli_fetch_assoc($resulbase))
+        	{
+						
+				$clientessinip = $clientessinip + 1;
+						
+			}
+			//SACAR CLIENTES cortados
+			$buscarbase = "si";
+			$sqlbase = "SELECT * from `contratos` WHERE `activado` LIKE '$buscarbase' AND `estado` LIKE '$estadocontrato'";
+			$resulbase = mysqli_query($con, $sqlbase);
+			while($crowbase = mysqli_fetch_assoc($resulbase))
+        	{
+						
+				$clientessuspendidos = $clientessuspendidos + 1;
+						
+			}
+			//SACAR CLIENTES SIN CAJA
+			$buscarbase = 0;
+			$sqlbase = "SELECT * from `contratos` WHERE `caja` LIKE '$buscarbase' AND `estado` LIKE '$estadocontrato'";
+			$resulbase = mysqli_query($con, $sqlbase);
+			while($crowbase = mysqli_fetch_assoc($resulbase))
+        	{
+						
+				$clientessincaja = $clientessincaja + 1;
+						
+			}
+			//SACAR CLIENTES RETIRADOS
+			$estadocontrato ="suspendido";
+			$buscarbase = "suspendido";
+			$sqlbase = "SELECT * from `contratos` WHERE `estado` LIKE '$buscarbase' AND `estado` LIKE '$estadocontrato'";
+			$resulbase = mysqli_query($con, $sqlbase);
+			while($crowbase = mysqli_fetch_assoc($resulbase))
+        	{
+						
+				$clientesretirados = $clientesretirados + 1;
+						
+			}
+			//SACAR CONTRATOS ACTUALES PARA PORCENTAJE
+			$estadocon = "activo";
+			$contratosultimomes = 0;
+			$contratostodos = 0;
+			$sqlcc = "SELECT * from `contratos` WHERE `fecha` LIKE '%$fechaactual%' AND `estado` LIKE '$estadocon' order by fecha DESC";
+			$resulcc = mysqli_query($con, $sqlcc);
+			while($crowcc = mysqli_fetch_assoc($resulcc))
+        	{
+						
+				$contratosultimomes = $contratosultimomes + 1;
+						
+			}
+			$sqlcc = "SELECT * from `contratos` WHERE `estado` LIKE '$estadocon' order by fecha DESC";
+			$resulcc = mysqli_query($con, $sqlcc);
+			while($crowcc = mysqli_fetch_assoc($resulcc))
+        	{
+						
+				$contratostodos = $contratostodos + 1;
+						
+			}
+				if ($contratostodos != 0 )
+				{
+			$crecimiento = ($contratosultimomes * 100)/$contratostodos;
+				}
+			//SACAR SERVICIOS TECNICOS ACTUALES PARA PORCENTAJE
+			$servicioanterior =0;
+			$servicioactual =0;
+			$crecimientoservicio =0;
+			$contratosultimomes = 0;
+			$contratostodos = 0;
+			$sqlcc = "SELECT * from `serviciotecnico` WHERE `fecha` LIKE '%$fechaactual%' order by fecha DESC";
+			$resulcc = mysqli_query($con, $sqlcc);
+			while($crowcc = mysqli_fetch_assoc($resulcc))
+        	{
+						
+				$servicioactual = $servicioactual + 1;
+						
+			}
+			$sqlcc = "SELECT * from `serviciotecnico` WHERE `fecha` LIKE '$fechaanterior' order by fecha DESC";
+			$resulcc = mysqli_query($con, $sqlcc);
+			while($crowcc = mysqli_fetch_assoc($resulcc))
+        	{
+						
+				$servicioanterior = $servicioanterior + 1;
+						
+			}
+				if($servicioactual == 0)
+				{
+					$crecimientoservicio= 0;
+				}
+				else
+				{
+					$crecimientoservicio = (($servicioanterior * 100)/$servicioactual)-100;
+				}
+			//BUSCAR CUANTAS TARJETAS ESTAN CONFIGURADAS
+			$tarjetas = 0;
+			$sqlco = "SELECT * from `olt` ";
+			$resulco = mysqli_query($con, $sqlco);
+			while($crowco = mysqli_fetch_assoc($resulco))
+        	{
+						
+				$tarjetas = $tarjetas + 1;
+						
+			}
+			//BUSCAR CUANTAS MANGAS ESTAN CONFIGURADAS
+			$mangas = 0;
+			$bus="manga";
+			$sqlco = "SELECT * from `dispositivos_empresa` WHERE `tipo` LIKE '$bus' ";
+			$resulco = mysqli_query($con, $sqlco);
+			while($crowco = mysqli_fetch_assoc($resulco))
+        	{
+						
+				$mangas = $mangas + 1;
+						
+			}
+			//BUSCAR CUANTASEMPALME ESTAN CONFIGURADAS
+			$empalme = 0;
+			$bus="empalme";
+			$sqlco = "SELECT * from `dispositivos_empresa` WHERE `tipo` LIKE '$bus' ";
+			$resulco = mysqli_query($con, $sqlco);
+			while($crowco = mysqli_fetch_assoc($resulco))
+        	{
+						
+				$empalme = $empalme + 1;
+						
+			}
+			//BUSCAR CUANTAS TRONCAL ESTAN CONFIGURADAS
+			$troncal = 0;
+			$bus="troncal";
+			$sqlco = "SELECT * from `dispositivos_empresa` WHERE `tipo` LIKE '$bus' ";
+			$resulco = mysqli_query($con, $sqlco);
+			while($crowco = mysqli_fetch_assoc($resulco))
+        	{
+						
+				$troncal = $troncal + 1;
+						
+			}
+			//BUSCAR CUANTAS DERIVACION ESTAN CONFIGURADAS
+			$distribucion = 0;
+			$bus="distribucion";
+			$sqlco = "SELECT * from `dispositivos_empresa` WHERE `tipo` LIKE '$bus' ";
+			$resulco = mysqli_query($con, $sqlco);
+			while($crowco = mysqli_fetch_assoc($resulco))
+        	{
+						
+				$distribucion = $distribucion + 1;
+						
+			}
+			//BUSCAR CUANTAS NODOS ESTAN CONFIGURADAS
+			$nodo = 0;
+			
+			$sqlco = "SELECT * from `nodo` ";
+			$resulco = mysqli_query($con, $sqlco);
+			while($crowco = mysqli_fetch_assoc($resulco))
+        	{
+						
+				$nodo = $nodo + 1;
+						
+			}
+			// BUSCAR CONTRATOS PARA SACAR CUANTO SE FACTURA
+			$productomensual = 0;
+			$estadoppp = "activo";
+			$sqlppcp = "SELECT * from `contratos` WHERE `estado` LIKE '$estadoppp' order by numero DESC";
+			$resulppcp = mysqli_query($con, $sqlppcp);
+			while($crowppcp = mysqli_fetch_assoc($resulppcp))
+        	{
+						
+				$buscarmensual = $crowppcp['producto'];
+				$sqlmensual = "SELECT * from `productos` WHERE `codigo` LIKE '$buscarmensual' order by codigo DESC";
+				$resulmensual = mysqli_query($con, $sqlmensual);
+				while($crowmensual = mysqli_fetch_assoc($resulmensual))
+        		{
+						
+					$productomensual = $productomensual + $crowmensual['preciouno'];
+				}
+			}
+				
+			//BUSCAR CUANTAS MULTIMEDIA ESTAN CONFIGURADAS
+			$multimedia = 0;
+			$bus="si";
+			$sqlco = "SELECT * from `clientes` WHERE `multimedia` LIKE '$bus' ";
+			$resulco = mysqli_query($con, $sqlco);
+			while($crowco = mysqli_fetch_assoc($resulco))
+        	{
+						
+				$multimedia = $multimedia + 1;
+						
+			}
+					
+					if($dispositivo == "movil")
+		  			{
+					echo '<script type="text/javascript">'; 
+					echo 'alert("PARA MEJOR VISUALIZACION PONGA SU DISPOSITIVO EN HORIZONTAL");';
+					echo '</script>';
+					}
+					$contratoscantidad = 0;
+					$contratoscantidadc = 0;
+					$valor = 0;
+					$valorc = 0;
+					$facturasvv = 0;
+					$valorvencido  = 0;
+					$facturascv = 0;
+					$valorvencidoc  = 0;
+					//--BUSCO en contratos para sacar cantidad de contratos y valor
+					$estadopp = "activo";
+					$sqlpp = "SELECT * from `contratos` WHERE `estado` LIKE '$estadopp' order by numero DESC";
+					$resulpp = mysqli_query($con, $sqlpp);
+					while($crowpp = mysqli_fetch_assoc($resulpp))
+        			{
+						
+						$dia_corte = $crowpp['dia_corte_actual'];
+						$dia_actual = date("d");
+						if ($dia_actual == $dia_corte)
+						{
+							$corte = 1;
+						}
+						
+						$contratoscantidad = $contratoscantidad +1;
+						$productopp = $crowpp['producto'];
+						$sqlh = "SELECT * from `productos` WHERE `codigo` LIKE '$productopp' order by codigo DESC";
+						$resulh = mysqli_query($con, $sqlh);
+						while($crowh = mysqli_fetch_assoc($resulh))
+        				{
+							$valor = $valor + $crowh['preciouno'];
+						}
+					}
+					//--BUSCO en contratos para sacar cantidad de contratos y valor de compra
+					$estadopp = "activo";
+					$sqlppc = "SELECT * from `contratoscompra` WHERE `estado` LIKE '$estadopp' order by numero DESC";
+					$resulppc = mysqli_query($con, $sqlppc);
+					while($crowppc = mysqli_fetch_assoc($resulppc))
+        			{
+						
+						$dia_corte = $crowppc['dia_corte_actual'];
+						$dia_actual = date("d");
+						if ($dia_actual == $dia_corte)
+						{
+							$corte = 1;
+						}
+						
+						$contratoscantidadc = $contratoscantidadc +1;
+						$productoppc = $crowppc['producto'];
+						$sqlh = "SELECT * from `productos` WHERE `codigo` LIKE '$productoppc' order by codigo DESC";
+						$resulhc = mysqli_query($con, $sqlh);
+						while($crowhc = mysqli_fetch_assoc($resulhc))
+        				{
+							$valorc = $valorc + $crowhc['preciocompra'];
+						}
+					}
+	//-----------------
+					  if ($corte == 1)
+						{
+							echo '<script type="text/javascript">'; 
+							echo 'alert("EXISTEN CLIENTES PARA CORTE");';
+							echo '</script>';	
+						}
+					//-- BUSCAR VALORE VENCIDOS EN VENTAS
+					$estadovv = "pendiente";
+					$sqlvv = "SELECT * from `ventas` WHERE `estado` LIKE '$estadovv' order by fecha DESC";
+					$resulvv = mysqli_query($con, $sqlvv);
+					while($crowvv = mysqli_fetch_assoc($resulvv))
+        			{
+						
+						$facturasvv = $facturasvv +1;
+						$total = str_replace ( ",", '', $crowvv['total']);
+						$valorvencido = $valorvencido + $total;
+						
+					}
+					//-- BUSCAR VALORE VENCIDOS EN COMPRAS
+					$estadovv = "pendiente";
+					$sqlcv = "SELECT * from `compras` WHERE `estado` LIKE '$estadovv' order by fecha DESC";
+					$resulcv = mysqli_query($con, $sqlcv);
+					while($crowcv = mysqli_fetch_assoc($resulcv))
+        			{
+						
+						$facturascv = $facturascv +1;
+						$totalc = str_replace ( ",", '', $crowcv['total']);
+						$valorvencidoc = $valorvencidoc + $totalc;
+						
+					}
+					//SACAR CONTRATOS PARA GRAFICAR AÑO ACTUAL
+					$sqlc = "SELECT * from `contratos` WHERE `fecha` LIKE '%$ano%' order by fecha DESC";
+					$resultc = mysqli_query($con, $sqlc);
+					while($crowc = mysqli_fetch_assoc($resultc))
+        		{
+					$contrato = $crowc['fecha'];
+					$buscar = $ano."-01";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$enero = $enero + 1;
+					}
+					$buscar = $ano."-02";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$febrero = $febrero + 1;
+					}
+					$buscar = $ano."-03";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$marzo = $marzo + 1;
+					}
+					$buscar = $ano."-04";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$abril = $abril + 1;
+					}
+					$buscar = $ano."-05";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$mayo = $mayo + 1;
+					}
+					$buscar = $ano."-06";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$junio = $junio + 1;
+					}
+					$buscar = $ano."-07";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$julio = $julio + 1;
+					}
+					$buscar = $ano."-08";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$agosto = $agosto + 1;
+					}
+					$buscar = $ano."-09";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$septiembre = $septiembre + 1;
+					}
+					$buscar = $ano."-10";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$octubre = $octubre + 1;
+					}
+					$buscar = $ano."-11";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$noviembre = $noviembre + 1;
+					}
+					$buscar = $ano."-12";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$diciembre = $diciembre + 1;
+					}
+				}
+				$anoanterior = $ano-1;
+				$sqlc = "SELECT * from `contratos` WHERE `fecha` LIKE '%$anoanterior%' order by fecha DESC";
+					$resultc = mysqli_query($con, $sqlc);
+					while($crowc = mysqli_fetch_assoc($resultc))
+        		{
+					//AÑO ANTERIOR
+					$contrato = $crowc['fecha'];
+					$buscar = $anoanterior."-01";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$eneroanterior = $eneroanterior + 1;
+					}
+					$buscar = $anoanterior."-02";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$febreroanterior = $febreroanterior + 1;
+					}
+					$buscar = $anoanterior."-03";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$marzoanterior = $marzoanterior + 1;
+					}
+					$buscar = $anoanterior."-04";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$abril = $abril + 1;
+					}
+					$buscar = $anoanterior."-05";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$mayoanterior = $mayoanterior + 1;
+					}
+					$buscar = $anoanterior."-06";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$junioanterior = $junioanterior + 1;
+					}
+					$buscar = $anoanterior."-07";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$julioanterior = $julioanterior + 1;
+					}
+					$buscar = $anoanterior."-08";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$agostoanterior = $agostoanterior + 1;
+					}
+					$buscar = $anoanterior."-09";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$septiembreanterior = $septiembreanterior+ 1;
+					}
+					$buscar = $anoanterior."-10";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$octubreanterior = $octubreanterior + 1;
+					}
+					$buscar = $anoanterior."-11";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$noviembreanterior = $noviembreanterior + 1;
+					}
+					$buscar = $anoanterior."-12";
+					$resultado = strpos($contrato, $buscar);
+					if($resultado !== FALSE){
+    				$diciembreanterior = $diciembreanterior + 1;
+					}
+				
+				}
+					// DATOS PARA GRAFICOS CONTRATOS
+					
+					
+					?>
+          </p>
+          <div class="card-body all-icons">
+                                    <div class="row" style="color: #5D5CD8;">
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail" >
+                                                <i class="nc-icon nc-air-baloon" style=""></i>
+                                                <div class="h4 mb-0"><?php echo $contratoscantidadc;?></div>
+                                                <a href="../contratos/productos_proveedores.php"><strong>CONTRATOS PROVEEDORES</strong></a>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-album-2"></i>
+                                                <div class="h4 mb-0"><span class="count"><?php echo $facturascv;?></span></div>
+                                                <a href="../ventas/carteravencidacompras.php"><strong>FACTURA PENDIENTE PROVEEDOR</strong></a>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-alien-33"></i>
+                                                <div class="h4 mb-0"><span class="count"><?php echo $valorc = round($valorc, 2);?></span></div>
+                                                <strong>VALOR VENCIDO PROVEEDOR</strong>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-align-center"></i>
+                                                <div class="h4 mb-0"><span class="count"><?php echo $contratoscantidad;?></span></div>
+<a href="../contratos/productos.php"><strong>CONTRATOS CLIENTES</strong></a>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-align-left-2"></i>
+                                                <div class="h4 mb-0"><?php echo $facturasvv;?></div>
+                                                <a href="../ventas/carteravencida.php"><strong>FACTURAS VENCIDAS CLIENTES</strong></a>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-ambulance"></i>
+                                                <div class="h4 mb-0"><span class="count"><?php echo $valorvencido = round($valorvencido, 2);?></span></div>
+                                                <a href="../ventas/carteravencida.php"><strong>VALOR CLIENTES VENCIDOS</strong></a>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-android"></i>
+                                                <div class="h4 mb-0"><span class="count">0</span></div>
+                                                <a href="../contratos/productos_proveedores.php"><strong>DOCUMENTOS PAGADOS</strong></a>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-app"></i>
+                                                <div class="h4 mb-0"><span class="count"><?php echo $valorcobrado;?></span></div>
+                                                <a href="../ventas/carteravencidacompras.php"><strong>DOCUMENTOS COBRADOS</strong></a>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-apple"></i>
+                                                <div class="h4 mb-0"><span class="count">0</span></div>
+                                                <strong>GASTOS VS VENTAS</strong>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-atom"></i>
+                                                <div class="h4 mb-0"><span class="count"><?php echo $crecimiento;?></span>%</div>
+<a href="../contratos/productos.php"><strong>AUMENTO CONTRATO</strong></a>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-attach-87"></i>
+                                                <div class="h4 mb-0"><span class="count"><?php echo $crecimientoservicio;?></span>%</div>
+                                                <a href="../ventas/carteravencida.php"><strong>SERVICIOS TECNICOS</strong></a>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-audio-92"></i>
+                                                <div class="h4 mb-0"><span class="count"><?php echo $productomensual;?></span></div>
+                                                <a href="../ventas/carteravencida.php"><strong>FACTURACION MENSUAL</strong></a>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-backpack"></i>
+                                                <div class="h4 mb-0"><span class="count"><?php echo $tarjetas;?></span></div>
+                                                <a href="../contratos/productos_proveedores.php"><strong>TARJETRAS CONFIGURADAS</strong></a>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-badge"></i>
+                                                <div class="h4 mb-0"><span class="count"><?php echo $mangas;?></span></div>
+                                                <a href="../ventas/carteravencidacompras.php"><strong>MANGAS CONFIGURADAS</strong></a>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-bag"></i>
+                                                <div class="h4 mb-0"><span class="count"><?php echo $empalme;?></span></div>
+                                                <strong>EMPALMES CONFIRADAS</strong>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-bank"></i>
+                                                <div class="h4 mb-0"><span class="count"><?php echo $troncal;?></span></div>
+<a href="../contratos/productos.php"><strong>TRONCALES CONFIGURADAS</strong></a>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-battery-81"></i>
+                                                <div class="h4 mb-0"><span class="count"><?php echo $distribucion;?></span></div>
+                                                <a href="../ventas/carteravencida.php"><strong>DERIVACIONES CONFIGURADAS</strong></a>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-bell-55"></i>
+                                                <div class="h4 mb-0"><span class="count"><?php echo $nodo;?></span></div>
+                                                <a href="../ventas/carteravencida.php"><strong>NODOS CONFIGURADOS</strong></a>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                        <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-bold"></i>
+                                                <div class="h4 mb-0"><span class="count"><?php echo $multimedia;?></span></div>
+                                                <a href="../contratos/productos_proveedores.php"><strong>SISTEMAS MULTIMEDIA CONFIGURADOS</strong></a>
+                                                <p>&nbsp;</p>
+                                            </div>
+                                        </div>
+                                      <div class="font-icon-list col-lg-2 col-md-3 col-sm-4 col-6">
+                                            <div class="font-icon-detail">
+                                                <i class="nc-icon nc-bulb-63"></i>
+                                                <div class="h4 mb-0"><?php echo $actualizacionanterior; ?></div>
+                                                <a href="../ventas/carteravencidacompras.php"><strong>ULTIMA ACTUALIZACION</strong></a>
+                                                <p>&nbsp;</p>
+                                          </div>
+                                        </div>
+                                        
+                                    </div>
+                                </div>
+          <p>&nbsp;</p>
+          <p>
+            <?php 
+					// SACAR INFORMACION DE OLT
+					// SELECCIONO OLT
+					$sqlolno = "SELECT * from `nodo`";
+					$resultolno = mysqli_query($con, $sqlolno);
+					while($crowolno = mysqli_fetch_assoc($resultolno))
+					{
+					$nodoconeccion=$crowolno['codigo'];
+					
+					$sqlolt = "SELECT * from `olt_conexion` WHERE `nodo` LIKE '$nodoconeccion'";
+					$resultolt = mysqli_query($con, $sqlolt);
+					while($crowolt = mysqli_fetch_assoc($resultolt))
+					{
+					$host_olt=$crowolt['ip'];
+					$u_olt=$crowolt['usuario'];
+					$p_olt=$crowolt['contrasena'];
+					}				
+					// Establecer conexión SSH con olt
+					$connection = ssh2_connect($host_olt, $port);
+					if (!$connection) 
+					{
+					die("No se pudo establecer la conexión SSH.");
+					}
+					// Ejecutar un comando remoto recuperacion informacion olt
+					$connection = ssh2_connect($host_olt, $port);
+					if (!ssh2_auth_password($connection, $u_olt, $p_olt)) {
+							die("La autenticación SSH falló.");
+					}else
+					{
+					$command = 'enable'."\n".'config'."\n".'scroll 512'."\n".'display sysuptime'."\n";
+					$stream = ssh2_exec($connection, $command);
+					stream_set_blocking($stream, true);
+					$output = stream_get_contents($stream);
+					//$output;
+					$separador = "time";
+					$separada = explode($separador, $output);
+					$separador = "second";
+					$separadat = explode($separador, $separada[2]);
+					}
+					$connection = ssh2_connect($host_olt, $port);
+					if (!ssh2_auth_password($connection, $u_olt, $p_olt)) {
+							die("La autenticación SSH falló.");
+					}else
+					{
+					$command = 'enable'."\n".'config'."\n".'scroll 512'."\n".'display cpu 0/1'."\n";
+					$stream = ssh2_exec($connection, $command);
+					stream_set_blocking($stream, true);
+					$output = stream_get_contents($stream);
+					//$output;
+					$separador = "occupancy";
+					$separadapor = explode($separador, $output);
+					$separador = "%";
+					$separadatpor = explode($separador, $separadapor[2]);
+					//ssh2_disconnect($connection);
+					$tarjetauno = $separadatpor[0]." %";
+					
+					}
+					$connection = ssh2_connect($host_olt, $port);	
+				
+					if (!ssh2_auth_password($connection, $u_olt, $p_olt)) {
+							die("La autenticación SSH falló.");
+					}else
+					{
+					$command = 'enable'."\n".'config'."\n".'scroll 512'."\n".'display cpu 0/2'."\n";
+					$stream = ssh2_exec($connection, $command);
+					stream_set_blocking($stream, true);
+					$output = stream_get_contents($stream);
+					$separador = "occupancy";
+					$separadapordos = explode($separador, $output);
+					$separador = "%";
+					$separadatpordos = explode($separador, $separadapordos[2]);
+					$tarjetados = $separadatpordos[0]." %";
+					}
+					
+					
+					////////////pendiente de sacar informacion	
+					$connection = ssh2_connect($host_olt, $port);
+					if (!ssh2_auth_password($connection, $u_olt, $p_olt)) {
+							die("La autenticación SSH falló.");
+					}else
+					{
+					$command = 'enable'."\n".'config'."\n".'scroll 512'."\n".'interface gpon 0/1'."\n".'display ont port state 0 0 eth-port all'."\n";
+					$stream = ssh2_exec($connection, $command);
+					stream_set_blocking($stream, true);
+					$output = stream_get_contents($stream);
+					//$separador = "occupancy";
+					//$separadapordos = explode($separador, $output);
+					//$separador = "%";
+					//$separadatpordos = explode($separador, $separadapordos[2]);
+					//$tarjetados = $separadatpordos[0]." %";
+					}	
+					///////////////////////////////////////////////////
+									?>
+          </p>
+          <h >NODO <?php echo $nodo;?></h2>
+          <table width="100%" align="center">
+            <tbody>
+    <tr>
+      <td align="center"><div class="card">
+        <div class="card-body">
+          <div class="stat-widget-one">
+            <div class="stat-icon dib"><i class="ti-money text-success border-success"></i></div>
+            <div class="stat-content dib">
+              <div class="stat-text"><a href="../contratos/productossinip.php">Tiempo Activo</a></div>
+              <div class="stat-digit"><?php echo $separadat[0]; ?></div>
+            </div>
+          </div>
+        </div>
+      </div></td>
+      <td width="1%" align="center">&nbsp;</td>
+      <td align="center"><div class="card">
+        <div class="card-body">
+          <div class="stat-widget-one">
+            <div class="stat-icon dib"><i class="ti-user text-primary border-primary"></i></div>
+            <div class="stat-content dib">
+              <div class="stat-text"><a href="../contratos/productossuspendido.php">Uso Tarjeta 0/1</a></div>
+              <div class="stat-digit"><?php echo $tarjetauno; ?></div>
+            </div>
+          </div>
+        </div>
+      </div></td>
+      <td width="1%" align="center">&nbsp;</td>
+      <td align="center"><div class="card">
+        <div class="card-body">
+          <div class="stat-widget-one">
+            <div class="stat-icon dib"><i class="ti-layout-grid2 text-warning border-warning"></i></div>
+            <div class="stat-content dib">
+              <div class="stat-text"><a href="../contratos/productoscaja.php">Uso Tarjeta 0/2</a></div>
+              <div class="stat-digit"><?php echo $tarjetados; ?></div>
+            </div>
+          </div>
+        </div>
+      </div></td>
+      <td width="1%" align="center">&nbsp;</td>
+      <td align="center"><div class="card">
+        <div class="card-body">
+          <div class="stat-widget-one">
+            <div class="stat-icon dib"><i class="ti-link text-danger border-danger"></i></div>
+            <div class="stat-content dib">
+              <div class="stat-text"><a href="../contratos/productosretirados.php">Ancho de Banda</a></div>
+              <div class="stat-digit"><?php echo $clientesretirados; ?></div>
+            </div>
+          </div>
+        </div>
+      </div></td>
+      <td width="1%" align="center">&nbsp;</td>
+      <td align="center"><div class="card">
+        <div class="card-body">
+          <div class="stat-widget-one">
+            <div class="stat-icon dib"><i class="ti-money text-success border-success"></i></div>
+            <div class="stat-content dib">
+              <div class="stat-text"><a href="../contratos/productossinip.php">Sin ip</a></div>
+              <div class="stat-digit"><?php echo $clientessinip; ?></div>
+            </div>
+          </div>
+        </div>
+      </div></td>
+      <td width="1%" align="center">&nbsp;</td>
+      <td align="center"><div class="card">
+        <div class="card-body">
+          <div class="stat-widget-one">
+            <div class="stat-icon dib"><i class="ti-user text-primary border-primary"></i></div>
+            <div class="stat-content dib">
+              <div class="stat-text"><a href="../contratos/productossuspendido.php">Suspendidos</a></div>
+              <div class="stat-digit"><?php echo $clientessuspendidos; ?></div>
+            </div>
+          </div>
+        </div>
+      </div></td>
+      <td width="1%" align="center">&nbsp;</td>
+      <td align="center"><div class="card">
+        <div class="card-body">
+          <div class="stat-widget-one">
+            <div class="stat-icon dib"><i class="ti-layout-grid2 text-warning border-warning"></i></div>
+            <div class="stat-content dib">
+              <div class="stat-text"><a href="../contratos/productoscaja.php">Sin Caja</a></div>
+              <div class="stat-digit"><?php echo $clientessincaja; ?></div>
+            </div>
+          </div>
+        </div>
+      </div></td>
+      <td width="1%" align="center">&nbsp;</td>
+      <td align="center"><div class="card">
+        <div class="card-body">
+          <div class="stat-widget-one">
+            <div class="stat-icon dib"><i class="ti-link text-danger border-danger"></i></div>
+            <div class="stat-content dib">
+              <div class="stat-text"><a href="../contratos/productosretirados.php">Retirados</a></div>
+              <div class="stat-digit"><?php echo $clientesretirados; ?></div>
+            </div>
+          </div>
+        </div>
+      </div></td>
+    </tr>
+  </tbody>
+</table>
+<?php 
+}								
+?>
+<p>
+  <?php 
+	if ($tipoempresacontrol== "isp")
+	{
+	?>
+                  </p>
+<table width="100%" border="0" align="center">
+                  <tbody>
+                      <tr>
+                        <td>
+                          <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+                          <script type="text/javascript">
+      google.charts.load('current', {'packages':['corechart']});
+      google.charts.setOnLoadCallback(drawChart);
+
+      function drawChart() {
+        var data = google.visualization.arrayToDataTable([
+          ['MES', '<?php echo $ano;?>', '<?php echo $ano-1;?>'],
+          ['Ene',  <?php echo $enero;?>,     <?php echo $eneroanterior;?>],
+          ['Feb',  <?php echo $febrero;?>,      <?php echo $febreroanterior;?>],
+          ['Mar', <?php echo $marzo;?>,       <?php echo $marzoanterior;?>],
+          ['Abr',  <?php echo $abril;?>,      <?php echo $abrilanterior;?>],
+          ['May', <?php echo $mayo;?>,      <?php echo $mayoanterior;?>],
+          ['Jun',  <?php echo $junio;?>,      <?php echo $junioanterior;?>],
+          ['Jul',  <?php echo $julio;?>,      <?php echo $julioanterior;?>],
+          ['Ago',  <?php echo $agosto;?>,      <?php echo $agostoanterior;?>],
+          ['Sep',  <?php echo $septiembre;?>,      <?php echo $septiembreanterior;?>],
+          ['Oct',  <?php echo $octubre;?>,      <?php echo $octubreanterior;?>],
+          ['Nov', <?php echo $noviembre;?>,       <?php echo $noviembreanterior;?>],
+          ['Dic',  <?php echo $diciembre;?>,      <?php echo $diciembreanterior;?>]
+        ]);
+
+        var options = {
+          title: 'Contratos Mensuales',
+          curveType: 'function',
+          legend: { position: 'bottom' }
+        };
+
+        var chart = new google.visualization.LineChart(document.getElementById('curve_chart'));
+
+        chart.draw(data, options);
+      }
+    </script>
+                          
+                          
+                          <div id="curve_chart" ></div>
+                          <!--<div id="curve_chart" style="width: 900px; height: 500px"></div>-->                        </td>
+                      </tr>
+                      <tr>
+                        <td>
+						  <?php 
+							
+					//SACARservicios tecnicos PARA GRAFICAR
+					$sqlst = "SELECT * from `serviciotecnico`";
+					$resultst = mysqli_query($con, $sqlst);
+					while($crowst = mysqli_fetch_assoc($resultst))
+        		{
+					$mes = $crowst['fecha'];
+					$motivo = $crowst['motivo'];
+					$m = "Instalacion Nueva";
+					$mm = "Cambio de Domicilio";
+					$mmm = "Pon Rojo";
+					$mmmm = "Baja Velocidad";
+				$fecha_buscada = "2022-01";	
+					$buscado = strpos($mes, $fecha_buscada);
+					if ($buscado === false)
+					{}else{
+						$stenero=$stenero+1;
+						$motivobuscado = strpos($motivo, $m);
+						if ($motivobuscado === false)
+							{}else{
+						$eneroin = $eneroin +1;
+							}
+						$motivobuscado = strpos($motivo, $mm);
+						if ($motivobuscado === false)
+							{}else{
+						$enerocd = $enerocd+ +1;
+							}
+						$motivobuscado = strpos($motivo, $mmm);
+						if ($motivobuscado === false)
+							{}else{
+						$eneropr = $eneropr+ +1;
+							}
+						$motivobuscado = strpos($motivo, $mmmm);
+						if ($motivobuscado === false)
+							{}else{
+						$enerobv = $enerobv+ +1;
+							}
+					}
+				$fecha_buscada = "2022-02";	
+					$buscado = strpos($mes, $fecha_buscada);
+					if ($buscado === false)
+					{}else{
+						$stfebrero=$stfebrero+1;
+						$motivobuscado = strpos($motivo, $m);
+						if ($motivobuscado === false)
+							{}else{
+						$febreroin = $febreroin +1;
+							}
+						$motivobuscado = strpos($motivo, $mm);
+						if ($motivobuscado === false)
+							{}else{
+						$febrerocd = $febrerocd +1;
+							}
+						$motivobuscado = strpos($motivo, $mmm);
+						if ($motivobuscado === false)
+							{}else{
+						$febreropr = $febreropr +1;
+							}
+						$motivobuscado = strpos($motivo, $mmmm);
+						if ($motivobuscado === false)
+							{}else{
+						$febrerobv = $febrerobv +1;
+							}
+					}
+				$fecha_buscada = "2022-03";	
+					$buscado = strpos($mes, $fecha_buscada);
+					if ($buscado === false)
+					{}else{
+						$stmarzo=$stmarzo+1;
+						$motivobuscado = strpos($motivo, $m);
+						if ($motivobuscado === false)
+							{}else{
+						$marzoin = $marzoin +1;
+							}
+						$motivobuscado = strpos($motivo, $mm);
+						if ($motivobuscado === false)
+							{}else{
+						$marzocd = $marzocd +1;
+							}
+						$motivobuscado = strpos($motivo, $mmm);
+						if ($motivobuscado === false)
+							{}else{
+						$marzopr = $marzopr +1;
+							}
+						$motivobuscado = strpos($motivo, $mmmm);
+						if ($motivobuscado === false)
+							{}else{
+						$marzobv = $marzobv +1;
+							}
+					}
+				
+				$fecha_buscada = "2022-04";	
+					$buscado = strpos($mes, $fecha_buscada);
+					if ($buscado === false)
+					{}else{
+						$stabril=$stabril+1;
+						$motivobuscado = strpos($motivo, $m);
+						if ($motivobuscado === false)
+							{}else{
+						$abrilin = $abrilin +1;
+							}
+						$motivobuscado = strpos($motivo, $mm);
+						if ($motivobuscado === false)
+							{}else{
+						$abrilcd = $abrilcd +1;
+							}
+						$motivobuscado = strpos($motivo, $mmm);
+						if ($motivobuscado === false)
+							{}else{
+						$abrilpr = $abrilpr +1;
+							}
+						$motivobuscado = strpos($motivo, $mmmm);
+						if ($motivobuscado === false)
+							{}else{
+						$abrilbv = $abrilbv +1;
+							}
+					}
+				$fecha_buscada = "2022-05";	
+					$buscado = strpos($mes, $fecha_buscada);
+					if ($buscado === false)
+					{}else{
+						$stmayo=$stmayo+1;
+						$motivobuscado = strpos($motivo, $m);
+						if ($motivobuscado === false)
+							{}else{
+						$mayoin = $mayoin +1;
+							}
+						$motivobuscado = strpos($motivo, $mm);
+						if ($motivobuscado === false)
+							{}else{
+						$mayocd = $mayocd +1;
+							}
+						$motivobuscado = strpos($motivo, $mmm);
+						if ($motivobuscado === false)
+							{}else{
+						$mayopr = $mayopr +1;
+							}
+						$motivobuscado = strpos($motivo, $mmmm);
+						if ($motivobuscado === false)
+							{}else{
+						$mayobv = $mayobv +1;
+							}
+					}
+				$fecha_buscada = "2022-06";	
+					$buscado = strpos($mes, $fecha_buscada);
+					if ($buscado === false)
+					{}else{
+						$stjunio=$stjunio+1;
+						$motivobuscado = strpos($motivo, $m);
+						if ($motivobuscado === false)
+							{}else{
+						$junioin = $junioin +1;
+							}
+						$motivobuscado = strpos($motivo, $mm);
+						if ($motivobuscado === false)
+							{}else{
+						$juniocd = $juniocd +1;
+							}
+						$motivobuscado = strpos($motivo, $mmm);
+						if ($motivobuscado === false)
+							{}else{
+						$juniopr = $juniopr +1;
+							}
+						$motivobuscado = strpos($motivo, $mmmm);
+						if ($motivobuscado === false)
+							{}else{
+						$juniobv = $juniobv +1;
+							}
+					}
+				$fecha_buscada = "2022-07";	
+					$buscado = strpos($mes, $fecha_buscada);
+					if ($buscado === false)
+					{}else{
+						$stjulio=$stjulio+1;
+						$motivobuscado = strpos($motivo, $m);
+						if ($motivobuscado === false)
+							{}else{
+						$julioin = $julioin +1;
+							}
+						$motivobuscado = strpos($motivo, $mm);
+						if ($motivobuscado === false)
+							{}else{
+						$juliocd = $juliocd +1;
+							}
+						$motivobuscado = strpos($motivo, $mmm);
+						if ($motivobuscado === false)
+							{}else{
+						$juliopr = $juliopr +1;
+							}
+						$motivobuscado = strpos($motivo, $mmmm);
+						if ($motivobuscado === false)
+							{}else{
+						$juliobv = $juliobv +1;
+							}
+					}
+				$fecha_buscada = "2022-08";	
+					$buscado = strpos($mes, $fecha_buscada);
+					if ($buscado === false)
+					{}else{
+						$stagosto=$stagosto+1;
+						$motivobuscado = strpos($motivo, $m);
+						if ($motivobuscado === false)
+							{}else{
+						$agostoin = $agostoin +1;
+							}
+						$motivobuscado = strpos($motivo, $mm);
+						if ($motivobuscado === false)
+							{}else{
+						$agostocd = $agostocd +1;
+							}
+						$motivobuscado = strpos($motivo, $mmm);
+						if ($motivobuscado === false)
+							{}else{
+						$agostopr = $agostopr +1;
+							}
+						$motivobuscado = strpos($motivo, $mmmm);
+						if ($motivobuscado === false)
+							{}else{
+						$agostobv = $agostobv +1;
+							}
+					}
+				$fecha_buscada = "2022-09";	
+					$buscado = strpos($mes, $fecha_buscada);
+					if ($buscado === false)
+					{}else{
+						$stseptiembre=$stseptiembre+1;
+						$motivobuscado = strpos($motivo, $m);
+						if ($motivobuscado === false)
+							{}else{
+						$septiembrein = $septiembrein +1;
+							}
+						$motivobuscado = strpos($motivo, $mm);
+						if ($motivobuscado === false)
+							{}else{
+						$septiembrecd = $septiembrecd +1;
+							}
+						$motivobuscado = strpos($motivo, $mmm);
+						if ($motivobuscado === false)
+							{}else{
+						$septiembrepr = $septiembrepr +1;
+							}
+						$motivobuscado = strpos($motivo, $mmmm);
+						if ($motivobuscado === false)
+							{}else{
+						$septiembrebv = $septiembrebv +1;
+							}
+					}
+				$fecha_buscada = "2022-10";	
+					$buscado = strpos($mes, $fecha_buscada);
+					if ($buscado === false)
+					{}else{
+						$stoctubre=$stoctubre+1;
+						$motivobuscado = strpos($motivo, $m);
+						if ($motivobuscado === false)
+							{}else{
+						$octubrein = $octubrein +1;
+							}
+						$motivobuscado = strpos($motivo, $mm);
+						if ($motivobuscado === false)
+							{}else{
+						$octubrecd = $octubrecd +1;
+							}
+						$motivobuscado = strpos($motivo, $mmm);
+						if ($motivobuscado === false)
+							{}else{
+						$octubrepr = $octubrepr +1;
+							}
+						$motivobuscado = strpos($motivo, $mmmm);
+						if ($motivobuscado === false)
+							{}else{
+						$octubrebv = $octubrebv +1;
+							}
+					}
+				$fecha_buscada = "2022-11";	
+					$buscado = strpos($mes, $fecha_buscada);
+					if ($buscado === false)
+					{}else{
+						$stnoviembre=$stnoviembre+1;
+						$motivobuscado = strpos($motivo, $m);
+						if ($motivobuscado === false)
+							{}else{
+						$noviembrein = $noviembrein +1;
+							}
+						$motivobuscado = strpos($motivo, $mm);
+						if ($motivobuscado === false)
+							{}else{
+						$noviembrecd = $noviembrecd +1;
+							}
+						$motivobuscado = strpos($motivo, $mmm);
+						if ($motivobuscado === false)
+							{}else{
+						$noviembrepr = $noviembrepr +1;
+							}
+						$motivobuscado = strpos($motivo, $mmmm);
+						if ($motivobuscado === false)
+							{}else{
+						$noviembrebv = $noviembrebv +1;
+							}
+					}
+				$fecha_buscada = "2022-12";	
+					$buscado = strpos($mes, $fecha_buscada);
+					if ($buscado === false)
+					{}else{
+						$stdiciembre=$stdiciembre+1;
+						$motivobuscado = strpos($motivo, $m);
+						if ($motivobuscado === false)
+							{}else{
+						$diciembrein = $diciembrein +1;
+							}
+						$motivobuscado = strpos($motivo, $mm);
+						if ($motivobuscado === false)
+							{}else{
+						$diciembrecd = $diciembrecd +1;
+							}
+						$motivobuscado = strpos($motivo, $mmm);
+						if ($motivobuscado === false)
+							{}else{
+						$diciembrepr = $diciembrepr +1;
+							}
+						$motivobuscado = strpos($motivo, $mmmm);
+						if ($motivobuscado === false)
+							{}else{
+						$diciembrebv = $diciembrebv +1;
+							}
+					}
+				
+				}
+					
+							?>
+						  
+						  
+						  <script type="text/javascript">
+      google.charts.load('current', {'packages':['corechart']});
+      google.charts.setOnLoadCallback(drawChart);
+
+  function drawChart() {
+    var data = google.visualization.arrayToDataTable([
+      ['Ene', <?php echo $stenero-5;?>, <?php echo $stenero-3;?>, <?php echo $stenero+3;?>, <?php echo $stenero+5;?>],
+      ['Feb', <?php echo $stfebrero-5;?>, <?php echo $stfebrero-3;?>, <?php echo $stfebrero+3;?>, <?php echo $stfebrero+5;?>],
+      ['Mar', <?php echo $stmarzo-5;?>, <?php echo $stmarzo-3;?>, <?php echo $stmarzo+3;?>, <?php echo $stmarzo+5;?>],
+      ['Abr', <?php echo $stabril-5;?>, <?php echo $stabril-3;?>, <?php echo $stabril+3;?>, <?php echo $stabril+5;?>],
+      ['May',  <?php echo $stmayo-5;?>, <?php echo $stmayo-3;?>, <?php echo $stmayo+3;?>, <?php echo $stmayo+5;?>],
+	  ['Jun',  <?php echo $stjunio-5;?>, <?php echo $stjunio-3;?>, <?php echo $stjunio+3;?>, <?php echo $stjunio+5;?>],
+      ['Jul',  <?php echo $stjulio-5;?>, <?php echo $stjulio-3;?>, <?php echo $stjulio+3;?>, <?php echo $stjulio+5;?>],
+      ['Ago',  <?php echo $stagosto-5;?>, <?php echo $stagosto-3;?>, <?php echo $stagosto+3;?>, <?php echo $stagosto+5;?>],
+      ['Sep',  <?php echo $stseptiembre-5;?>, <?php echo $stseptiembre-3;?>, <?php echo $stseptiembre+3;?>, <?php echo $stseptiembre+5;?>],
+      ['Oct',  <?php echo $stoctubre-5;?>, <?php echo $stoctubre-3;?>, <?php echo $stoctubre+3;?>, <?php echo $stoctubre+5;?>],
+	  ['Nov',  <?php echo $stnoviembre-5;?>, <?php echo $stnoviembre-3;?>, <?php echo $stnoviembre+3;?>, <?php echo $stnoviembre+5;?>],
+      ['Dic',  <?php echo $stdiciembre-5;?>, <?php echo $stdiciembre-3;?>, <?php echo $stdiciembre+3;?>, <?php echo $stdiciembre+5;?>]
+      // Treat first row as data as well.
+    ], true);
+
+    var options = {
+		title: 'Servicios Tecnicos por Mes',
+		vAxis: {title: 'Unidades'},
+          hAxis: {title: 'Meses'},
+      legend: { position: 'bottom' }
+    };
+
+    var chart = new google.visualization.CandlestickChart(document.getElementById('chart_div'));
+
+    chart.draw(data, options);
+  }
+    </script>
+  
+
+    <div id="chart_div"></div>
+ 
+</td>
+                      </tr>
+                      <tr>
+                        <td>
+						  
+						  
+					      <script type="text/javascript">
+      google.charts.load('current', {'packages':['corechart']});
+      google.charts.setOnLoadCallback(drawVisualization);
+
+      function drawVisualization() {
+        // Some raw data (not necessarily accurate)
+        var data = google.visualization.arrayToDataTable([
+          ['Month', 'Varios', 'Ins Nueva', 'Cam Dom', 'Pon Rojo', 'Baja Vel', 'Promedio'],
+          ['Ene',0,<?php echo $eneroin;?>,<?php echo $enerocd;?>,<?php echo $eneropr;?>,<?php echo $eneropbv;?>,<?php echo $enero;?>],
+          ['Feb',0,<?php echo $febreroin;?>,<?php echo $febrerocd;?>,<?php echo $febreropr;?>,<?php echo $febrerobv;?>,<?php echo $febrero;?>],
+          ['Mar',0,<?php echo $marzoin;?>,<?php echo $marzocd;?>,<?php echo $marzopr;?>,<?php echo $marzobv;?>,<?php echo $marzo;?>],
+          ['Abr',0,<?php echo $abrilin;?>,<?php echo $abrilcd;?>,<?php echo $abrilpr;?>,<?php echo $abrilbv;?>,<?php echo $abril;?>],
+          ['May',0,<?php echo $mayoin;?>,<?php echo $mayocd;?>,<?php echo $mayopr;?>,<?php echo $mayobv;?>,<?php echo $mayo;?>],
+          ['Jun',0,<?php echo $junioin;?>,<?php echo $juniocd;?>,<?php echo $juniopr;?>,<?php echo $juniobv;?>,<?php echo $junio;?>],
+          ['Jul',0,<?php echo $julioin;?>,<?php echo $juliocd;?>,<?php echo $juliopr;?>,<?php echo $juliobv;?>,<?php echo $julio;?>],
+          ['Ago',0,<?php echo $agostoin;?>,<?php echo $agostocd;?>,<?php echo $agostopr;?>,<?php echo $agostobv;?>,<?php echo $agosto;?>],
+          ['Sep',0,<?php echo $septiembrein;?>,<?php echo $septiembrecd;?>,<?php echo $septiembrepr;?>,<?php echo $septiembrebv;?>,<?php echo $septiembre;?>],
+          ['Oct',0,<?php echo $octubrein;?>,<?php echo $octubrecd;?>,<?php echo $octubrepr;?>,<?php echo $octubrebv;?>,<?php echo $octubre;?>],
+          ['Nov',0,<?php echo $noviembrein;?>,<?php echo $noviembrecd;?>,<?php echo $noviembrepr;?>,<?php echo $noviembrebv;?>,<?php echo $noviembre;?>],
+          ['Dic',0,<?php echo $diciembrein;?>,<?php echo $diciembrecd;?>,<?php echo $diciembrepr;?>,<?php echo $diciembrebv;?>,<?php echo $diciembre;?>]
+        ]);
+
+        var options = {
+          title : 'Servicio Tecnico Detallado',
+          vAxis: {title: 'Unidades'},
+          hAxis: {title: 'Meses'},
+          seriesType: 'bars',
+          series: {5: {type: 'line'}}
+        };
+
+        var chart = new google.visualization.ComboChart(document.getElementById('chart_div_2'));
+        chart.draw(data, options);
+      }
+    </script>
+  
+    <div id="chart_div_2"></div>
+	<?php 
+	}
+	?>
+  <?php
+//echo '<script type="text/javascript">';
+//echo $estadoactualizacion = 'confirm("¿Existe una actualizacion para su Sistema?")'; 
+//echo '</script>';
+//echo $estadoactualizacion;
+//if($estadoactualizacion == "true"){
+//echo '<script type="text/javascript">';
+//echo 'alert("cua cua")'; 
+//echo '</script>';
+//}else{
+//echo '<script type="text/javascript">';
+//echo 'alert("no heres un pato")'; 
+//echo '</script>';
+//}
+?>
+					
+
+						  
+						  
+						  
+					    </td>
+                      </tr>
+     

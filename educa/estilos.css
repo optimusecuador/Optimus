@@ -1,0 +1,21 @@
+/* Estilos para soportar pantalla completa en elementos de video */
+.video-wrapper:-webkit-full-screen { 
+    width: 100%; 
+    height: 100%; 
+    background: #0f172a; 
+}
+.video-wrapper:-moz-full-screen { 
+    width: 100%; 
+    height: 100%; 
+    background: #0f172a; 
+}
+.video-wrapper:fullscreen { 
+    width: 100%; 
+    height: 100%; 
+    background: #0f172a; 
+}
+
+/* Estilos personalizados para el contenedor redimensionable */
+.resizable-video-container {
+    transition: width 0.1s ease;
+}

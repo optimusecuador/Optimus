@@ -1,0 +1,2006 @@
+<!DOCTYPE html>
+<!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7" lang=""> <![endif]-->
+<!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8" lang=""> <![endif]-->
+<!--[if IE 8]>         <html class="no-js lt-ie9" lang=""> <![endif]-->
+<!--[if gt IE 8]><!-->
+<html lang="en"><!-- InstanceBegin template="/Templates/sistema.dwt" codeOutsideHTMLIsLocked="false" -->
+<head>
+<?php
+if(isset($_COOKIE['usuario']))
+{
+}
+else
+{
+header("Location: http://45.70.237.242/acceso/accesodos.php?cerrar=cerrar");
+//exit;
+}
+date_default_timezone_set('America/Guayaquil');
+session_start(); 
+//setlocale(LC_TIME, 'es_ES', 'esp_esp');
+setlocale(LC_ALL, 'es_ES');
+setlocale(LC_TIME, 'es_ES.UTF-8'); //Linux
+require('../conectar.php');
+$pagina = $_SERVER['REQUEST_URI']; 
+$dispositivo = $_SESSION['dispositivo'];
+//-- ENCERAR VARIABLES DE USUARIO
+$alerta = 0;
+$verificarpago = "0";
+//$uno="si";
+//$dos="si";
+//$tres="si";
+//$cuatro="si";
+//$cinco="si";
+//$seis="si";
+//$siete="si";
+//$ocho="si";
+//$nueve="si";
+//$diez ="si";
+//$once ="si";
+//$doce ="si";
+//$trece="si";
+//$catorce ="si";
+//$quince="si";
+//$diezyseis ="si";
+//$diezysiete="si";
+//$diezyocho ="si";
+//$diezynueve ="si";
+//$veinte ="si";
+//$veinteyuno="si";
+//$veinteydos="si";
+//$veinteytres="si";
+//$veinteycuatro="si";
+//$veinteycinco ="si";
+//$veinteyseis ="si";
+//$veinteysiete="si";
+//$veinteyocho ="si";
+//$veinteynueve ="si";
+//$treinta ="si";
+//$treintayuno ="si";
+//$treintaydos ="si";
+//$treintaytres="si";
+//$treintaycuatro="si";
+//$treintaycinco="si";
+//$treintayseis="si";
+//$treintaysiete="si";
+//$treintayocho ="si";
+//$treintaynueve ="si";
+//$cuarenta ="si";
+//$cuarentayuno="si";
+//$cuarentaydos ="si";
+//$cuarentaytres ="si";
+//$cuarentaycuatro ="si";
+//$cuarentaycinco ="si";
+//$cuarentayseis ="si";
+//$cuarentaysiete ="si";
+//$cuarentayocho ="si";
+//$cuarentaynueve ="si";
+//$cincuenta ="si";
+//$cincuentayuno ="si";
+//$cincuentaydos ="si";
+//$cincuentaytres ="si";
+////-- SI NO INICIA SESION ENVIA A PAGUNA DE ACCESO DENEGADO
+$ingresoexitoso='../images/ingresoexitoso.mp3';
+$vacio= " Vacio";
+$vacioint = 0;
+$alerta = 0;
+$notificacion_app;
+$notificacion_asignar;
+$notificacion_peliculas;
+$notificacion_pagos;
+$sistema = "Vacio";
+$menu = "Vacio";
+$personal_app = "0";
+$verificarpago = "0";	 
+$pagocierre = date("Y")."-".date("m");
+$sql = "SELECT * from `pagos` WHERE `mes` LIKE '$pagocierre' order by mes DESC";
+$resultpa = mysqli_query($con, $sql);
+while($crowp = mysqli_fetch_assoc($resultpa))
+{	
+	$verificarpago = $crowp['mes'];
+}
+
+if(isset($_SESSION['app_cliente']))
+	{
+	$personal_app = $_SESSION['codigo_app'];
+	$puesto_personal = "cliente";
+	$sistema = "clienteapp";
+	}
+	else
+	{
+		//$_SESSION['app_cliente'] = "0";   
+	}
+if(isset($_SESSION['password']))
+	{
+
+//--BUSCO EL NOMBRE DE LA EMPRESA Y EL LOGO
+		$sqlem = "SELECT * from `configuracion` order by ruc DESC";
+		$resultem = mysqli_query($con, $sqlem);
+		while($crowem = mysqli_fetch_assoc($resultem))
+        {
+			$_SESSION['empresamail']=$crowem['empresa'];
+			$empresa = $crowem['empresa'];
+			$logo = $crowem['logo'];
+			$colorfondo = $crowem['colorfondo'];
+			$carpeta = $crowem['carpeta'];
+			$tipoempresacontrol = $crowem['tipoempresa'];
+			$ip = $crowem['ip'];
+			$actualizacionanterior = $crowem['actualizacion'];
+			$ivadecimal =(100+$crowem['iva'])/100;
+			//#24a5dd
+		}
+//--BUSCO ACTUALIZACION NUEVA
+		$sqlac = "SELECT * from `actualizacion` order by fecha ASC";
+		$resultac = mysqli_query($conactualizacion, $sqlac);
+		while($crowac = mysqli_fetch_assoc($resultac))
+        {
+			$actualizacionnueva = $crowac['fecha'];
+			
+		}
+	
+	$personal = $_SESSION['password']; 
+	
+	//--BUSCAR DATOS DE CLIENTE PARA LA APP
+	$sqlcl = "SELECT * from `clientes` WHERE `codigo` LIKE '$personal_app' order by codigo DESC";
+	$resultcl = mysqli_query($con, $sqlcl);
+	while($crowcl = mysqli_fetch_assoc($resultcl))
+    {
+		$clienteapp = $crowcl['nombres'];
+		$clientecodigo = $crowcl['codigo'];
+		$direccionapp = $crowcl['direccion'];
+		$telefono1app = $crowcl['telefono1'];
+		$telefono2app = $crowcl['telefono2'];
+		$mailapp = $crowcl['mail'];
+		$sistema = "clienteapp";
+	}
+	$contrasenapersonal = $_SESSION['password'];
+	$sqlp = "SELECT * from `personal` WHERE `contrasena` LIKE '$contrasenapersonal' order by codigo DESC";
+	$resultp = mysqli_query($con, $sqlp);
+	while($crowp = mysqli_fetch_assoc($resultp))
+    {	
+		$sistema = "software";
+		$menu = $crowp['puesto'];	
+		if ($crowp['puesto'] == "instalador")
+		{
+			$sistema = "instalador";
+		}
+		$puesto_personal=$crowp['puesto'];
+		$usuarionombre=$crowp['nombres']." ".$crowp['apellidos'];
+		$usuarionombre2=$crowp['nombres'];
+		$foto=$crowp['foto'];
+		$uno=$crowp['uno'];
+		$dos=$crowp['dos'];
+		$tres=$crowp['tres'];
+		$cuatro=$crowp['cuatro'];
+		$cinco 	=$crowp['cinco'];
+		$seis 	=$crowp['seis'];
+		$siete=$crowp['siete'];
+		$ocho=$crowp['ocho'];
+		$nueve 	=$crowp['nueve'];
+		$diez =$crowp['diez'];
+		$once =$crowp['once'];
+		$doce =$crowp['doce'];
+		$trece=$crowp['trece'];
+		$catorce =$crowp['catorce'];
+		$quince=$crowp['quince'];
+		$diezyseis =$crowp['diezyseis'];
+		$diezysiete=$crowp['diezysiete'];
+		$diezyocho =$crowp['diezyocho'];
+		$diezynueve =$crowp['diezynueve'];
+		$veinte =$crowp['veinte'];
+		$veinteyuno=$crowp['veinteyuno'];
+		$veinteydos=$crowp['veinteydos'];
+		$veinteytres=$crowp['veinteytres'];
+		$veinteycuatro=$crowp['veinteycuatro'];
+		$veinteycinco =$crowp['veinteycinco'];
+		$veinteyseis =$crowp['veinteyseis'];
+		$veinteysiete=$crowp['veinteysiete'];
+		$veinteyocho =$crowp['veinteyocho'];
+		$veinteynueve =$crowp['veinteynueve'];
+		$treinta =$crowp['treinta'];
+		$treintayuno =$crowp['treintayuno'];
+		$treintaydos =$crowp['treintaydos'];
+		$treintaytres=$crowp['treintaytres'];
+		$treintaycuatro=$crowp['treintaycuatro'];
+		$treintaycinco=$crowp['treintaycinco'];
+		$treintayseis=$crowp['treintayseis'];
+		$treintaysiete=$crowp['treintaysiete'];
+		$treintayocho =$crowp['treintayocho'];
+		$treintaynueve =$crowp['treintaynueve'];
+		$cuarenta =$crowp['cuarenta'];
+		$cuarentayuno=$crowp['cuarentayuno'];
+		$cuarentaydos =$crowp['cuarentaydos'];
+		$cuarentaytres =$crowp['cuarentaytres'];
+		$cuarentaycuatro =$crowp['cuarentaycuatro'];
+		$cuarentaycinco =$crowp['cuarentaycinco'];
+		$cuarentayseis =$crowp['cuarentayseis'];
+		$cuarentaysiete =$crowp['cuarentaysiete'];
+		$cuarentayocho =$crowp['cuarentayocho'];
+		$cuarentaynueve =$crowp['cuarentaynueve'];
+		$cincuenta =$crowp['cincuenta'];
+		$cincuentayuno =$crowp['cincuentayuno'];
+		$cincuentaydos =$crowp['cincuentaydos'];
+		$cincuentaytres =$crowp['cincuentaytres'];
+		$exportar =$crowp['exportar'];
+		$cambiarprecio =$crowp['cambiarprecio'];
+	}
+	// PHP program to get IP address of client
+	$IP = $_SERVER['REMOTE_ADDR'];
+	// PHP code to get the MAC address of Client
+	$MAC = exec('getmac');
+	$nombre = gethostbyaddr($_SERVER['REMOTE_ADDR']);
+  	// Storing 'getmac' value in $MAC
+	$MAC = strtok($MAC, ' ');
+	$fecha = date("Y-m-d (H:i:s)", time());
+	$url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "s") . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
+	//$sql = " INSERT INTO `acceso` ( `usuario`, `fecha`, `url`, `ip`, `mac`, `nombre`) VALUES ( '$personal', '$fecha', '$url', '$IP', '$MAC', '$nombre')"; 
+	//mysqli_query($con, $sql);
+
+	}
+	else
+	{
+		//$redireccionar = "http://".$ip."/acceso/acceso.php";
+		//header('http://45.70.237.242/');
+		?>
+		<script>
+		function redireccionar(){window.location="http://45.70.237.242/";}
+		setTimeout ("redireccionar()", 5);
+		</script>
+		<?php
+		echo "no hay usuario";
+	}
+$array = array(); 
+$array2 = array();
+$array3 = array();
+$cerrar = "http://".$ip."/acceso/accesodos.php?cerrar=cerrar";
+$cerrarapp = "http://".$ip."/acceso/accesodos.php?cerrar=cerrar";
+//SACAR FECHA DE PAGO
+$sql = "SELECT * from `pagos` WHERE `mes` LIKE '$pagocierre' order by mes DESC";
+$resultpa = mysqli_query($con, $sql);
+while($crowp = mysqli_fetch_assoc($resultpa))
+{	
+	$verificarpago = $crowp['mes'];
+}
+$dia = date("d");
+
+if ($puesto_personal != "admin" AND $puesto_personal != "instalador")
+	
+	?>
+	<?php 
+				$estado="pendiente";
+				$sqlapp = "SELECT * from `app_cliente` WHERE `estado` LIKE '$estado' order by cliente DESC";
+				$resultapp = mysqli_query($con, $sqlapp);
+				$numfilas = $resultapp->num_rows;
+				$alerta = $numfilas;
+				$notificacion_app = $numfilas;
+				$estado="pendiente";
+				$sqlapp = "SELECT * from `clienteasignar` WHERE `estado` LIKE '$estado' order by cliente DESC";
+				$resultapp = mysqli_query($con, $sqlapp);
+				$numfilas = $resultapp->num_rows;
+				$alerta = $numfilas + $alerta;
+				$notificacion_asignar = $numfilas;
+				$sqlpel = "SELECT * from `solicitud_peliculas`order by id_solicitud DESC";
+				$resultpel = mysqli_query($con, $sqlpel);
+				$numfilas = $resultpel->num_rows; 
+				$alerta = $numfilas + $alerta;
+				$notificacion_peliculas = $numfilas;
+				$sqlpel = "SELECT * from `registro_pagos`order by id DESC";
+				$resultpel = mysqli_query($con, $sqlpel);
+				$numfilas = $resultpel->num_rows; 
+				$notificacion_pagos = $numfilas;
+				$alerta = $numfilas + $alerta;
+
+				?>
+    <meta charset="utf-8" />
+	<link href="../complementos/estilos.css" rel="stylesheet" type="text/css">
+    <link rel="apple-touch-icon" sizes="76x76" href="../assets/img/apple-icon.png">
+    <link rel="icon" type="image/png" href="../assets/img/favicon.ico">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+    <title>OPTIMUS SOFTWARE 6.0</title>
+    <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no' name='viewport' />
+    <!--     Fonts and icons     -->
+    <link href="https://fonts.googleapis.com/css?family=Montserrat:400,700,200" rel="stylesheet" />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/latest/css/font-awesome.min.css" />
+    <!-- CSS Files -->
+    <link href="../assets/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="../assets/css/light-bootstrap-dashboard.css?v=2.0.0%20" rel="stylesheet" />
+    <!-- CSS Just for demo purpose, don't include it in your project -->
+    <link href="../assets/css/demo.css" rel="stylesheet" />
+	
+</head>
+
+<body>
+    <div class="wrapper">
+        <div class="sidebar" data-image="../assets/img/sidebar-5.jpg">
+            <!--
+        Tip 1: You can change the color of the sidebar using: data-color="purple | blue | green | orange | red"
+        Tip 2: you can also add an image using data-image tag
+    -->
+            <div class="sidebar-wrapper">
+                <div class="logo">
+                    <a href="http://www.optimusecuador.com" class="simple-text"><img src="../images/android-chrome-192x192.png" width="42" height="56" alt=""/> OPTIMUS SOFTWARE </a>
+                </div>
+                <ul class="nav">
+                    <?php 
+					if ($sistema == "instalador")
+						{
+					?>
+                        	<li>
+                        <a class="nav-link" href="../serviciotecnico/clientes.php">
+                            <i class="nc-icon nc-chart-pie-35"></i>
+                            <p>Dashboard</p>
+                        </a>
+                    </li>
+						<?php 
+						}
+						else
+						{ 
+						?>
+					<li>
+                        <a class="nav-link" href="../menu_principal/panel.php">
+                            <i class="nc-icon nc-chart-pie-35"></i>
+                            <p>Dashboard</p>
+                        </a>
+                    </li>
+					<?php } ?>
+                     <?php if ($sistema == "instalador")
+						{?>  
+				
+                    <li>
+                        <a class="nav-link" href="../serviciotecnico/solicitar_producto.php?cliente=<?php echo $personal;?>">
+                            <i class="nc-icon nc-circle-09"></i>
+                            <p>Sol. Producto</p>
+                        </a>
+                    </li>
+					 <li class="nav-item active">
+                        <a class="nav-link" href="../serviciotecnico/devolucion_producto.php?cliente=<?php echo $personal;?>">
+                            <i class="nc-icon nc-notes"></i>
+                            <p>Dev. Producto</p>
+                        </a>
+                    </li>
+					 <li>
+                        <a class="nav-link" href="../serviciotecnico/reportecasos.php?cliente=<?php echo $personal;?>">
+                            <i class="nc-icon nc-paper-2"></i>
+                            <p>Formularios</p>
+                        </a>
+                    </li>
+				  <li>
+                        <a class="nav-link" href="../bodegas/kardex2.php?cliente=<?php echo $personal;?>">
+                            <i class="nc-icon nc-atom"></i>
+                            <p>Inventario</p>
+                        </a>
+                    </li>
+				 
+				  <?php 
+						}
+						else
+						{ 
+						?>
+					<li>
+                        <a class="nav-link" href="../menu_principal/clientes.php">
+                            <i class="nc-icon nc-circle-09"></i>
+                            <p>Clientes</p>
+                        </a>
+                    </li>
+					
+                    <li class="nav-item active">
+                        <a class="nav-link" href="../menu_principal/proveerores.php">
+                            <i class="nc-icon nc-notes"></i>
+                            <p>Proveedores</p>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link" href="../menu_principal/inventario.php">
+                            <i class="nc-icon nc-paper-2"></i>
+                            <p>Inventario</p>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link" href="../menu_principal/bodegas.php">
+                            <i class="nc-icon nc-atom"></i>
+                            <p>Bodegas</p>
+                        </a>
+                    </li>
+					<li>
+                      <a class="nav-link" href="../menu_principal/personal.php">
+                            <i class="nc-icon nc-circle-09"></i>
+                            <p>Personal</p>
+                        </a>
+                    </li>
+                    <li>
+						
+                      <a class="nav-link" href="../menu_principal/servicio_tecnico.php">
+                            <i class="nc-icon nc-pin-3"></i>
+                            <p>Serv. Tecnico</p>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="nav-link" href="../menu_principal/reportes.php">
+                            <i class="nc-icon nc-bell-55"></i>
+                            <p>Reportes</p>
+                        </a>
+                    </li>
+					<li>
+                        <a class="nav-link" href="../menu_principal/administrador.php">
+                            <i class="nc-icon nc-chart-pie-35"></i>
+                            <p>Admin</p>
+                        </a>
+                    </li>
+					
+                    <li class="nav-item active active-pro">
+                        <a class="nav-link active" href="../menu_principal/configuraciones.php">
+                            <i class="nc-icon nc-alien-33"></i>
+                            <p>Configuraciones</p>
+                        </a>
+                    </li>
+					<?php } ?>
+                </ul>
+            </div>
+        </div>
+        <div class="main-panel">
+            <!-- Navbar -->
+            <nav class="navbar navbar-expand-lg " color-on-scroll="500">
+                <div class="container-fluid">
+                    <a class="navbar-brand" href="#pablo"> <?php echo $usuarionombre2; ?> </a>
+                    <button href="" class="navbar-toggler navbar-toggler-right" type="button" data-toggle="collapse" aria-controls="navigation-index" aria-expanded="false" aria-label="Toggle navigation">
+                        <span class="navbar-toggler-bar burger-lines"></span>
+                        <span class="navbar-toggler-bar burger-lines"></span>
+                        <span class="navbar-toggler-bar burger-lines"></span>
+                    </button>
+                    <div class="collapse navbar-collapse justify-content-end" id="navigation">
+                        <ul class="nav navbar-nav mr-auto">
+                            <?php 
+							if ($sistema == "instalador")
+						{ ?>
+						<li class="nav-item">
+                                <a href="../serviciotecnico/clientes.php" class="nav-link" data-toggle="dropdown">
+                                    <i class="nc-icon nc-palette"></i>
+                                    <span class="d-lg-none">Dashboard</span>
+                                </a>
+                            </li>
+						<?php }
+						else
+						{ ?>
+							<li class="nav-item">
+                                <a href="../menu_principal/panel.php" class="nav-link" data-toggle="dropdown">
+                                    <i class="nc-icon nc-palette"></i>
+                                    <span class="d-lg-none">Dashboard</span>
+                                </a>
+                            </li>
+							<?php } ?>
+                            <li class="dropdown nav-item">
+                                <a href="#" class="dropdown-toggle nav-link" data-toggle="dropdown">
+                                    <i class="nc-icon nc-planet"></i>
+                                    <span class="notification">5</span>
+                                    <span class="d-lg-none">Alertas</span>
+                                </a>
+                                <ul class="dropdown-menu">
+                                    <a class="dropdown-item" href="#">Solicitudes App</a>
+                                    <a class="dropdown-item" href="#">Solicitud Multimedia</a>
+                                    <a class="dropdown-item" href="#">Pagos App</a>
+                                    <a class="dropdown-item" href="#">Contratos incompletos</a>
+                                    <a class="dropdown-item" href="#">Otras Notificaciones</a>
+                                </ul>
+                            </li>
+                            
+                        </ul>
+                        <ul class="navbar-nav ml-auto">
+                            <li class="nav-item">
+                                <a class="nav-link" href="#pablo">
+                                    <span class="no-icon">Cuenta</span>
+                                </a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="http://example.com" id="navbarDropdownMenuLink" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                    <span class="no-icon">Sistema</span>
+                                </a>
+                                <div class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
+                                    <a class="dropdown-item" href="../contratos/corte_diario.php">Corte Semiatomatico</a>
+                                    <a class="dropdown-item" href="../contratos/corte_diario.php">Corte por Fecha</a>
+                                    <a class="dropdown-item" href="#">Activacion Semiautomatica</a>
+                                    
+                                    <div class="divider"></div>
+                                    <a class="dropdown-item" href="#">Registro de Pago Sistema</a>
+                                </div>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="<?php echo $cerrar;?>">
+                                    <span class="no-icon">Log out</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </nav>
+            <!-- End Navbar -->
+            <div class="content">
+                <div class="container-fluid">
+                  <div class="row">
+                    <div class="col-md-12">
+                      <div class="card strpied-tabled-with-hover">
+                                <div class="card-header ">
+                                   <!-- InstanceBeginEditable name="EditRegion1" -->
+		
+		<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+
+    <style type="text/css">
+      #mapa {
+            height: 50vh;
+      }
+      .h2s {
+        font-size: 3vh;
+      }
+    </style>
+		
+				  <?php  
+$tabla = "clientes";
+$filacolor="0";
+if (isset($_GET['codigo'])) {
+   			$codigo=$_GET['codigo'];
+			$codigogps=$_GET['codigo'];
+			$sql = "SELECT * from `".$tabla."` WHERE `codigo` LIKE '$codigo' order by fecha DESC";
+			$result = mysqli_query($con, $sql); 
+			while($crow = mysqli_fetch_assoc($result))
+            			{	
+						
+
+						$codigo = $crow['codigo'];
+						$producto = $crow['nombres'];
+						$apellidos = $crow['apellidos'];
+						$direccion = $crow['direccion'];
+						$telefono = $crow['telefono1'];
+						$telefono2 = $crow['telefono2'];
+						$mail = $crow['mail'];
+						$foto1 = $crow['foto1'];
+						$foto2 = $crow['foto2'];
+						$foto3 = $crow['foto3'];
+						$foto4 = $crow['foto4'];
+						$cedula1 = $crow['cedula1'];
+						$cedula2 = $crow['cedula2'];
+						$planilla = $crow['planilla'];
+				
+						$accion="editar";
+						}
+	
+// Listamos las direcciones con todos sus datos (lat, lng, direcci√≥n, etc.)
+  						$resultg = mysqli_query($con, "SELECT * FROM `clientegps` WHERE `codigo` LIKE '$codigogps'");
+						while ($crowg = mysqli_fetch_array($resultg)) 
+						{
+     	 				$lat = $crowg['lat'];
+		 				$lng = $crowg['lng'];
+		 				$ip = $crowg['ip'];
+  						}
+///-- buscamos historial de facturas
+	
+						$sql2 = "SELECT * from `ventas` WHERE `cliente` LIKE '$codigogps' order by fecha DESC";
+						$result2 = mysqli_query($con, $sql2); 
+//---buscamos historial de servicios tecnicos
+						$sql22 = "SELECT * from `serviciotecnico` WHERE `cliente` LIKE '$codigogps' order by fecha DESC";
+						$result22 = mysqli_query($con, $sql22); 
+						
+						
+		}
+		else
+		{
+   			$mail ="";
+			$codigo ="";
+			$producto ="";
+			$apellidos ="";
+			$direccion ="";
+			$telefono ="";
+			$telefono2 ="";
+			$accion='nuevo';
+			
+		}
+
+?>
+		
+      <table width="100%"  align="center">
+        <tbody>
+          <tr>
+            <td colspan="3" align="center"><div class="esquinas_redondeadas">
+              <h2  id="optimus">RESUMEN DE CLIENTE</h2>
+              <table width="95%" align="center" class="clase_tabla">
+                <tbody>
+                  <tr>
+                    <td align="center"><form action="../clientes/productos.php" method="post" name="form2" id="form2">
+                      <input type="image" src="../images/icons/regresar.png" name="nombre_opcional">
+                      <input name="producto" type="hidden" id="producto" value="<?php echo $producto;?>">
+                    </form></td>
+                    <td align="center">
+						<a href="https://wa.me/593996629720?text=I'm%20interested%20in%20your%20car%20for%20sale">NOTIFICAR CLIENTE</a>
+						<h3>Ahora EN VIVO: 
+      <a href="#" 
+         onclick="window.open( \'https://www.tulink_1.com\', \'_self\');
+                  window.open( \'https://www.tulink_2.com\', \'_blank\');" >
+      UN PARTIDO
+      </a>
+    </h3>
+						<form action="https://wa.me/593992950431" Anchor text" method="post" name="form2" id="form6">
+						
+						
+						
+                      <input type="image" src="../images/icons/notificacion.png" name="nombre_opcional4">
+                      <input name="producto4" type="hidden" id="producto4" value="<?php echo $producto;?>">
+                    </form></td>
+                    <td align="center"><form action="../ventas/historial.php?codigo=<?php echo $codigo;?>" method="post" name="form2" id="form3">
+                      <input type="image" src="../images/icons/documento.png" name="nombre_opcional2">
+                      <input name="producto2" type="hidden" id="producto2" value="<?php echo $producto;?>">
+                    </form></td>
+                    <td align="center"><form action="../contratos/historial_contratos.php?codigo=<?php echo $codigo;?>" method="post" name="form2" id="form4">
+                      <input type="image" src="../images/icons/contratos.png" name="nombre_opcional3">
+                      <input name="producto3" type="hidden" id="producto3" value="<?php echo $producto;?>">
+                    </form></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+              <br></td>
+          </tr>
+          <tr>
+            <td align="center" valign="top">
+					
+					
+					<div  class="grilla_listado">
+					
+              
+             
+                    <strong>
+            CLIENTE
+            </strong>
+                    <div class="card card-hover">
+                      <table width="95%" align="center" class="clase_tabla">
+                        <tbody>
+                          <tr>
+                            <td colspan="3" style="text-align: center"><strong>RUC / CI : </strong></td>
+                          </tr>
+                          <tr>
+                            <td colspan="3" style="text-align: center"><input name="element_1" type="text" disabled="disabled" required   class="campos" id="element_1" value="<?php echo $codigocontrato = $codigo;?>" size="20" maxlength="255"/></td>
+                          </tr>
+                          <tr>
+                            <td colspan="3" style="text-align: center"><strong>CLIENTE: </strong></td>
+                          </tr>
+                          <tr>
+                            <td colspan="3" style="text-align: center"><input name="element_2" type="text" disabled="disabled"  required  class="campos" id="element_2" value="<?php echo $nombremensaje = $producto;?>" size="20" maxlength="255"/></td>
+                          </tr>
+                          <tr>
+                            <td colspan="3" style="text-align: center"><strong>DIRECCION : </strong></td>
+                          </tr>
+                          <tr>
+                            <td colspan="3" style="text-align: center"><input name="direccion" type="text" disabled="disabled" required  class="campos" id="direccion" value="<?php echo $direccion;?>" size="20" maxlength="255"/></td>
+                          </tr>
+                          <tr>
+                            <td colspan="3" style="text-align: center"><strong>TELEFONO : </strong></td>
+                          </tr>
+                          <tr>
+                            <td colspan="3" style="text-align: center"><input name="telefono" type="text" disabled="disabled" required  class="campos" id="telefono" value="<?php echo $telefono;?>" size="7" maxlength="255"/>                            <input name="telefono2" type="text" disabled="disabled"  class="campos" id="telefono2" value="<?php echo $telefono2;?>" size="7" maxlength="255"/></td>
+                          </tr>
+                          <tr>
+                            <td colspan="3" style="text-align: center"><strong>MAIL : </strong></td>
+                          </tr>
+                          <tr>
+                            <td colspan="3" style="text-align: center"><input name="mail" type="text" disabled="disabled"  class="campos" id="mail" value="<?php echo $mail;?>" size="20" maxlength="255"/></td>
+                          </tr>
+                          <tr>
+                            <td colspan="3" style="text-align: center"><span class="buttons">
+                              <input id="accion" name="accion" class="element text small" type="text" maxlength="255" value="<?php echo $accion;?>" style="visibility:hidden"/>
+                            <input name="apellidos" type="text" class="element text medium" id="apellidos" value="<?php echo $apellidos;?>" maxlength="255" style="visibility:hidden"/>
+                            </span></td>
+                          </tr>
+                          <tr>
+                            <td colspan="3" style="text-align: center"><strong>DOCUMENTOS</strong></td>
+                          </tr>
+                          <tr>
+                            <td style="text-align: center"><a onClick="window.open('../contratos/subir_foto.php?codigo=<?php echo $codigofoto;?>','popup', 'width=700px,height=800px')"><img src="<?php echo $cedula1; ?>" width="58" height="58" alt=""/></a></td>
+                            <td style="text-align: center"><a onClick="window.open('../contratos/subir_foto2.php?codigo=<?php echo $codigofoto;?>','popup', 'width=700px,height=800px')"><img src="<?php echo $cedula2; ?>" width="58" height="58" alt=""/></a></td>
+                            <td style="text-align: center"><a onClick="window.open('../contratos/subir_fotoplanilla.php?codigo=<?php echo $codigofoto;?>','popup', 'width=700px,height=800px')"><img src="<?php echo $planilla; ?>" width="58" height="58" alt=""/></a></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <p>&nbsp;</p>
+				</div>
+					<div class="grilla_listado">
+					  <h1 class="mb-4">
+			    <!-- Contenedor del Mapa de Google -->
+		      </h1>
+			  <div id="mapa"></div>
+			  <h1 class="mb-4">
+			    <!-- Contenedor del Mapa de Google -->
+		      </h1>
+			  </div>
+				<!--</div>-->
+              </main>
+              <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+              <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+              <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+              <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCuD4KNlsr-S52eivNqUtKRYK8POmwn_j8&callback=initMap"></script>
+              <script type="text/javascript">
+      function initMap() {
+          var map;
+          var bounds = new google.maps.LatLngBounds();
+          var mapOptions = {
+              mapTypeId: 'roadmap'
+          };
+
+          map = new google.maps.Map(document.getElementById('mapa'), {
+              mapOptions
+          });
+
+          map.setTilt(50);
+
+          // Crear mÔøΩltiples marcadores desde la Base de Datos 
+		  <?php $clientegps=$codigogps;?>
+          var marcadores = [
+              <?php 
+			  
+			  include('php/marcadores.php'); ?>
+          ];
+
+          // Creamos la ventana de informaciÔøΩn para cada Marcador
+          var ventanaInfo = [
+              <?php include('php/info_marcadores.php'); ?>
+          ];
+
+          // Creamos la ventana de informaciÔøΩn con los marcadores 
+          var mostrarMarcadores = new google.maps.InfoWindow(),
+              marcadores, i;
+
+          // Colocamos los marcadores en el Mapa de Google 
+          for (i = 0; i < marcadores.length; i++) {
+              var position = new google.maps.LatLng(marcadores[i][1], marcadores[i][2]);
+              bounds.extend(position);
+              marker = new google.maps.Marker({
+                  position: position,
+                  map: map,
+                  title: marcadores[i][0]
+              });
+
+              // Colocamos la ventana de informaciÔøΩn a cada Marcador del Mapa de Google 
+              google.maps.event.addListener(marker, 'click', (function(marker, i) {
+                  return function() {
+                      mostrarMarcadores.setContent(ventanaInfo[i][0]);
+                      mostrarMarcadores.open(map, marker);
+                  }
+              })(marker, i));
+
+              // Centramos el Mapa de Google para que todos los marcadores se puedan ver 
+              map.fitBounds(bounds);
+          }
+
+          // Aplicamos el evento 'bounds_changed' que detecta cambios en la ventana del Mapa de Google, tambiÔøΩn le configramos un zoom de 14 
+          var boundsListener = google.maps.event.addListener((map), 'bounds_changed', function(event) {
+              this.setZoom(14);
+              google.maps.event.removeListener(boundsListener);
+          });
+
+      }
+
+      // Lanzamos la funciÔøΩn 'initMap' para que muestre el Mapa con Los Marcadores y toda la configuraciÔøΩn realizada 
+      google.maps.event.addDomListener(window, 'load', initMap);
+                </script></td>
+            <td width="1%" align="center" valign="top">&nbsp;</td>
+            <td align="center" valign="top"><div class="grilla_listado"><strong>
+            HISTORIAL DE FACTURACION
+            </strong>
+                <div class="card card-hover">
+                  <table width="95%" align="center" class="clase_tabla">
+                    <tr  align="center" valign="top">
+                      <td><strong>CREACION</strong></td>
+                      <td><strong>VALOR</strong></td>
+                      <td><strong>SAL</strong></td>
+                      <td><strong>ESTADO</strong></td>
+                      <td><strong>DOC</strong></td>
+                      </tr>
+                    <?php while($crow2 = mysqli_fetch_assoc($result2))
+            			{
+						if($filacolor =="0")
+						{
+							$color="#c3acfa";
+							$filacolor="1";
+						}
+							
+						else
+						{
+							$color="";
+							$filacolor="0";
+						}
+						$control =$crow2['id'];
+						$sql24 = "SELECT * from `ventas` WHERE `id` LIKE '$control' order by fecha DESC";
+						$result24 = mysqli_query($con, $sql24); 
+						$numfilas = $result24->num_rows;
+		 				$numfilas;
+						if ($numfilas == 1)
+						{
+							
+					?>
+                    <tr class="alternar" bgcolor="<?php echo $color;?>" >
+                      <td><?php echo $fecha =$crow2['fecha'];?></td>
+                      <td><?php echo $total =$crow2['total'];$abono =$crow2['abono'];?></td>
+                      
+                      <td><?php if ($crow2['estado'] == "anular")
+{
+echo "0";
+}
+else
+{
+echo $saldo =$total- $abono;
+}?></td>
+                      <td><?php echo $estado =$crow2['estado'];?></td>
+                      <td><?php $tipodocumento =$crow2['tipodocumento'];
+					  if($tipodocumento == "Sin_documento")
+						{
+							
+						}
+						else
+						{
+							 echo $tipodocumento ;
+						}
+					  ?></td>
+                      <?php if($estado == "pendiente")
+						{
+							?>
+                      <?php
+						}
+						else
+						{
+							 ?>
+                      <?php
+						}
+							
+							?>
+                      <?php if($estado == "pendiente")
+						{
+							?>
+                      <?php
+						}
+						else
+						{
+							 ?>
+                      <?php
+						}
+							
+							?>
+                      </tr>
+                    <?php 
+						$controlservicio=0;
+						}
+						else
+						{
+							if ($controlservicio ==  "0")
+							{
+								
+							
+						?>
+                    <tr class="alternar" bgcolor="<?php echo $color;?>" >
+                      <td><?php echo $fecha =$crow2['fecha'];?></td>
+                      <td><?php echo $total =$crow2['total'];?></td>
+                      <td><?php if ($crow2['estado'] == "anular")
+{
+echo "0";
+}
+else
+{
+echo $saldo =$total- $abono;
+}?></td>
+                      <td><?php echo $estado =$crow2['estado'];?></td>
+                      <td><?php echo $tipodocumento =$crow2['tipodocumento'];?></td>
+                      <?php if($estado == "pendiente")
+						{
+							?>
+                      <?php
+						}
+						else
+						{
+							 ?>
+                      <?php
+						}
+							
+							?>
+                      <?php if($estado == "pendiente")
+						{
+							?>
+                      <?php
+						}
+						else
+						{
+							 ?>
+                      <?php
+						}
+							
+							?>
+                      </tr>
+                    <?php 
+							}
+							$controlservicio= $controlservicio+1;
+						}
+
+
+
+				}?>
+                  </table>
+                </div>
+            </div>
+            <div class="grilla_listado"><strong> HISTORIAL DE NUMEROS DE SERIE</strong>
+              <div class="card card-hover">
+                <table width="95%" align="center" class="clase_tabla">
+                  <tr  align="center" valign="top">
+                    <td><strong>PRODUCTO</strong></td>
+                    <td><strong>FECHA</strong></td>
+                    <td><strong>SERIE</strong></td>
+                    <td><strong>OBSERVACION</strong></td>
+                    </tr>
+                  <?php 
+				  $sql22 = "SELECT * from `registro` WHERE `cliente` LIKE '$codigo' order by fecha DESC";
+					$result22 = mysqli_query($con, $sql22);
+				  	while($crow2 = mysqli_fetch_assoc($result22))
+            			{
+						$serie =$crow2['serie'];
+						$sqlse = "SELECT * from `series` WHERE `serie` LIKE '$serie' order by serie DESC";
+						$resultse = mysqli_query($con, $sqlse);
+				  		while($crowse = mysqli_fetch_assoc($resultse))
+            			{
+						
+						if($filacolor =="0")
+						{
+							$color="#c3acfa";
+							$filacolor="1";
+						}
+							
+						else
+						{
+							$color="";
+							$filacolor="0";
+						}
+						$control =$crow2['id'];
+								
+							
+						?>
+                  <tr class="alternar" bgcolor="<?php echo $color;?>" >
+                    <td><?php echo $crow2['codigo'];?></td>
+                    <td><?php echo $fecha =$crow2['fecha'];?></td>
+                    <td><?php echo $serie?></td>
+                    <td><?php echo $crow2['observacion'];?></td>
+                    <?php if($estado == "pendiente")
+						{
+							?>
+                    <?php
+						}
+						else
+						{
+							 ?>
+                    <?php
+						}
+							
+							?>
+                    <?php if($estado == "pendiente")
+						{
+							?>
+                    <?php
+						}
+						else
+						{
+							 ?>
+                    <?php
+						}
+							
+							?>
+                    </tr>
+                  <?php 
+							
+							$controlservicio= $controlservicio+1;
+						
+
+
+
+				}}?>
+                </table>
+              </div>
+            </div>
+            <div class="grilla_listado"><strong> HISTORIAL DE SERVICIO TECNICO
+              </strong>
+              <div class="card card-hover">
+                <table width="95%" align="center" class="clase_tabla">
+                  <tr  align="center" valign="top">
+                    <td><strong>CON</strong></td>
+                    <td><strong>SERVICIO</strong></td>
+                    <td><strong>IP</strong></td>
+                    <td><strong>FECHA</strong></td>
+                    <td><strong>PLAN</strong></td>
+                    <td><strong>GPS</strong></td>
+                    <td><strong>TECNICO</strong></td>
+                    <td><strong>MOTIVO</strong></td>
+                    <td><strong>OBSERVACION</strong></td>
+                    </tr>
+                  <?php while($crow2 = mysqli_fetch_assoc($result22))
+            			{
+						if($filacolor =="0")
+						{
+							$color="#c3acfa";
+							$filacolor="1";
+						}
+							
+						else
+						{
+							$color="";
+							$filacolor="0";
+						}
+						$control =$crow2['id'];
+						$sql24 = "SELECT * from `ventas` WHERE `id` LIKE '$control' order by fecha DESC";
+						$result24 = mysqli_query($con, $sql24); 
+						$numfilas = $result24->num_rows;
+		 				$numfilas;
+						if ($numfilas == 1)
+						{
+							
+					?>
+                  <tr class="alternar" bgcolor="<?php echo $color;?>" >
+                    <td><?php echo $numero =$crow2['numero'];?></td>
+                    <td><?php echo $producto =$crow2['producto'];?></td>
+                    <td><?php echo $total =$crow2['ip'];?></td>
+                    <td><?php echo $fecha =$crow2['fecha'];?></td>
+                    <td><?php echo $abono =$crow2['plan'];?></td>
+                    <td><?php echo $estado =$crow2['latitud'];?></td>
+                    <td><?php echo $tipodocumento =$crow2['personal'];?></td>
+                    <td><?php echo $tipodocumento =$crow2['motivo'];?></td>
+                    <td><?php echo $tipodocumento =$crow2['observacion'];?></td>
+                    <?php if($estado == "pendiente")
+						{
+							?>
+                    <?php
+						}
+						else
+						{
+							 ?>
+                    <?php
+						}
+							
+							?>
+                    <?php if($estado == "pendiente")
+						{
+							?>
+                    <?php
+						}
+						else
+						{
+							 ?>
+                    <?php
+						}
+							
+							?>
+                    </tr>
+                  <?php 
+						$controlservicio=0;
+						}
+						else
+						{
+							if ($controlservicio ==  "0")
+							{
+								
+							
+						?>
+                  <tr class="alternar" bgcolor="<?php echo $color;?>" >
+                    <td><?php echo $numero =$crow2['numero'];?></td>
+                    <td><?php echo "Servicio Tecnico"?></td>
+                    <td><?php echo $total =$crow2['ip'];?></td>
+                    <td><?php echo $fecha =$crow2['fecha'];?></td>
+                    <td><?php echo $abono =$crow2['plan'];?></td>
+                    <td><?php echo $estado =$crow2['latitud'];?></td>
+                    <td><?php echo $tipodocumento =$crow2['personal'];?></td>
+                    <td><?php echo $tipodocumento =$crow2['motivo'];?></td>
+                    <td><?php echo $tipodocumento =$crow2['observacion'];?></td>
+                    <?php if($estado == "pendiente")
+						{
+							?>
+                    <?php
+						}
+						else
+						{
+							 ?>
+                    <?php
+						}
+							
+							?>
+                    <?php if($estado == "pendiente")
+						{
+							?>
+                    <?php
+						}
+						else
+						{
+							 ?>
+                    <?php
+						}
+							
+							?>
+                    </tr>
+                  <?php 
+							}
+							$controlservicio= $controlservicio+1;
+						}
+
+
+
+				}?>
+                </table>
+              </div>
+            </div>
+            <div class="grilla_listado"> 
+              <p><strong>CONTRATOS</strong></p>
+              <div class="card card-hover">
+                <table width="95%" class="clase_tabla">
+                  <tbody>
+                    <tr>
+                      <td align="center"><strong>N¬∫</strong></td>
+                      <td align="center"><strong>DIRECCION</strong></td>
+                      <td align="center"><strong>UBICACION</strong></td>
+                      <td align="center"><strong>NOTIFICAR PERSONAL</strong></td>
+                      <td align="center"><strong>ACT/DES</strong></td>
+                      <td align="center"><strong>GESTION</strong></td>
+                    <?php 
+			$sqlc = "SELECT * from `contratos` WHERE `cliente` LIKE '$codigocontrato' order by numero DESC";
+            $resultc = mysqli_query($con, $sqlc);
+            while ($crowc = mysqli_fetch_assoc($resultc)) 
+			  {
+					?>
+                    <tr>
+                      <?php 
+			
+					  	$ubicacion = $crowc['absoluta'];
+					  	$nodo = $crowc['nodo'];
+					  	$numerocontrato = $crowc['numero'];
+						$numeropalabra = str_word_count($ubicacion);
+						if ($numeropalabra == 3)
+						{
+						list($diruno, $restante) = explode('+', $ubicacion);
+						list($dirdos, $ciudad) = explode(' ', $restante);
+						$ubicacion = "https://www.google.com/maps/place/".$diruno."%2B".$dirdos."+".$ciudad;	
+						}
+						else
+						{
+							$ubicacion = "Sin_Ubicacion";
+						}
+					  ?>
+                      <td><?php echo $crowc['numero'];?></td>
+                      <td><?php echo $crowc['direccion'];?></td>
+                      <td><a href=<?php echo $ubicacion;?> target="new"><?php echo $crowc['absoluta'];?> Ir-&gt;</a></td>
+                      <td><form action="revicion.php" method="post" name="form1" id="form1">
+                        <span style="text-align: center">
+                          <input name="numero" type="hidden" id="numero" value=<?php echo $crowc['numero'];?>>
+                          <input name="nombre" type="hidden" id="nombre" value=<?php echo $codigocontrato;?>>
+                          <input name="ubicacion" type="hidden" id="ubicacion" value=<?php echo $crowc['absoluta'];?>>
+                          <select name="personal" id="personal" class="campos">
+                            <?php
+						$sqlv = "SELECT * from `personal` order by apellidos ASC";
+            			$resultv = mysqli_query($con, $sqlv);
+                        while ($crowv = mysqli_fetch_assoc($resultv)) 
+						{
+                                    ?>
+                            <option value=<?php echo $codigo = $crowv['codigo']; ?>><?php echo $producto = $crowv['nombres'] . " " . $crowv['apellidos']; ?></option>
+                            <?php
+                          }
+						  ?>
+                            </select>
+                          </span>
+                        <input type="image" src="../images/icons/notificacion.png" name="nombre_opcional5">
+                        </form></td>
+                      <td>
+						  <?php  $crowc['ip'];
+						  if ($crowc['activado'] == "si")
+						  {
+						  ?>
+						  
+						  <form action="confirmacion_desabilitar.php" method="post" name="form1" id="form5">
+                        <span style="text-align: center">
+                          <input name="numero" type="hidden" id="numero" value=<?php echo $crowc['numero'];?>>
+                        </span>
+                        <input type="image" src="../images/icons/desactivar.png" name="nombre_opcional6">
+                      </form>
+						<?php }?>
+						  <?php
+						  if ($crowc['activado'] == "no")
+						  {
+						  ?>
+						  
+						  <form action="confirmacion_activar.php" method="post" name="form1" id="form5">
+                        <span style="text-align: center">
+                          <input name="numero" type="hidden" id="numero" value=<?php echo $crowc['numero'];?>>
+                        </span>
+                        <input type="image" src="../images/icons/activar.png" name="nombre_opcional6">
+                      </form>
+						<?php }?>
+						</td>
+						<td>
+						 <?php 
+			  			$ip_gestion="http://".$crowc['ip'].":".$crowc['puerto_gestion']."/";
+						?>
+						<a href=<?php echo $ip_gestion;?> target="new"><?php echo $ip_gestion;?> Ir-&gt;</a>
+						 
+						   
+						</td>
+                      </tr>
+                    <?php 
+			  }
+					?>
+                    </tbody>
+                </table>
+              </div>
+              <p>&nbsp;</p>
+              <p><strong>FOTOS</strong></p>
+              <div class="card card-hover">
+                <table width="95%" align="center" class="clase_tabla">
+                  <tbody>
+                    <tr>
+                      <td align="center"><strong>CASA</strong></td>
+                      <td align="center"><strong>EQUIPO</strong></td>
+                      <td align="center"><strong>CAJA</strong></td>
+                      <td align="center"><strong>POTENCIA</strong></td>
+                      </tr>
+                    <tr>
+                      <td align="center"><a href="<?php echo $foto1; ?>" target="_blank"><img src="<?php echo $foto1; ?>" width="58" height="58" alt=""/></a></td>
+                      <td align="center"><a href="<?php echo $foto2; ?>" target="_blank"><img src="<?php echo $foto2; ?>" width="58" height="58" alt=""/></a></td>
+                      <td align="center"><a href="<?php echo $foto3; ?>" target="_blank"><img src="<?php echo $foto3; ?>" width="58" height="58" alt=""/></a></td>
+                      <td align="center"><a href="<?php echo $foto4; ?>" target="_blank"><img src="<?php echo $foto4; ?>" width="58" height="58" alt=""/></a></td>
+                      </tr>
+                    </tbody>
+                </table>
+              </div>
+              <?php 
+				  
+				  $procesado = "si";
+				  $estado_contrato = "activo";
+				  //echo $codigo;
+				  $sqlc2 = "SELECT * from `contratos` WHERE (`cliente` LIKE '$codigocontrato') AND (`procesados` LIKE '$procesado')AND (`estado` LIKE '$estado_contrato')order by fecha DESC";
+                  $resultc2 = mysqli_query($con, $sqlc2);
+                  $Resultados= "1";
+                 while ($crowc2 = mysqli_fetch_assoc($resultc2)) 
+                 {
+                 $ip_cliente = $crowc2['ip'];
+                 $nodo = $crowc2['nodo'];
+                 $serieurl = $crowc2['router'];
+					 
+                 list($ipuno, $ipdos, $iptres, $ipcuatro) = explode(".", $ip_cliente);
+                 if($iptres <= 15)
+                 {
+                 	$tarjeta1 = "0/1";
+                 	$t1 = 0;
+                 	$t2 = 1;
+                 }
+                 if($iptres >= 16)
+                 {
+                 	$tarjeta1 = "0/2";
+                 	$t1 = 0;
+                 	$t2 = 2;
+                 }
+                 $tarjeta = "0/".$iptres;
+                 $puerto_tarjeta = $iptres;
+                 if($puerto_tarjeta == 16 )
+                 {
+                  $puerto_tarjeta = 0;
+                 }
+                 if($puerto_tarjeta == 17 )
+                 {
+                  $puerto_tarjeta = 1;
+                 }
+                 if($puerto_tarjeta == 18 )
+                 {
+                  $puerto_tarjeta = 2;
+                 }
+                 if($puerto_tarjeta == 19 )
+                 {
+                  $puerto_tarjeta = 3;
+                 }
+                 if($puerto_tarjeta == 20 )
+                 {
+                  $puerto_tarjeta = 4;
+                 }
+                 if($puerto_tarjeta == 21 )
+                 {
+                  $puerto_tarjeta = 5;
+                 }
+                 if($puerto_tarjeta == 22 )
+                 {
+                  $puerto_tarjeta = 6;
+                 }
+                 if($puerto_tarjeta == 23 )
+                 {
+                  $puerto_tarjeta = 7;
+                 }
+                 if($puerto_tarjeta == 24 )
+                 {
+                  $puerto_tarjeta = 8;
+                 }
+                 if($puerto_tarjeta == 25 )
+                 {
+                  $puerto_tarjeta = 9;
+                 }
+                 if($puerto_tarjeta == 26 )
+                 {
+                  $puerto_tarjeta = 10;
+                 }
+                 if($puerto_tarjeta == 27 )
+                 {
+                  $puerto_tarjeta = 11;
+                 }
+                 if($puerto_tarjeta == 28 )
+                 {
+                  $puerto_tarjeta = 12;
+                 }
+                 if($puerto_tarjeta == 29 )
+                 {
+                  $puerto_tarjeta = 13;
+                 }
+                 if($puerto_tarjeta == 30 )
+                 {
+                  $puerto_tarjeta = 14;
+                 }
+                 if($puerto_tarjeta == 31 )
+                 {
+                  $puerto_tarjeta = 15;
+                 }
+                 $ubicacion_puerto = $ipcuatro;
+                 $imagen_olt = "../images/equipos/tarjeta_huawei".$puerto_tarjeta.".jpg"; 
+                 ?>
+ 				 <img src=<?php echo $imagen_olt; ?> width="900" height="250" alt="Logo">
+ 				 <br />
+				<?php
+                 
+                
+				  ?>
+				<div class="alert alert-primary" role="alert">
+							<?php echo "TARJETA: "; echo $tarjeta1;?>
+						</div>
+						<div class="alert alert-secondary" role="alert">
+							<?php echo "PUERTO TARJETA "; echo $puerto_tarjeta;?>
+						</div>
+						<div class="alert alert-success" role="alert">
+							<?php echo "NUMERO DE ONT "; echo $ubicacion_puerto; ?>
+						</div>
+						<div class="alert alert-danger" role="alert">
+							<?php echo "IP CLIENTE "; echo $ip_cliente; ?>
+						</div>
+					
+					
+					<?php
+					?>
+					BOTON DE REINICIO 
+					<br />
+					<?php
+					?>
+					DATOS INFORMATIVOS DE LA ONT
+					<br />
+					<?php
+					
+				//EJECUTAR COMANDO PARA RECUPERACION DE INFORMACION DE LA ONT
+				$port = 22;
+				$sqlolt = "SELECT * from `olt_conexion`  WHERE `nodo` LIKE '$nodo'";
+				$resultolt = mysqli_query($con, $sqlolt);
+				while($crowolt = mysqli_fetch_assoc($resultolt))
+				{
+					$host_olt=$crowolt['ip'];
+					$u_olt=$crowolt['usuario'];
+					$p_olt=$crowolt['contrasena'];
+				}	
+				$connection = ssh2_connect($host_olt, $port);
+					if (!ssh2_auth_password($connection, $u_olt, $p_olt)) {
+							die("La autenticaci√≥n SSH fall√≥.");
+					}else
+				// Ejecutar un comando remoto recuperacion informacion olt para saacr distancia y ortros
+				$command = 'enable'."\n".'config'."\n".'scroll 512'."\n".'display ont info '.$t1." ".$t2."\n".' '.$puerto_tarjeta." ".$ubicacion_puerto."\n"."\n";
+				$stream = ssh2_exec($connection, $command);
+				stream_set_blocking($stream, true);
+				$output = stream_get_contents($stream);
+				$output;
+				////////imprimo distancia
+				$separador = "distance(m)";
+				$separada = explode($separador, $output);
+				$separada[2]; 
+				$separador = "ONT";
+				$control = $separada[2];
+				$separadaf = explode($separador, $control);
+				
+				?>
+				<div class="alert alert-warning" role="alert">
+							<?php echo "Distancia ";echo $separadaf[0];	 ?>
+						</div>
+					<?php
+				/////////imprimo numero de serie
+				$separador = "SN";
+				$separada = explode($separador, $output);
+				$separada[2]; 
+				$separador = "Management";
+				$control = $separada[2];
+				$separadaf = explode($separador, $control);
+				?>
+				<div class="alert alert-info" role="alert">
+							<?php echo "Numero Serie ";echo $separadaf[0]; ?>
+						</div>
+					<?php
+				///////////////////imprimir descripcion
+				$separador = "Description";
+				$separada = explode($separador, $output);
+				$separada[1]; 
+				$separador = "Last";
+				$control = $separada[1];
+				$separadaf = explode($separador, $control);
+				
+				?>
+				<div class="alert alert-light" role="alert">
+							<?php echo "Descripcion ";echo $separadaf[0]; ?>
+						</div>
+					<?php
+				///////////////////imprimir duracion prendida
+				$separador = "duration";
+				$separada = explode($separador, $output);
+				$separada[1]; 
+				$separador = "ONT";
+				$control = $separada[1];
+				$separadaf = explode($separador, $control);
+				
+				?>
+				<div class="alert alert-dark" role="alert">
+							<?php echo "Duracion Prendida ";echo $separadaf[0]; ?>
+						</div>	
+					<?php
+				///////////////////ultimo apagado
+				$separador = "cause";
+				$separada = explode($separador, $output);
+				$separada[1]; 
+				$separador = "Last";
+				$control = $separada[1];
+				$separadaf = explode($separador, $control);
+				
+				?>
+					<div class="alert alert-primary" role="alert">
+							<?php echo "LAST DOWN CAUSE ";echo $separadaf[0]; ?>
+						</div>
+						
+					<?php
+				///////////////////hora de prendido
+				$separador = "time";
+				$separada = explode($separador, $output);
+				$separada[1]; 
+				$separador = "Last";
+				$control = $separada[1];
+				$separadaf = explode($separador, $control);
+				
+				?>
+					<div class="alert alert-secondary" role="alert">
+							<?php echo "ULTIMO PRENDIDO ";echo $separadaf[0]; ?>
+						</div>
+						
+					<?php
+				///////////////////hora de apagado
+				$separador = "time";
+				$separada = explode($separador, $output);
+				$separada[2]; 
+				$separador = "Last";
+				$control = $separada[1];
+				$separadaf = explode($separador, $control);
+				
+				?>
+					<div class="alert alert-success" role="alert">
+							<?php echo "ULTIMO APAGADO";echo $separadaf[0]; ?>
+						</div>
+						
+					<?php
+				///////////////////hora de apagado repentino
+				$separador = "time";
+				$separada = explode($separador, $output);
+				$separada[3]; 
+				$separador = "Last";
+				$control = $separada[1];
+				$separadaf = explode($separador, $control);
+				
+				?>
+				<div class="alert alert-danger" role="alert">
+							<?php echo "ULTIMO APAGADO REPENTINO";echo $separadaf[0]; ?>
+						</div>
+					
+				<?php
+					 
+					?>
+					<div class="alert alert-primary" role="alert">
+							<?php echo "OPERACIONES CON  LA OLT " ?> <?php echo "<a href='../clientes/confirmacion_eliminar.php?numero=$serieurl&nodo=$nodo'> BORRADO COMPLETO </a>" ?>
+						</div>
+				<?php
+				// Ejecutar un comando remoto recuperacion informacion olt para sacar las potencias
+				$connection = ssh2_connect($host_olt, $port);
+					if (!ssh2_auth_password($connection, $u_olt, $p_olt)) {
+							die("La autenticaci√≥n SSH fall√≥.");
+					}else
+					
+				$command = 'enable'."\n".'config'."\n".'scroll 512'."\n".'interface gpon '.$tarjeta1."\n".'display ont optical-info '.$puerto_tarjeta." ".$ubicacion_puerto."\n"."\n";
+				$stream = ssh2_exec($connection, $command);
+				stream_set_blocking($stream, true);
+				$output = stream_get_contents($stream);
+				//$output;
+				
+				$separador = "(dBm)";
+				$separada = explode($separador, $output);
+				$separador = "power";
+				$control = $separada[2];
+				$separadaf = explode($separador, $control);
+				
+				//GRAFICO POTENCIA DE IDA
+				
+				$separador = "optical";
+				$control = $separada[8];
+				$separadaf2 = explode($separador, $control);
+				?>
+				
+				
+				<div class="alert alert-warning" role="alert">
+							<?php echo "Potencia que recibe cliente:";echo $graficartemp = $separadaf[0];echo " (dBm)"; ?>
+						</div>
+				<?php
+list($userw) = explode("CATV", $graficartemp);
+//echo $userw;
+list($userq, $userq) = explode(":", $userw);
+//echo $userq;
+$usere =str_replace(' ', '', $userw);
+list($useru, $useri) = explode("-", $usere);
+$useri;
+$dbm = $useri;
+$nummax = 30;
+$porcentaje = round(((int)$dbm * 100) / (int)$nummax);
+
+?>
+<style type="text/CSS">
+/*Establecemos al ancho y alto del div exterior. Adem√°s le daremos un tama√±o al borde y un color*/    
+.divexterior{
+    height: 25px;
+    width: 400px;
+    border: solid 1px #000;
+}
+/*Establecemos el div interior. Como ancho le vamos a dar el valor de la variable $resporcentaje. Este div lo vamos a colorear un con gradiente*/
+.divinterior{
+    height: 25px;
+    width: <?php echo $porcentaje; ?>%;
+    border-right: solid 1px #000;
+    color: #fff;
+    background: rgb(2,0,36);
+    background: linear-gradient(86deg, rgba(2,0,36,1) 0%, rgba(181,181,214,1) 0%, rgba(0,212,255,1) 100%);
+}
+</style>
+<!--Estos div los utilizaremos para crear la barra de progreso. El exterior ser√° el borde que se ver√° por fuera y el interior ser√° el que se va a colorear con un gradiente de azules-->
+<div class="divexterior">
+    <div class="divinterior"><?php echo "-".$dbm; ?>(dBm)</div>
+</div>
+
+<?php
+
+
+					 ?>
+				<div class="alert alert-info" role="alert">
+							<?php echo "Potencia que envia cliente";echo $graficartemp2 = $separadaf2[0];echo " (dBm)"; ?>
+						</div>
+				<?php
+list($userw) = explode("CATV", $graficartemp2);
+//echo $userw;
+list($userq, $userq) = explode(":", $userw);
+//echo $userq;
+$usere =str_replace(' ', '', $userw);
+list($useru, $useri) = explode("-", $usere);
+$useri;
+/*Establecemos un n√∫mero aleatorio entre 1 y 3000*/
+$numretorno = rand(0,30);
+$nummaxretorno = 30;
+/*Establecemos un n√∫mero aleatorio entre 1 y el n√∫mero que se genera aleatoriamente*/
+$dbmretorno = $useri;
+/*Calculamos el porcentaje con los valores anteriores, y lo mostramos sin decimales*/
+$porcentajeretorno = round(($dbmretorno * 100) / $nummaxretorno);
+
+?>
+<?php
+if ($useri >= 25)
+{
+?>
+<style type="text/CSS">
+/*Establecemos al ancho y alto del div exterior. Adem√°s le daremos un tama√±o al borde y un color*/    
+.divexteriorretorno{
+    height: 25px;
+    width: 400px;
+    border: solid 1px #000;
+}
+/*Establecemos el div interior. Como ancho le vamos a dar el valor de la variable $resporcentaje. Este div lo vamos a colorear un con gradiente*/
+.divinteriorretorno{
+    height: 25px;
+    width: <?php echo $porcentajeretorno; ?>%;
+    border-right: solid 1px #000;
+    color: #fff;
+    background: rgb(2,0,36);
+    background: linear-gradient(86deg, rgba(2,0,36,1) 0%, rgba(255,0,0,1) 0%, rgba(255,0,0,6) 100%);
+}
+</style>
+
+<?php
+}
+else
+{
+?>
+<style type="text/CSS">
+/*Establecemos al ancho y alto del div exterior. Adem√°s le daremos un tama√±o al borde y un color*/    
+.divexteriorretorno{
+    height: 25px;
+    width: 400px;
+    border: solid 1px #000;
+}
+/*Establecemos el div interior. Como ancho le vamos a dar el valor de la variable $resporcentaje. Este div lo vamos a colorear un con gradiente*/
+.divinteriorretorno{
+    height: 25px;
+    width: <?php echo $porcentajeretorno; ?>%;
+    border-right: solid 1px #000;
+    color: #fff;
+    background: rgb(2,0,36);
+    background: linear-gradient(86deg, rgba(2,0,36,1) 0%, rgba(181,181,214,1) 0%, rgba(0,212,255,1) 100%);
+}
+</style>
+<?php
+}
+?>
+<!--Estos div los utilizaremos para crear la barra de progreso. El exterior ser√° el borde que se ver√° por fuera y el interior ser√° el que se va a colorear con un gradiente de azules-->
+<div class="divexteriorretorno">
+    <div class="divinteriorretorno"><?php echo "-".$dbmretorno; ?>(dBm)</div>
+</div>
+				<br />
+				<?php
+				$Resultados = $Resultados +1;
+				//$separador = "PARA";
+				//$separada = explode($separador, $separada[0]);
+				//$pal = explode(" ",$separada[1]);
+				//$a = count($pal);
+				//echo <br/>;
+              	
+					
+				}
+				  
+				  
+	?>
+	<br />
+				  CALIFICACION DE CLIENTE :<img src="../images/estrella.jpg" width="58" height="58" alt="Logo"><img src="../images/estrella.jpg" width="58" height="58" alt="Logo">
+				 <img src="../images/estrella.jpg" width="58" height="58" alt="Logo">
+				 <img src="../images/estrella.jpg" width="58" height="58" alt="Logo">
+				 <img src="../images/estrella.jpg" width="58" height="58" alt="Logo">
+				  <style>
+				  <style>
+
+			body {
+				color: #444;
+				font-family: Varela, Helvetica, Arial, sans-serif;
+				font-size: 24px;
+				font-weight: normal;
+				height: 32px;
+				letter-spacing: normal;
+				line-height: 32px;
+			}
+			
+			p {
+				text-align: center;
+			}
+
+			/*
+			 * #### Gauge Component
+			 *
+			 * The standard markup for the component is:
+			 *
+			 *      <div class="gauge">
+			 *          <div class="gauge--container">
+			 *              <div class="gauge--marker"></div>
+			 *              <div class="gauge--background"></div>
+			 *              <div class="gauge--center"></div>
+			 *              <div class="gauge--data"></div>
+			 *              <div class="gauge--needle"></div>
+			 *          </div>
+			 *          <div class="gauge--labels">
+			 *              <span class="gauge--label__low">No</span>
+			 *              <span class="gauge--label__spacer"></span>
+			 *              <span class="gauge--label__high">Yes</span>
+			 *          </div>
+			 *      </div>
+			 */
+ 
+			/*
+			 * First define all of the relevant rules that aren't dependent
+			 * on the size of the gauge. We want to collect the size-depenent
+			 * rules in one place to make it easier to adjust the size.
+			 */
+
+			.gauge {
+			    position: relative;
+			}
+
+			.gauge--container {
+				margin: 0;
+				padding: 0;
+				position: absolute;
+				left: 50%;
+				overflow: hidden;
+				text-align: center;
+				-webkit-transform: translateX(-50%);
+				   -moz-transform: translateX(-50%);
+				    -ms-transform: translateX(-50%);
+				     -o-transform: translateX(-50%);
+				        transform: translateX(-50%);
+			}
+
+			.gauge--background {
+				z-index: 0;
+				position: absolute;
+				background-color: #C0D3D3;
+				top: 0;
+				border-radius: 300px 300px 0 0;
+			}
+
+			.gauge--data {
+				z-index: 1;
+				position: absolute;
+				background-color: #007979;
+				margin-left: auto;
+				margin-right: auto;
+				border-radius: 300px 300px 0 0;
+			    -webkit-transform-origin: center bottom;
+			       -moz-transform-origin: center bottom;
+			        -ms-transform-origin: center bottom;
+			         -o-transform-origin: center bottom;
+			            transform-origin: center bottom;
+			}
+
+			.gauge--center {
+				z-index: 2;
+				position: absolute;
+				background-color: #fff;
+				margin-right: auto;
+				border-radius: 300px 300px 0 0;
+			}
+
+			.gauge--marker {
+			    z-index: 3;
+			    background-color: #fff;
+			    position: absolute;
+			    width: 1px;
+			}
+
+			.gauge--needle {
+			    z-index: 4;
+			    background-color: #F77C15;
+			    height: 3px;
+			    position: absolute;
+			    -webkit-transform-origin: left center;
+			       -moz-transform-origin: left center;
+			        -ms-transform-origin: left center;
+			         -o-transform-origin: left center;
+			            transform-origin: left center;
+			}
+
+			.gauge--labels {
+			    display: table;
+			    margin: 0 auto;
+			    position: relative;
+			}
+
+			.gauge--label__low {
+			    display: table-cell;
+			    text-align: center;
+			}
+
+			.gauge--label__spacer {
+			    display: table-cell;
+			}
+
+			.gauge--label__high {
+			    display: table-cell;
+			    text-align: center;
+			}
+
+			/*
+			 * Now define the rules that depend on the size of
+			 * the gauge. We start with sizing for a small mobile
+			 * device.
+			 */
+
+			.gauge { height: calc(120px + 3em); }
+			.gauge--container { width: 240px; height: 120px; }
+			.gauge--marker { height: 120px; left: 119.5px; }
+			.gauge--background { width: 240px; height: 120px; }
+			.gauge--center { width: 144px; height: 72px; top: 48px; margin-left: 48px; }
+			.gauge--data { width: 240px; height: 120px; }
+			.gauge--needle { left: 120px; top: 117px; width: 120px; }
+			.gauge--labels { top: 120px; width: 240px; }
+			.gauge--label__low { width: 48px; }
+			.gauge--label__spacer { width: 144px; }
+			.gauge--label__high { width: 48px; }
+
+			/*
+			 * Increase the gauge size slightly on larger viewports.
+			 */
+
+			 @media only screen and (min-width: 400px) {
+			    .gauge { height: calc(150px + 3em); }
+			    .gauge--container { width: 300px; height: 150px; }
+			    .gauge--marker { height: 150px; left: 149.5px; }
+			    .gauge--background { width: 300px; height: 150px; }
+			    .gauge--center { width: 180px; height: 90px; top: 60px; margin-left: 60px; }
+			    .gauge--data { width: 300px; height: 150px; }
+			    .gauge--needle { left: 150px; top: 147px; width: 150px; }
+			    .gauge--labels { top: 150px; width: 300px; }
+			    .gauge--label__low { width: 60px; }
+			    .gauge--label__spacer { width: 180px; }
+			    .gauge--label__high { width: 60px; }
+			}
+
+			/*
+			 * As an option, the `gauge__liveupdate` class can be added
+			 * to the main gauge element. When this class is present,
+			 * we add a transition that animates any changes to the gauge
+			 * value. Currently, the app does not use this option because
+			 * all the inputs that can change gauge values are present
+			 * on tab panels that are different from the gauge itself.
+			 * Therefore, users won't be able to see any gauge changes
+			 * when they make input changes. The code is available, though,
+			 * should this change.
+			 */
+
+			.gauge__liveupdate .gauge--data,
+			.gauge__liveupdate .gauge--needle {
+			    -webkit-transition: all 1s ease-in-out;
+			       -moz-transition: all 1s ease-in-out;
+			        -ms-transition: all 1s ease-in-out;
+			         -o-transition: all 1s ease-in-out;
+			            transition: all 1s ease-in-out;
+			}            
+
+			/*
+			 * For a given gauge value, x, ranging from 0.0 to 1.0, set
+			 * the `transform: rotate()` property according to the
+			 * following equation: `-0.5 + 0.5x turns` The default
+			 * properties below represent an x value of 0.
+			 */
+
+			.gauge--data {
+			    -webkit-transform: rotate(-.50turn);
+			       -moz-transform: rotate(-.50turn);
+			        -ms-transform: rotate(-.50turn);
+			         -o-transform: rotate(-.50turn);
+			            transform: rotate(-.50turn);
+			}
+			.gauge--needle {
+			    -webkit-transform: rotate(-.50turn);
+			       -moz-transform: rotate(-.50turn);
+			        -ms-transform: rotate(-.50turn);
+			         -o-transform: rotate(-.50turn);
+			            transform: rotate(-.50turn);
+			}
+
+		</style>
+    </head>
+    <body>
+    	<p>POTENCIA -14</p>
+    	<div class="gauge gauge__liveupdate" id="gauge">
+        	<div class="gauge--container" id="gauge-container">
+        		<div class="gauge--marker"></div>
+        		<div class="gauge--background"></div>
+        		<div class="gauge--center"></div>
+        		<div class="gauge--data"></div>
+        		<div class="gauge--needle"></div>
+       	  </div>
+        	<div class="gauge--labels mdl-typography--headline">3<span class="gauge--label__spacer"></span>
+            	<span class="gauge--label__high">-21</span>
+        	</div>
+   	</div>
+		<script>
+		
+			// #### Gauge
+
+			// The Gauge object encapsulates the behavior
+			// of simple gauge. Most of the implementation
+			// is in the CSS rules, but we do have a bit
+			// of JavaScript to set or read the gauge value
+
+			function Gauge(el) {
+
+			    // ##### Private Properties and Attributes
+
+			    var element,      // Containing element for the info component
+			        data,         // `.gauge--data` element
+			        needle,       // `.gauge--needle` element
+			        value = 0.0,  // Current gauge value from 0 to 1
+			        prop;         // Style for transform
+
+			    // ##### Private Methods and Functions
+    
+			    var setElement = function(el) {
+			        // Keep a reference to the various elements and sub-elements
+			        element = el;
+			        data = element.querySelector(".gauge--data");
+			        needle = element.querySelector(".gauge--needle");
+			    };
+    
+			    var setValue = function(x) {
+			        value = x;
+			        var turns = -0.5 + (x * 0.5);
+			        data.style[prop] = "rotate(" + turns + "turn)";
+			        needle.style[prop] = "rotate(" + turns + "turn)";
+			    };
+
+			    // ##### Object to be Returned
+
+			    function exports() { };
+
+			    // ##### Public API Methods
+
+			    exports.element = function(el) {
+			        if (!arguments.length) { return element; }
+			        setElement(el);
+			        return this;
+			    };
+    
+			    exports.value = function(x) {
+			        if (!arguments.length) { return value; }
+			        setValue(x);
+			        return this;
+			    };
+
+			    // ##### Initialization
+    
+			    var body = document.getElementsByTagName("body")[0];
+			    ["webkitTransform", "mozTransform", "msTransform", "oTransform", "transform"].
+			        forEach(function(p) {
+			            if (typeof body.style[p] !== "undefined") { prop = p; }
+			        }
+			    );
+
+			    if (arguments.length) {
+			        setElement(el);
+			    }
+
+			    return exports;
+
+			};
+
+			var gauge = new Gauge(document.getElementById("gauge"));
+			
+			gauge.value(0.25);
+			document.getElementById("gauge-container").addEventListener("mouseover", function() {
+				gauge.value(0.75);
+			});
+			document.getElementById("gauge-container").addEventListener("mouseout", function() {
+				gauge.value(0.25);
+			});
+
+		</script>
+              <p>&nbsp;</p>
+          </div>
+            <p>&nbsp;</p></td>
+			<p>&nbsp;</p></td>
+          </tr>
+        </tbody>
+    </table>
+      <p>&nbsp;</p>
+    <!-- InstanceEndEditable -->
+                        </div>
+                              
+                        </div>
+                      <p>&nbsp;</p>
+                      </div>
+                    </div>
+                </div>
+            </div>
+            <footer class="footer">
+                <div class="container-fluid">
+                    <nav>
+                        <ul class="footer-menu">
+                            <li>
+                                <a href="https://www.optimusecuador.com/">
+                                    Home
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#">
+                                    Whatsapp
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#">
+                                    Portafoli                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             ˚”}ÅÄ(¢≥x˝Å5ÑaYqyÓ&≤[xÜ’6@b¿a†‡ô7W\‹E‰\:¬Ílq˚‡∞–$›©à\ƒ(É *d%Y¨∑q‡.∫¬V~¿#˘¿[@πÑ  Q®õ«¬Œˇ 8ƒM„ˆ›ÖqK,¿”f w°√ä 0QƒÆã=≈EˆÖßÃ¨8˝ñD¿∂™÷ùB’j ∑XÉ*´Ã~+Yw4JªÃM„ˆTäWõπNRÛÿQãkoñV~ •«Ï¥ƒQµ¿9Â†UX‘z±P√ì,¿ xÖ
+Ø_≤è°~[ãeΩnUá(B≠1Wõ*Uk^¶™àπ{2É»)Èπb’X®JØˇ 0±dÕ»öÕq‚7†Ü·qSﬂÛ¸K]∞Äp,ÑIéO®◊?Òh•U9ål5X9›ˇ ëîê
+Â¿–héêƒ<˙DﬂÙ/†âº~ Òˇ   ÕD·ßﬁ†â†EA%D¬/∂]›gæ1(Z9ˇ ˝‡       J¢ ?àcbç'Êõ…Ë¸@ Ê<«òÛcÃyè1Ê<«òÛcÃyè1Ê<«òÛcÃyè1Ê<«òÛcÃyè1Ê<«òÛcÃyè1Ê<«òÛcÃyè1Ê<«òÛcÃyè1Ê<«òÛcÃyè1Ê<«òÛcÃyè1Ê<«òÛcÃyè1Ê<«òÛcÃyè1Ê<«òÛcÃyè1Ê<«ü˛ˇŸ

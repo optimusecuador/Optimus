@@ -9,7 +9,6 @@ if ($resultado && $fila = $resultado->fetch_assoc()) {
     $TRACCAR_USER = $fila['api'];
     $TRACCAR_URL  = $fila['ip'];
     $TRACCAR_PASS = $fila['contrasena'];
-
     // 2. Comando de ping optimizado para Ubuntu / Linux
     $ping_cmd = "ping -c 1 -W 1 " . escapeshellarg($TRACCAR_URL);
     exec($ping_cmd, $output, $status);
@@ -193,7 +192,7 @@ if (curl_errno($ch)) {
 }
 curl_close($ch);
 ?>
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">

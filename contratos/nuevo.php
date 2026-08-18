@@ -62,7 +62,7 @@ session_start();
 setlocale(LC_ALL, 'es_ES');
 setlocale(LC_TIME, 'es_ES.UTF-8'); //Linux
 /* ===============================
-   CONEXION BD 
+   CONEXION BD  
 =================================*/
 require('../conectar.php');
 $oltconfiguracion = "no";

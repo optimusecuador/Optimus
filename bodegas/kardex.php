@@ -340,6 +340,16 @@ if (isset($_POST['fecha1'])) {
 }
 
 $nombre_producto_export = !empty($producto) ? $producto : 'General';
+
+// Obtención de registros de la tabla personal para el menú desplegable
+$personal_list = [];
+$sql_personal = "SELECT nombres, mail FROM `personal` WHERE mail IS NOT NULL AND mail != '' ORDER BY nombres ASC";
+$res_personal = mysqli_query($con, $sql_personal);
+if ($res_personal) {
+    while ($row_p = mysqli_fetch_assoc($res_personal)) {
+        $personal_list[] = $row_p;
+    }
+}
 ?>
 
 <!-- Librería CDN para la exportación a Excel nativa -->
@@ -364,9 +374,108 @@ $nombre_producto_export = !empty($producto) ? $producto : 'General';
         gap: 10px;
         align-items: center;
         flex-wrap: wrap;
+        position: relative;
     }
 
-    /* Estructura adaptable del Filtro de Fechas (Evita desbordamientos) */
+    /* Burbuja desplegable para Envío de Correo (Diseño exacto de la imagen) */
+    .burbuja-email {
+        display: none;
+        position: absolute;
+        top: 110%;
+        right: 0;
+        background-color: #2b2a3a;
+        border: 1px solid #3c3a50;
+        padding: 16px;
+        border-radius: 8px;
+        box-shadow: 0px 6px 16px rgba(0,0,0,0.6);
+        z-index: 1000;
+        width: 310px;
+        color: #ffffff;
+        text-align: left;
+        box-sizing: border-box;
+    }
+
+    .burbuja-email label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 6px;
+        color: #ffffff;
+    }
+
+    .burbuja-email input[type="email"],
+    .burbuja-email input[type="text"],
+    .burbuja-email select {
+        width: 100%;
+        padding: 8px 10px;
+        margin-bottom: 14px;
+        border-radius: 6px;
+        border: 1px solid #48455e;
+        background-color: #1c1b26;
+        color: #e0e0e0;
+        box-sizing: border-box;
+        font-size: 13px;
+        outline: none;
+    }
+
+    .burbuja-email input::placeholder {
+        color: #8c88a5;
+    }
+
+    .burbuja-email select {
+        cursor: pointer;
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        background-image: url('data:image/svg+xml;utf8,<svg fill="%23ffffff" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+        background-repeat: no-repeat;
+        background-position: right 8px center;
+        background-size: 18px;
+        padding-right: 28px;
+    }
+
+    .burbuja-email-acciones {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 4px;
+    }
+
+    .btn-burbuja-cancelar {
+        background-color: #68727d;
+        border: none;
+        color: #ffffff;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 13px;
+    }
+
+    .btn-burbuja-enviar {
+        background-color: #27ad52;
+        border: none;
+        color: #ffffff;
+        padding: 8px 18px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 13px;
+    }
+
+    .btn-mail {
+        background-color: #007bff;
+        color: #fff;
+        border: none;
+        padding: 10px 18px;
+        font-weight: bold;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    /* Estructura adaptable del Filtro de Fechas */
     .filtro-fechas-container {
         display: flex;
         align-items: center;
@@ -414,17 +523,14 @@ $nombre_producto_export = !empty($producto) ? $producto : 'General';
             margin: 10mm;
         }
 
-        /* 1. Ocultar menús, barras laterales, headers e interfaz general */
         body * {
             visibility: hidden !important;
         }
 
-        /* 2. Mostrar únicamente el contenedor del Kardex */
         #area-imprimible-kardex, #area-imprimible-kardex * {
             visibility: visible !important;
         }
 
-        /* 3. Ajustar el área de impresión al inicio de la página */
         #area-imprimible-kardex {
             position: absolute !important;
             left: 0 !important;
@@ -435,12 +541,10 @@ $nombre_producto_export = !empty($producto) ? $producto : 'General';
             background: #ffffff !important;
         }
 
-        /* Ocultar botones de la interfaz e inputs del formulario al imprimir */
-        .no-print, .btn-print, .btn-excel, .boton-azul, form, script {
+        .no-print, .btn-print, .btn-excel, .btn-mail, .burbuja-email, .boton-azul, form, script {
             display: none !important;
         }
 
-        /* Formato de tabla e impresión visual en blanco */
         body {
             background-color: #ffffff !important;
             color: #000000 !important;
@@ -509,7 +613,7 @@ $nombre_producto_export = !empty($producto) ? $producto : 'General';
                                     KARDEX: <?php echo $_SESSION['productoregresar'] = $producto; ?>
                                 </h2>
                             </div>
-                            <!-- Botones de Acción (Excel e Impresión) -->
+                            <!-- Botones de Acción -->
                             <div class="acciones-kardex no-print">
                                 <button type="button" onclick="exportarExcelKardex();" class="boton-azul btn-excel" style="cursor: pointer; padding: 10px 18px; font-weight: bold; background-color: #1e7e34; border: none; color: #fff; display: flex; align-items: center; gap: 8px;">
                                     📊 Exportar a Excel
@@ -517,6 +621,35 @@ $nombre_producto_export = !empty($producto) ? $producto : 'General';
                                 <button type="button" onclick="window.print();" class="boton-azul btn-print" style="cursor: pointer; padding: 10px 18px; font-weight: bold; display: flex; align-items: center; gap: 8px;">
                                     🖨️ Imprimir Kardex
                                 </button>
+
+                                <!-- Botón Enviar por Mail -->
+                                <button type="button" onclick="toggleBurbujaMail();" class="boton-azul btn-mail">
+                                    📧 Enviar por Mail
+                                </button>
+
+                                <!-- Burbuja flotante -->
+                                <div id="burbujaMail" class="burbuja-email">
+                                    <label>🔍 Buscar Personal:</label>
+                                    <input type="text" id="buscar_personal" placeholder="Escriba nombres o apellidos..." onkeyup="filtrarSelectPersonal();">
+                                    
+                                    <label>👤 Seleccionar Destinatario:</label>
+                                    <select id="select_personal" onchange="seleccionarCorreoSelect();">
+                                        <option value="">-- Seleccione un destinatario --</option>
+                                        <?php foreach ($personal_list as $p): ?>
+                                            <option value="<?php echo htmlspecialchars($p['mail']); ?>" data-nombre="<?php echo htmlspecialchars(mb_strtolower($p['nombres'])); ?>">
+                                                <?php echo htmlspecialchars($p['nombres']); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+
+                                    <label>✉️ Correo Destinatario:</label>
+                                    <input type="email" id="email_destinatario" placeholder="ejemplo@correo.com" required>
+
+                                    <div class="burbuja-email-acciones">
+                                        <button type="button" class="btn-burbuja-cancelar" onclick="toggleBurbujaMail();">Cancelar</button>
+                                        <button type="button" class="btn-burbuja-enviar" onclick="procesarEnvioMail();">Enviar</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -526,7 +659,7 @@ $nombre_producto_export = !empty($producto) ? $producto : 'General';
             <tr>
                 <td align="center">
                     <div class="grilla_listado" style="width: 100%;">
-                        <!-- Filtro de fechas reestructurado y optimizado -->
+                        <!-- Filtro de fechas -->
                         <div class="panel-dark no-print" style="padding: 10px; margin-bottom: 15px;">
                             <form action="kardex.php" method="post" name="form2" id="form2" style="margin: 0;">
                                 <div class="filtro-fechas-container">
@@ -547,7 +680,7 @@ $nombre_producto_export = !empty($producto) ? $producto : 'General';
                             </form>
                         </div>
 
-                        <!-- Grilla de Movimientos del Kardex con contenedor adaptable -->
+                        <!-- Grilla de Movimientos del Kardex -->
                         <div class="panel-dark">
                             <div class="tabla-responsive-container">
                                 <table width="100%" align="center" class="table-dark" id="tabla-kardex-data" style="border-collapse: collapse;">
@@ -666,7 +799,7 @@ $nombre_producto_export = !empty($producto) ? $producto : 'General';
 
 </div> <!-- Fin #area-imprimible-kardex -->
 
-<!-- Script de Exportación a Excel -->
+<!-- Scripts JS de Exportación y Funciones de la Burbuja -->
 <script>
 function exportarExcelKardex() {
     var tabla = document.getElementById('tabla-kardex-data');
@@ -678,11 +811,8 @@ function exportarExcelKardex() {
     var wb = XLSX.utils.book_new();
     var datosExportar = [];
 
-    // Título superior del archivo
     datosExportar.push(["REPORTE DE KARDEX - PRODUCTO: <?php echo addslashes($nombre_producto_export); ?>"]);
     datosExportar.push([]);
-
-    // Encabezados excluyendo la columna de acciones/detalles
     datosExportar.push(["REF", "FECHA", "BODEGA", "ACCIÓN", "SERIE", "CAN", "USUARIO", "EXIS", "UBICACIÓN", "FACTURADO"]);
 
     var filas = tabla.querySelectorAll('tbody tr');
@@ -707,11 +837,93 @@ function exportarExcelKardex() {
     var ws = XLSX.utils.aoa_to_sheet(datosExportar);
     XLSX.utils.book_append_sheet(wb, ws, "Kardex");
 
-    // Formato del archivo descargado: kardex_[nombre_producto].xlsx
     var nombreProductoLimpio = "<?php echo preg_replace('/[^A-Za-z0-9_\-]/', '_', $nombre_producto_export); ?>";
     var nombreArchivo = "kardex_" + nombreProductoLimpio + ".xlsx";
 
     XLSX.writeFile(wb, nombreArchivo);
+}
+
+// Alterna la visibilidad de la burbuja flotante
+function toggleBurbujaMail() {
+    var burbuja = document.getElementById('burbujaMail');
+    if (burbuja.style.display === 'block') {
+        burbuja.style.display = 'none';
+    } else {
+        burbuja.style.display = 'block';
+        document.getElementById('buscar_personal').focus();
+    }
+}
+
+// Filtra las opciones del menú desplegable según la búsqueda realizada
+function filtrarSelectPersonal() {
+    var filtro = document.getElementById('buscar_personal').value.toLowerCase().trim();
+    var select = document.getElementById('select_personal');
+    var opciones = select.getElementsByTagName('option');
+
+    for (var i = 1; i < opciones.length; i++) {
+        var nombre = opciones[i].getAttribute('data-nombre') || "";
+        var email = opciones[i].value.toLowerCase();
+        if (nombre.indexOf(filtro) > -1 || email.indexOf(filtro) > -1) {
+            opciones[i].style.display = "";
+        } else {
+            opciones[i].style.display = "none";
+        }
+    }
+}
+
+// Completa automáticamente el correo destinatario según el usuario seleccionado
+function seleccionarCorreoSelect() {
+    var select = document.getElementById('select_personal');
+    var emailInput = document.getElementById('email_destinatario');
+    emailInput.value = select.value;
+}
+
+// Procesa el envío del correo mediante AJAX enviando únicamente el HTML de la tabla limpia
+function procesarEnvioMail() {
+    var email = document.getElementById('email_destinatario').value.trim();
+    if (email === "") {
+        alert("Por favor, ingrese un correo electrónico válido.");
+        return;
+    }
+
+    var tablaKardex = document.getElementById('tabla-kardex-data');
+    if (!tablaKardex) {
+        alert("No se encontró la tabla de datos para enviar.");
+        return;
+    }
+
+    var tablaClonada = tablaKardex.cloneNode(true);
+    
+    var elementosOcultar = tablaClonada.querySelectorAll('.no-print');
+    elementosOcultar.forEach(function(el) {
+        el.remove();
+    });
+
+    var htmlEnviar = `
+        <h3 style="font-family: Arial, sans-serif; color: #333;">Reporte de Kardex - Producto: <?php echo addslashes($nombre_producto_export); ?></h3>
+        <table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; font-size: 12px; color: #333;">
+            ${tablaClonada.innerHTML}
+        </table>
+    `;
+
+    var formData = new FormData();
+    formData.append('email', email);
+    formData.append('contenido', htmlEnviar);
+
+    toggleBurbujaMail();
+    alert("Enviando correo, por favor espere...");
+
+    fetch('enviar_mail.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(function(response) { return response.text(); })
+    .then(function(data) {
+        alert(data);
+    })
+    .catch(function(error) {
+        alert("Ocurrió un error al intentar enviar el correo: " + error);
+    });
 }
 </script>
 									<!-- InstanceEndEditable --></main>

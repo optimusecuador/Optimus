@@ -447,6 +447,51 @@ add interval=10s timeout=3s host=10.9.0.252 up-script="\
 " down-script="\
 /tool e-mail send to=soldaniela416@gmail.com subject=\"EQUIPO DESCONECTADO\" body=\"El equipo 10.9.0.252 se ha desconectado de la red.\";\
 " comment="Monitor_10.9.0.252"
+
+############################################
+# MANGLE: IDENTIFICACIÓN DE TRÁFICO DE VIDEO Y REDES
+############################################
+/ip firewall mangle
+
+# 1. Liberar marcas previas para evitar duplicidad
+remove [find comment="QOS_REDES_VIDEO"]
+
+# 2. Priorización por TLS Host / SNI (Capa 7 - Detecta Dominios de Streaming y Redes Sociales)
+add chain=forward protocol=tcp dst-port=443 tls-host="*youtube.com*" action=mark-packet new-packet-mark=VIDEO_PRIORITY passthrough=no comment="QOS_REDES_VIDEO"
+add chain=forward protocol=tcp dst-port=443 tls-host="*googlevideo.com*" action=mark-packet new-packet-mark=VIDEO_PRIORITY passthrough=no comment="QOS_REDES_VIDEO"
+add chain=forward protocol=tcp dst-port=443 tls-host="*ytimg.com*" action=mark-packet new-packet-mark=VIDEO_PRIORITY passthrough=no comment="QOS_REDES_VIDEO"
+add chain=forward protocol=tcp dst-port=443 tls-host="*facebook.com*" action=mark-packet new-packet-mark=VIDEO_PRIORITY passthrough=no comment="QOS_REDES_VIDEO"
+add chain=forward protocol=tcp dst-port=443 tls-host="*fbcdn.net*" action=mark-packet new-packet-mark=VIDEO_PRIORITY passthrough=no comment="QOS_REDES_VIDEO"
+add chain=forward protocol=tcp dst-port=443 tls-host="*instagram.com*" action=mark-packet new-packet-mark=VIDEO_PRIORITY passthrough=no comment="QOS_REDES_VIDEO"
+add chain=forward protocol=tcp dst-port=443 tls-host="*tiktok.com*" action=mark-packet new-packet-mark=VIDEO_PRIORITY passthrough=no comment="QOS_REDES_VIDEO"
+add chain=forward protocol=tcp dst-port=443 tls-host="*tiktokcdn.com*" action=mark-packet new-packet-mark=VIDEO_PRIORITY passthrough=no comment="QOS_REDES_VIDEO"
+add chain=forward protocol=tcp dst-port=443 tls-host="*netflix.com*" action=mark-packet new-packet-mark=VIDEO_PRIORITY passthrough=no comment="QOS_REDES_VIDEO"
+add chain=forward protocol=tcp dst-port=443 tls-host="*nflxvideo.net*" action=mark-packet new-packet-mark=VIDEO_PRIORITY passthrough=no comment="QOS_REDES_VIDEO"
+
+# 3. Marcar QUIC / UDP (Protocolo nativo usado por Google/YouTube para buffering rápido)
+add chain=forward protocol=udp dst-port=443 action=mark-packet new-packet-mark=VIDEO_PRIORITY passthrough=no comment="QOS_REDES_VIDEO"
+
+# 4. Tráfico Gaming (Mantiene latencia baja)
+add chain=forward protocol=udp dst-port=3074,3478-3480,27000-27200,5000-5500 action=mark-packet new-packet-mark=GAMING passthrough=no comment="QOS_REDES_VIDEO"
+
+# 5. Todo el resto de tráfico (Navegación general, descargas pesadas, etc.)
+add chain=forward action=mark-packet new-packet-mark=NORMAL passthrough=no comment="QOS_REDES_VIDEO"
+
+
+############################################
+# QUEUE TREE: REESTRUCTURACIÓN DE PRIORIDADES
+############################################
+/queue tree
+
+# Limpieza de queues anteriores de este bloque
+remove [find name~"VIDEO-"]
+
+# Prioridad 1: Gaming (Para mantener el ping bajo sin lag)
+# Prioridad 2: Streaming / Redes Sociales (Asegura velocidad de descarga para buffers)
+# Prioridad 8: Tráfico Normal / Descargas masivas
+
+add name=VIDEO-DOWN parent=DOWNLOAD packet-mark=VIDEO_PRIORITY priority=2 comment="Prioridad Video/Redes"
+add name=VIDEO-UP parent=UPLOAD packet-mark=VIDEO_PRIORITY priority=2 comment="Prioridad Video/Redes"
 ############################################
 # MENSAJE FINAL
 ############################################

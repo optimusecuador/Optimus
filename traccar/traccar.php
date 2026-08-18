@@ -12,7 +12,7 @@ if ($resultado && $fila = $resultado->fetch_assoc()) {
     // 2. Comando de ping optimizado para Ubuntu / Linux
     $ping_cmd = "ping -c 1 -W 1 " . escapeshellarg($TRACCAR_URL);
     exec($ping_cmd, $output, $status);
-
+ 
     // 3. Lógica de verificación y respuesta
     if ($status === 0) {
         echo '<script>

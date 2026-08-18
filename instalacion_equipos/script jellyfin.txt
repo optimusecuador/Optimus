@@ -1,0 +1,200 @@
+
+/* --- TEMA GLOBALNET & NETFLIX OPTIMIZADO Y LIGERO --- */
+@import url('https://cdn.jsdelivr.net/gh/CTNicholas/Jellyfin-Netflix@master/style.css');
+
+/* 1. Fondo base azul y pantalla de login */
+body, .backgroundContainer, body#loginPage, .loginContainer {
+    background-color: #0b192c !important;
+    background-image: url('http://45.236.151.150:4443/img/login.png') !important;
+    background-size: cover !important;
+    background-position: center !important;
+}
+
+/* 2. Encabezado y Logo GlobalNET principal (Agrandado un 50%) */
+.skinHeader-withBackground {
+    background: linear-gradient(to bottom, rgba(11,25,44,0.85) 0%, rgba(11,25,44,0) 100%) !important;
+}
+
+.headerLogo, .pageTitleWithLogo {
+    background-image: url('http://45.236.151.150:4443/img/logo.png') !important;
+    background-size: contain !important;
+    background-repeat: no-repeat !important;
+    background-position: center left !important;
+    width: 225px !important;
+    height: 60px !important;
+}
+
+.headerLogo img, .pageTitleWithLogo img, #loginPage h1.loginTitle span, #loginPage img.loginLogo {
+    display: none !important;
+}
+
+/* 3. Portadas y tarjetas optimizadas (Sin efectos pesados) */
+.cardOverlayContainer, .cardOverlayButton, .cardPadder-square + .cardOverlayButton, .innerCardFooter .cardOverlayButton {
+    display: none !important;
+}
+
+.cardScalable {
+    border-radius: 6px !important;
+    border: none !important;
+    border-bottom: 4px solid transparent !important;
+    transition: transform 0.2s ease, border-color 0.2s ease !important;
+    overflow: hidden !important;
+}
+
+/* Marca de agua de GlobalNET en cada portada (Optimizada sin blur pesado) */
+.cardImageContainer::before {
+    content: '' !important;
+    position: absolute !important;
+    bottom: 8px !important;
+    right: 8px !important;
+    left: 8px !important;
+    height: 32px !important;
+    background-image: url('http://45.236.151.150:4443/img/logo.png') !important;
+    background-size: contain !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-color: rgba(11, 25, 44, 0.75) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: 6px !important;
+    z-index: 5 !important;
+    pointer-events: none !important;
+}
+
+/* Marca de agua durante la reproducción */
+.videoPlayerContainer::after, .htmlVideoPlayerContainer::after {
+    content: '' !important;
+    position: absolute !important;
+    bottom: 25px !important;
+    right: 25px !important;
+    width: 180px !important;
+    height: 70px !important;
+    background-image: url('http://45.236.151.150:4443/img/logo.png') !important;
+    background-size: contain !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-color: rgba(11, 25, 44, 0.8) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 8px !important;
+    z-index: 10 !important;
+    pointer-events: none !important;
+}
+
+/* Icono de Play central rápido */
+.cardScalable::after {
+    content: '▶' !important;
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) scale(0.5) !important;
+    width: 45px !important;
+    height: 45px !important;
+    background-color: rgba(229, 9, 20, 0.9) !important;
+    color: #FFFFFF !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 18px !important;
+    padding-left: 2px !important;
+    opacity: 0 !important;
+    transition: opacity 0.2s ease, transform 0.2s ease !important;
+    z-index: 10 !important;
+    pointer-events: none !important;
+}
+
+/* Enfoque limpio y ligero en las tarjetas (Línea roja inferior) */
+.card:focus .cardScalable, .card:hover .cardScalable, .card[data-focused="true"] .cardScalable {
+    transform: scale(1.1) !important;
+    z-index: 1000 !important;
+    border-bottom: 5px solid #E50914 !important;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.8) !important;
+}
+
+.card:focus .cardScalable::after, .card:hover .cardScalable::after, .card[data-focused="true"] .cardScalable::after {
+    opacity: 1 !important;
+    transform: translate(-50%, -50%) scale(1) !important;
+}
+
+/* 4. Botón de reproducción en detalles */
+.mainDetailButtons .btnPlay, .mainDetailButtons [data-action="play"] {
+    background-color: #E50914 !important;
+    color: #FFFFFF !important;
+    box-shadow: 0 0 15px rgba(229, 9, 20, 0.7) !important;
+}
+
+/* 5. Títulos de géneros centrados en recuadro */
+.sectionTitleContainer, .homeSectionContainer .sectionTitle, .listHeader {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100% !important;
+    margin: 20px 0 10px 0 !important;
+}
+
+.sectionTitleContainer h2, .homeSectionContainer .sectionTitleText, .listHeaderTitle {
+    background-color: rgba(11, 25, 44, 0.9) !important;
+    color: #FFFFFF !important;
+    padding: 6px 20px !important;
+    border-radius: 6px !important;
+    border: 1px solid rgba(229, 9, 20, 0.4) !important;
+    text-align: center !important;
+    font-size: 1.15rem !important;
+    margin: 0 auto !important;
+}
+
+/* 6. Listado alfabético lateral en rojo */
+.alphaPickerButton, .alphabetPickerButton, .alphaPicker-button {
+    color: #FFFFFF !important;
+    background-color: rgba(11, 25, 44, 0.7) !important;
+}
+
+.alphaPickerButton:hover, .alphaPickerButton:focus, .alphaPickerButton-selected {
+    background-color: #E50914 !important;
+    color: #FFFFFF !important;
+}
+
+/* 7. Icono de la casita (Home) personalizado */
+.navMenuOption[href*="home"] .material-icons::before, .navMenuOption[href$="index.html"] .material-icons::before {
+    content: "" !important;
+    display: inline-block !important;
+    width: 24px !important;
+    height: 24px !important;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>') !important;
+    background-size: contain !important;
+}
+/* --- Mejora de legibilidad para los títulos de las películas --- */
+.cardText, .cardText-primary, .cardText-secondary, .innerCardFooter .cardText {
+    font-size: 1.05rem !important;
+    font-weight: bold !important;
+    color: #FFFFFF !important;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9) !important;
+}
+
+/* Fondo sutil y elegante en el pie de la tarjeta para resaltar el texto */
+.innerCardFooter {
+    background: linear-gradient(to top, rgba(11, 25, 44, 0.95) 0%, rgba(11, 25, 44, 0.6) 70%, transparent 100%) !important;
+    padding: 8px 6px !important;
+    border-bottom-left-radius: 6px !important;
+    border-bottom-right-radius: 6px !important;
+}
+
+/* Título principal más grande y destacado */
+.cardText-primary {
+    font-size: 1.1rem !important;
+    letter-spacing: 0.3px !important;
+}
+
+/* Subtítulos o año un poco más claros pero legibles */
+.cardText-secondary {
+    font-size: 0.9rem !important;
+    color: #d1d5db !important;
+}
+/* --- Ocultar secciones específicas de Directores, Escritores y Estudios sin afectar colecciones --- */
+.detailSection .peopleSection,
+.detailSection [class*="Director"],
+.detailSection [class*="Writer"],
+.detailSection [class*="Studio"],
+.itemGenres {
+    display: none !important;
+}
+

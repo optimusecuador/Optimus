@@ -1,0 +1,461 @@
+############################################
+# RESET TOTAL
+############################################
+/system reset-configuration no-defaults=yes skip-backup=yes
+############################################
+# LIMPIEZA INICIAL
+############################################
+/ip address remove [find]
+/ip dhcp-client remove [find]
+/ip dhcp-server remove [find]
+/ip pool remove [find]
+/ip firewall nat remove [find]
+/ip firewall filter remove [find]
+/ip firewall mangle remove [find]
+/ip route remove [find]
+/queue simple remove [find]
+/queue tree remove [find]
+
+############################################
+# RENOMBRAR INTERFACES
+############################################
+/interface ethernet
+set ether1 name=WAN1
+set ether2 name=WAN2
+set ether3 name=LAN
+set ether4 name=truenas1
+set ether5 name=truenas2
+
+############################################
+# DHCP CLIENTES WAN
+############################################
+/ip dhcp-client
+add interface=WAN1 add-default-route=yes use-peer-dns=no disabled=no
+add interface=WAN2 add-default-route=yes use-peer-dns=no disabled=no
+
+############################################
+# REDES LAN (LAN, truenas1, truenas2)
+############################################
+/ip address
+add address=10.10.0.1/24 interface=LAN comment="Gateway Clientes"
+add address=10.9.0.1/24 interface=truenas1 comment="Gateway TrueNAS 1"
+add address=10.8.0.1/24 interface=truenas2 comment="Gateway TrueNAS 2"
+
+############################################
+# DHCP POOLS
+############################################
+/ip pool
+add name=POOL-LAN ranges=10.10.0.10-10.10.0.254
+add name=POOL-TRUENAS1 ranges=10.9.0.10-10.9.0.254
+add name=POOL-TRUENAS2 ranges=10.8.0.10-10.8.0.254
+
+############################################
+# DHCP SERVERS
+############################################
+/ip dhcp-server
+add name=DHCP-LAN interface=LAN address-pool=POOL-LAN disabled=no
+add name=DHCP-TRUENAS1 interface=truenas1 address-pool=POOL-TRUENAS1 disabled=no
+add name=DHCP-TRUENAS2 interface=truenas2 address-pool=POOL-TRUENAS2 disabled=no
+
+############################################
+# DHCP NETWORKS
+############################################
+/ip dhcp-server network
+add address=10.10.0.0/24 gateway=10.10.0.1 dns-server=8.8.8.8,1.1.1.1
+add address=10.9.0.0/24 gateway=10.9.0.1 dns-server=8.8.8.8,1.1.1.1
+add address=10.8.0.0/24 gateway=10.8.0.1 dns-server=8.8.8.8,1.1.1.1
+
+############################################
+# DNS ROUTER
+############################################
+/ip dns
+set allow-remote-requests=yes servers=8.8.8.8,1.1.1.1
+
+############################################
+# NAT INTERNET
+############################################
+/ip firewall nat
+add chain=srcnat out-interface=WAN1 action=masquerade
+add chain=srcnat out-interface=WAN2 action=masquerade
+
+############################################
+# FIREWALL BASICO
+############################################
+/ip firewall filter
+add chain=input connection-state=established,related action=accept
+add chain=input connection-state=invalid action=drop
+add chain=input in-interface=LAN action=accept
+add chain=input in-interface=truenas1 action=accept
+add chain=input in-interface=truenas2 action=accept
+add chain=input action=drop
+
+############################################
+# SUSPENSION CLIENTES
+############################################
+/ip firewall address-list
+add list=CLIENTES-SUSPENDIDOS address=0.0.0.0
+/ip firewall address-list remove [find address=0.0.0.0]
+
+/ip firewall filter
+add chain=forward src-address-list=CLIENTES-SUSPENDIDOS \
+action=drop comment="SUSPENSION-INTERNET"
+
+############################################
+# AGREGAR TODAS LAS IPS A SUSPENSION
+############################################
+:for i from=2 to=254 do={
+/ip firewall address-list add \
+list=CLIENTES-SUSPENDIDOS \
+address=("10.10.0.".$i)
+}
+############################################
+# DHCP IP FIJA POR MAC
+############################################
+/ip dhcp-server lease
+add address=10.10.0.254 mac-address=28:EE:52:7B:63:0C server=DHCP-LAN comment="Cliente Prueba NODO"
+############################################
+# ACTIVAR ROUTER PRUEBA
+############################################
+/ip firewall address-list remove [find address=10.10.0.254]
+
+############################################
+# DHCP IP FIJA
+############################################
+/ip dhcp-server lease make-static [find address=10.10.0.254]
+
+############################################
+# LIMITADOR CLIENTE NODO
+############################################
+/queue simple
+add name="CLIENTE-NODO" target=10.10.0.254 max-limit=200M/200M
+
+############################################
+# QOS PRIORIDAD GAMING Y STREAMING
+############################################
+/ip firewall mangle
+add chain=forward protocol=tcp dst-port=80,443 \
+action=mark-packet new-packet-mark=STREAMING passthrough=yes
+
+add chain=forward protocol=udp dst-port=3074,3478-3480,27000-27200,5000-5500 \
+action=mark-packet new-packet-mark=GAMING passthrough=yes
+
+add chain=forward action=mark-packet \
+new-packet-mark=NORMAL passthrough=no
+
+############################################
+# QUEUE TREE
+############################################
+/queue tree
+add name=DOWNLOAD parent=global queue=default
+add name=GAMING-DOWN parent=DOWNLOAD packet-mark=GAMING priority=1
+add name=STREAMING-DOWN parent=DOWNLOAD packet-mark=STREAMING priority=3
+add name=NORMAL-DOWN parent=DOWNLOAD packet-mark=NORMAL priority=8
+
+add name=UPLOAD parent=global queue=default
+add name=GAMING-UP parent=UPLOAD packet-mark=GAMING priority=1
+add name=STREAMING-UP parent=UPLOAD packet-mark=STREAMING priority=3
+add name=NORMAL-UP parent=UPLOAD packet-mark=NORMAL priority=8
+
+############################################
+# FAILOVER WAN INTELIGENTE
+############################################
+/system script
+add name=FAILOVER-WAN source={
+
+:local ok1 [/ping 8.8.8.8 interface=WAN1 count=3]
+
+:if ($ok1=0) do={
+/ip route disable [find gateway~"WAN1"]
+:log warning "WAN1 CAIDA - USANDO WAN2"
+} else={
+/ip route enable [find gateway~"WAN1"]
+}
+
+}
+
+/system scheduler
+add name=CHECK-WAN interval=30s on-event=FAILOVER-WAN
+
+############################################
+# REINICIO AUTOMATICO 14 DIAS
+############################################
+/system scheduler
+add name=REINICIO-AUTOMATICO interval=2w \
+on-event="/system reboot" start-time=03:00:00
+
+############################################
+# CONFIGURAR CORREO YAHOO
+############################################
+/tool e-mail set \
+server=smtp.mail.yahoo.com \
+port=587 \
+from=nelo416@yahoo.com \
+user=nelo416@yahoo.com \
+password=pmylkbjcdglyaktv \
+tls=starttls
+
+############################################
+# SINCRONIZAR HORA
+############################################
+/system ntp client set enabled=yes \
+servers=pool.ntp.org,europe.pool.ntp.org
+
+/system clock set time-zone-name=America/Bogota
+
+############################################
+# CORREO PRUEBA
+############################################
+/tool e-mail send \
+to=soldaniela416@gmail.com \
+subject="MIKROTIK OK" \
+body="Router ISP configurado correctamente"
+############################################
+# NUEVA RED ETHER10 (CONTROL)
+############################################
+/interface ethernet
+set ether10 name=CONTROL
+
+/ip address
+add address=10.7.0.1/24 interface=CONTROL comment="Gateway Red 10.7.0.0"
+
+/ip pool
+add name=POOL-CONTROL ranges=10.7.0.10-10.7.0.254
+
+/ip dhcp-server
+add name=DHCP-CONTROL interface=CONTROL address-pool=POOL-CONTROL disabled=no
+
+/ip dhcp-server network
+add address=10.7.0.0/24 gateway=10.7.0.1 dns-server=8.8.8.8,1.1.1.1
+
+/ip firewall filter
+add chain=input in-interface=CONTROL action=accept comment="Permitir trafico input CONTROL"
+############################################
+# DHCP IP FIJA PARA CONTROL (MAC 04:7D:7B:63:6E:04)
+############################################
+/ip dhcp-server lease
+add address=10.7.0.254 mac-address=04:7D:7B:63:6E:04 server=DHCP-CONTROL comment="LAPTOP CONTROL"
+############################################
+# DHCP IP FIJA POR MAC PARA TRUENAS2
+############################################
+/ip dhcp-server lease
+add address=10.8.0.10 mac-address=6C:3B:E5:50:41:59 server=DHCP-TRUENAS2 comment="IP Estatica 10.8.0.10 para TrueNAS2"
+############################################
+# DHCP IP FIJA POR MAC PARA TRUENAS1 TRUENAS
+############################################
+/ip dhcp-server lease
+add address=10.9.0.251 mac-address=6C:3B:E5:50:41:58 server=DHCP-TRUENAS1 comment="IP Estatica 10.9.0.251 para TrueNAS1 TRUENAS"
+############################################
+# DHCP IP FIJA POR MAC PARA TRUENAS1 WINDOWS
+############################################
+/ip dhcp-server lease
+add address=10.9.0.252 mac-address=00:A0:98:7D:82:3B server=DHCP-TRUENAS1 comment="IP Estatica 10.9.0.252 para TrueNAS1 WINDOWS"
+############################################
+# DHCP IP FIJA POR MAC PARA TRUENAS1 SISTEMA
+############################################
+/ip dhcp-server lease
+add address=10.9.0.250 mac-address=00:A0:98:77:A9:86 server=DHCP-TRUENAS1 comment="IP Estatica 10.9.0.250 para TrueNAS1 SISTEMA"
+
+
+############################################
+# REDIRECCIÓN DE LAN A 10.9.0.251 (TRUENAS1)
+############################################
+/ip firewall nat
+add chain=dstnat in-interface=LAN dst-address=10.9.0.251 action=dst-nat \
+    comment="Redirigir solicitudes de LAN hacia la IP 10.9.0.251 en truenas1"
+
+add chain=srcnat out-interface=truenas1 dst-address=10.9.0.251 action=masquerade \
+    comment="Enmascaramiento para redireccion cruzada hacia truenas1"
+############################################
+# REDIRECCIÓN DE LAN A 10.9.0.250 (TRUENAS1 SISTEMA)
+############################################
+/ip firewall nat
+add chain=dstnat in-interface=LAN dst-address=10.9.0.250 action=dst-nat \
+    comment="Redirigir solicitudes de LAN hacia la IP 10.9.0.250 en truenas1 SISTEMA"
+
+add chain=srcnat out-interface=truenas1 dst-address=10.9.0.250 action=masquerade \
+    comment="Enmascaramiento para redireccion cruzada hacia truenas1 SISTEMA"
+
+############################################
+# REDIRECCIÓN DE LAN A 10.8.0.10 (TRUENAS2)
+############################################
+/ip firewall nat
+add chain=dstnat in-interface=LAN dst-address=10.8.0.10 action=dst-nat \
+    comment="Redirigir solicitudes de LAN hacia la IP 10.8.0.10 en truenas2"
+
+add chain=srcnat out-interface=truenas2 dst-address=10.8.0.10 action=masquerade \
+    comment="Enmascaramiento para redireccion cruzada hacia truenas2"
+############################################
+# REDIRECCIÓN DE LAN A 10.7.0.254 (CONTROL)
+############################################
+add chain=dstnat in-interface=LAN dst-address=10.7.0.254 action=dst-nat \
+    comment="Redirigir solicitudes de LAN hacia la IP 10.7.0.254 en control"
+
+add chain=srcnat out-interface=control dst-address=10.7.0.254 action=masquerade \
+    comment="Enmascaramiento para redireccion cruzada hacia control"
+############################################
+# OCULTAR MIKROTIK Y DISFRAZAR EN WAN
+############################################
+
+# 1. Desactivar protocolos de descubrimiento y vecinos en la WAN
+/ip neighbor discovery-settings
+set discover-interface-list=none
+
+/tool mac-server
+set allowed-interface-list=none
+
+/tool mac-server mac-winbox
+set allowed-interface-list=none
+
+/ip ndp
+set enabled=no
+
+# 2. Bloquear puertos de gestión y escaneo común desde el exterior (WAN1 y WAN2)
+/ip firewall filter
+add chain=input in-interface=WAN1 protocol=tcp dst-port=8291,20,21,22,23,80,443 action=drop comment="Ocultar puertos administracion WAN1"
+add chain=input in-interface=WAN2 protocol=tcp dst-port=8291,20,21,22,23,80,443 action=drop comment="Ocultar puertos administracion WAN2"
+
+# 3. Simular fabricante de laptop (Ejemplo: Cambiar MAC de WAN1 por un OUI de Intel/Realtek de PC)
+# Nota: Reemplaza la MAC por una de una tarjeta de red de laptop real si lo deseas
+/interface ethernet
+set WAN1 mac-address=1C-62-B8-40-30-3C
+/interface ethernet
+set WAN1 mac-address=84-25-3F-50-52-10
+
+############################################
+# CONTROL DE ACCESO A INTERNET POR LISTA
+############################################
+
+# 1. Crear o asegurar la lista y añadir las IPs solicitadas con acceso a Internet
+/ip firewall address-list
+add list=IPS-CON-INTERNET address=10.10.0.254 comment="Cliente Prueba NODO"
+add list=IPS-CON-INTERNET address=10.9.0.250  comment="TrueNAS1 SISTEMA"
+add list=IPS-CON-INTERNET address=10.9.0.252  comment="TrueNAS1 WINDOWS"
+add list=IPS-CON-INTERNET address=10.9.0.251  comment="TrueNAS1 TRUENAS"
+add list=IPS-CON-INTERNET address=10.8.0.10   comment="TrueNAS2"
+add list=IPS-CON-INTERNET address=10.7.0.254  comment="LAPTOP CONTROL"
+
+# 2. Reglas de Firewall para permitir internet a las IPs de la lista y bloquear al resto
+/ip firewall filter
+add chain=forward src-address-list=IPS-CON-INTERNET out-interface-list=WAN action=accept comment="Permitir Internet a IPs autorizadas"
+add chain=forward out-interface-list=WAN action=drop comment="Bloquear Internet al resto de IPs no autorizadas"
+
+############################################
+# NUEVA RED ETHER9 (OLT)
+############################################
+/interface ethernet
+set ether9 name=OLT
+
+/ip address
+add address=192.168.8.1/24 interface=OLT comment="Gateway Red 192.168.8.0"
+
+/ip pool
+add name=POOL-OLT ranges=192.168.8.10-192.168.8.254
+
+/ip dhcp-server
+add name=DHCP-OLT interface=OLT address-pool=POOL-OLT disabled=no
+
+/ip dhcp-server network
+add address=192.168.8.0/24 gateway=192.168.8.1 dns-server=8.8.8.8,1.1.1.1
+
+/ip firewall filter
+add chain=input in-interface=OLT action=accept comment="Permitir trafico input OLT"
+############################################
+# REDIRECCIÓN DE LAN A 192.168.8.100 (OLT)
+############################################
+/ip firewall nat
+add chain=dstnat in-interface=LAN dst-address=192.168.8.100 action=dst-nat \
+    comment="Redirigir solicitudes de LAN hacia la IP 192.168.8.100 en OLT"
+
+add chain=srcnat out-interface=OLT dst-address=192.168.8.100 action=masquerade \
+    comment="Enmascaramiento para redireccion cruzada hacia OLT"
+############################################
+# BLOQUEO DE ACCESO DESDE LAN HACIA OLT Y CONTROL
+############################################
+/ip firewall filter
+add chain=forward in-interface=LAN dst-address=192.168.8.0/24 action=drop \
+    comment="Bloquear acceso desde LAN hacia la red OLT (192.168.8.0/24)"
+
+add chain=forward in-interface=LAN dst-address=10.7.0.0/24 action=drop \
+    comment="Bloquear acceso desde LAN hacia la red CONTROL (10.7.0.0/24)"
+
+
+############################################
+# CONFIGURACIÓN DE PI-HOLE (10.8.0.10) EN INTERFAZ TRUENAS2
+############################################
+
+/tool netwatch
+add interval=10s timeout=3s host=10.8.0.10 port=20720 up-script="\
+/ip dhcp-server network set [find address=10.10.0.0/24] dns-server=10.8.0.10,1.1.1.1;\
+/ip firewall filter add chain=forward in-interface=LAN dst-address=10.8.0.10 protocol=udp dst-port=53 action=accept comment=\"Pi-hole_Rule\";\
+/ip firewall filter add chain=forward in-interface=LAN dst-address=10.8.0.10 protocol=tcp dst-port=53 action=accept comment=\"Pi-hole_Rule\";\
+/ip firewall nat add chain=dstnat in-interface=LAN protocol=udp dst-port=53 dst-address=!10.8.0.10 action=dst-nat to-addresses=10.8.0.10 to-ports=53 comment=\"Pi-hole_Rule\";\
+/ip firewall nat add chain=dstnat in-interface=LAN protocol=tcp dst-port=53 dst-address=!10.8.0.10 action=dst-nat to-addresses=10.8.0.10 to-ports=53 comment=\"Pi-hole_Rule\";\
+/ip firewall nat add chain=dstnat in-interface=LAN protocol=udp dst-port=53 action=dst-nat to-addresses=10.8.0.10 to-ports=53 comment=\"Pi-hole_Rule\";\
+/ip firewall nat add chain=dstnat in-interface=LAN protocol=tcp dst-port=53 action=dst-nat to-addresses=10.8.0.10 to-ports=53 comment=\"Pi-hole_Rule\";\
+" down-script="\
+/ip dhcp-server network set [find address=10.10.0.0/24] dns-server=1.1.1.1;\
+/ip firewall filter remove [find comment=\"Pi-hole_Rule\"];\
+/ip firewall nat remove [find comment=\"Pi-hole_Rule\"];\
+" comment="Monitor_Pihole_Port"
+
+############################################
+# MONITOREO IP 10.10.0.254 (NETWATCH)
+############################################
+/tool netwatch
+add interval=10s timeout=3s host=10.10.0.254 up-script="\
+/tool e-mail send \
+to=soldaniela416@gmail.com \
+subject=\"EQUIPO CONECTADO\" \
+body=\"El equipo 10.10.0.254 se ha conectado nuevamente.\";\
+" down-script="\
+/tool e-mail send \
+to=soldaniela416@gmail.com \
+subject=\"EQUIPO DESCONECTADO\" \
+body=\"El equipo 10.10.0.254 se ha desconectado de la red.\";\
+" comment="Monitor_Equipo_10.10.0.254"
+
+############################################
+# MONITOREO DE IPS CRITICAS (NETWATCH)
+############################################
+/tool netwatch
+add interval=10s timeout=3s host=10.9.0.250 up-script="\
+/tool e-mail send to=soldaniela416@gmail.com subject=\"EQUIPO CONECTADO\" body=\"El equipo 10.9.0.250 se ha conectado nuevamente.\";\
+" down-script="\
+/tool e-mail send to=soldaniela416@gmail.com subject=\"EQUIPO DESCONECTADO\" body=\"El equipo 10.9.0.250 se ha desconectado de la red.\";\
+" comment="Monitor_10.9.0.250"
+
+add interval=10s timeout=3s host=10.9.0.251 up-script="\
+/tool e-mail send to=soldaniela416@gmail.com subject=\"EQUIPO CONECTADO\" body=\"El equipo 10.9.0.251 se ha conectado nuevamente.\";\
+" down-script="\
+/tool e-mail send to=soldaniela416@gmail.com subject=\"EQUIPO DESCONECTADO\" body=\"El equipo 10.9.0.251 se ha desconectado de la red.\";\
+" comment="Monitor_10.9.0.251"
+
+add interval=10s timeout=3s host=10.8.0.10 up-script="\
+/tool e-mail send to=soldaniela416@gmail.com subject=\"EQUIPO CONECTADO\" body=\"El equipo 10.8.0.10 se ha conectado nuevamente.\";\
+" down-script="\
+/tool e-mail send to=soldaniela416@gmail.com subject=\"EQUIPO DESCONECTADO\" body=\"El equipo 10.8.0.10 se ha desconectado de la red.\";\
+" comment="Monitor_10.8.0.10"
+
+add interval=10s timeout=3s host=10.7.0.254 up-script="\
+/tool e-mail send to=soldaniela416@gmail.com subject=\"EQUIPO CONECTADO\" body=\"El equipo 10.7.0.254 se ha conectado nuevamente.\";\
+" down-script="\
+/tool e-mail send to=soldaniela416@gmail.com subject=\"EQUIPO DESCONECTADO\" body=\"El equipo 10.7.0.254 se ha desconectado de la red.\";\
+" comment="Monitor_10.7.0.254"
+
+add interval=10s timeout=3s host=10.9.0.252 up-script="\
+/tool e-mail send to=soldaniela416@gmail.com subject=\"EQUIPO CONECTADO\" body=\"El equipo 10.9.0.252 se ha conectado nuevamente.\";\
+" down-script="\
+/tool e-mail send to=soldaniela416@gmail.com subject=\"EQUIPO DESCONECTADO\" body=\"El equipo 10.9.0.252 se ha desconectado de la red.\";\
+" comment="Monitor_10.9.0.252"
+############################################
+# MENSAJE FINAL
+############################################
+:put "===== ISP CONFIGURADO CORRECTAMENTE ====="
+
+############################################
+# REINICIAR ROUTER
+############################################
+/system reboot force=yes
+
+
+

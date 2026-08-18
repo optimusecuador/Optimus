@@ -2,9 +2,9 @@
 require('../conectar.php');
 
 // Carga manual de PHPMailer desde la ruta especificada
-require '../generar_automatico/PHPmailer/src/Exception.php';
-require '../generar_automatico/PHPmailer/src/PHPMailer.php';
-require '../generar_automatico/PHPmailer/src/SMTP.php';
+require '../generar_automatico/PHPMailer/src/Exception.php';
+require '../generar_automatico/PHPMailer/src/PHPMailer.php';
+require '../generar_automatico/PHPMailer/src/SMTP.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;

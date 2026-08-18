@@ -331,6 +331,16 @@ if (empty($tabla) && isset($_SESSION['bodega'])) {
 }
 
 $nombre_bodega = !empty($codigo) ? $codigo : 'general';
+
+// Obtención de personal con correo registrado utilizando la columna 'nombres'
+$personal_list = [];
+$sql_personal = "SELECT nombres, mail FROM `personal` WHERE mail IS NOT NULL AND mail != '' ORDER BY nombres ASC";
+$res_personal = mysqli_query($con, $sql_personal);
+if ($res_personal) {
+    while ($row_p = mysqli_fetch_assoc($res_personal)) {
+        $personal_list[] = $row_p;
+    }
+}
 ?>
 
 <!-- Librería CDN para la exportación a Excel nativa -->
@@ -350,6 +360,56 @@ $nombre_bodega = !empty($codigo) ? $codigo : 'general';
         display: flex;
         gap: 10px;
         align-items: center;
+        position: relative;
+    }
+
+    /* Modal / Burbuja para Correo y Búsqueda de Personal */
+    .burbuja-email {
+        display: none;
+        position: absolute;
+        top: 110%;
+        right: 0;
+        background-color: #2a2a3c;
+        border: 1px solid #444;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0px 4px 12px rgba(0,0,0,0.5);
+        z-index: 1000;
+        width: 320px;
+        color: #fff;
+    }
+
+    .burbuja-email input[type="email"],
+    .burbuja-email input[type="text"],
+    .burbuja-email select {
+        width: 100%;
+        padding: 8px;
+        margin-top: 4px;
+        margin-bottom: 10px;
+        border-radius: 4px;
+        border: 1px solid #555;
+        background-color: #1a1a24;
+        color: #fff;
+        box-sizing: border-box;
+        font-size: 13px;
+    }
+
+    .burbuja-email-acciones {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+
+    .btn-mail {
+        background-color: #007bff;
+        color: #fff;
+        border: none;
+        padding: 10px 18px;
+        font-weight: bold;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
     
     @media print {
@@ -376,7 +436,7 @@ $nombre_bodega = !empty($codigo) ? $codigo : 'general';
             background: #ffffff !important;
         }
 
-        .no-print, .btn-print, .btn-excel, .boton-azul, script {
+        .no-print, .btn-print, .btn-excel, .btn-mail, .burbuja-email, .boton-azul, script {
             display: none !important;
         }
 
@@ -437,14 +497,14 @@ $nombre_bodega = !empty($codigo) ? $codigo : 'general';
         <div class="clientes-header-top">
             <div class="header-bodega-container" style="width: 100%;">
                 <div>
-                    <h2 class="clientes-title">Registro de Kardex</h2>
+                    <h2 class="clientes-title" id="titulo_kardex_general">Registro de Kardex</h2>
                     <div class="clientes-subtitle">
                         <h2 id="optimus" class="clientes-title" style="margin: 0;">
                             BODEGA: <?php echo htmlspecialchars($_SESSION['bodegaregresar'] = $codigo); ?>
                         </h2>
                     </div>
                 </div>
-                <!-- Botones de Acción (Imprimir y Exportar a Excel) -->
+                <!-- Botones de Acción (Imprimir, Exportar a Excel y Enviar por Mail) -->
                 <div class="acciones-bodega no-print">
                     <button type="button" onclick="exportarExcel();" class="boton-azul btn-excel" style="cursor: pointer; padding: 10px 18px; font-weight: bold; background-color: #1e7e34; border: none; color: #fff; display: flex; align-items: center; gap: 8px;">
                         📊 Exportar a Excel
@@ -452,6 +512,35 @@ $nombre_bodega = !empty($codigo) ? $codigo : 'general';
                     <button type="button" onclick="window.print();" class="boton-azul btn-print" style="cursor: pointer; padding: 10px 18px; font-weight: bold; display: flex; align-items: center; gap: 8px;">
                         🖨️ Imprimir Listado
                     </button>
+
+                    <!-- Botón Enviar por Mail -->
+                    <button type="button" onclick="toggleBurbujaMail();" class="boton-azul btn-mail">
+                        📧 Enviar por Mail
+                    </button>
+
+                    <!-- Burbuja flotante de Email con Búsqueda en Tabla Personal -->
+                    <div id="burbujaMail" class="burbuja-email">
+                        <label style="font-size: 12px; font-weight: bold;">🔍 Buscar Personal:</label>
+                        <input type="text" id="buscar_personal" placeholder="Escriba nombres o apellidos..." onkeyup="filtrarPersonal();">
+                        
+                        <label style="font-size: 12px; font-weight: bold;">👤 Seleccionar Destinatario:</label>
+                        <select id="select_personal" onchange="seleccionarCorreoPersonal();">
+                            <option value="">-- Seleccione un destinatario --</option>
+                            <?php foreach ($personal_list as $p): ?>
+                                <option value="<?php echo htmlspecialchars($p['mail']); ?>" data-nombre="<?php echo htmlspecialchars(mb_strtolower($p['nombres'])); ?>">
+                                    <?php echo htmlspecialchars($p['nombres'] . " (" . $p['mail'] . ")"); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+
+                        <label style="font-size: 12px; font-weight: bold;">✉️ Correo Destinatario:</label>
+                        <input type="email" id="email_destinatario" placeholder="ejemplo@correo.com" required>
+
+                        <div class="burbuja-email-acciones">
+                            <button type="button" onclick="toggleBurbujaMail();" style="background:#6c757d; border:none; color:#fff; padding:5px 10px; border-radius:4px; cursor:pointer;">Cancelar</button>
+                            <button type="button" onclick="procesarEnvioMail();" style="background:#28a745; border:none; color:#fff; padding:5px 10px; border-radius:4px; cursor:pointer; font-weight:bold;">Enviar</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -494,7 +583,7 @@ $nombre_bodega = !empty($codigo) ? $codigo : 'general';
                 <table width="100%" align="center" class="table-dark tabla-inventario-export" style="border-collapse: collapse;">
                     <thead>
                         <tr>
-                            <th colspan="6" align="center" style="padding: 10px; background-color: #1a1a1a;">
+                            <th colspan="6" align="center" class="titulo-categoria-export" style="padding: 10px; background-color: #1a1a1a;">
                                 <strong>INVENTARIO: <?php echo htmlspecialchars($tipo); ?></strong>
                             </th>
                         </tr>
@@ -522,7 +611,7 @@ $nombre_bodega = !empty($codigo) ? $codigo : 'general';
                                 <td align="center" class="no-print" style="padding: 8px;">
                                     <a href="../productos/imprimir_series.php?producto=<?php echo urlencode($crow2['codigo']); ?>&bodegabuscar=<?php echo urlencode($codigo); ?>" 
                                        class="boton-azul">
-                                       Seriales
+                                        Seriales
                                     </a>
                                 </td>
                                 <td align="center" class="no-print" style="padding: 8px;">
@@ -552,28 +641,27 @@ $nombre_bodega = !empty($codigo) ? $codigo : 'general';
 
 </div> <!-- Fin de #area-imprimible-kardex -->
 
-<!-- Script de Exportación a Excel -->
+<!-- Script de Exportación a Excel, Búsqueda de Personal y Envío por Mail -->
 <script>
-function exportarExcel() {
-    var tablas = document.querySelectorAll('.tabla-inventario-export');
-    if (tablas.length === 0) {
-        alert("No hay datos disponibles para exportar.");
-        return;
-    }
-
-    var wb = XLSX.utils.book_new();
+// Función para armar la matriz de datos que usa la descarga a Excel
+function construirEstructuraExcel() {
     var datosExportar = [];
 
-    // Título principal en la primera fila de Excel
-    datosExportar.push(["REPORTE DE INVENTARIO - BODEGA: <?php echo addslashes($nombre_bodega); ?>"]);
-    datosExportar.push([]); // Fila vacía de separación
+    var tituloKardex = document.getElementById('titulo_kardex_general') ? document.getElementById('titulo_kardex_general').innerText.trim() : "REGISTRO DE KARDEX";
+    var nombreBodega = "<?php echo addslashes($nombre_bodega); ?>";
+
+    datosExportar.push([tituloKardex]);
+    datosExportar.push(["BODEGA:", nombreBodega]);
+    datosExportar.push([]); 
+
+    var tablas = document.querySelectorAll('.tabla-inventario-export');
 
     tablas.forEach(function(tabla) {
-        var tituloCategoria = tabla.querySelector('thead tr:first-child th').innerText.trim();
-        datosExportar.push([tituloCategoria]); // Encabezado de la categoría
+        var tituloCatElem = tabla.querySelector('.titulo-categoria-export');
+        var tituloCategoria = tituloCatElem ? tituloCatElem.innerText.trim() : "INVENTARIO";
         
-        // Encabezados de columnas (excluyendo Series y Kardex)
-        datosExportar.push(["FECHA", "CÓDIGO", "PRODUCTO", "CANTIDAD"]);
+        datosExportar.push([tituloCategoria]); 
+        datosExportar.push(["FECHA", "CÓDIGO", "PRODUCTO", "CANTIDAD"]); 
 
         var filas = tabla.querySelectorAll('tbody tr');
         filas.forEach(function(fila) {
@@ -588,19 +676,111 @@ function exportarExcel() {
             }
         });
 
-        datosExportar.push([]); // Fila vacía entre categorías
+        datosExportar.push([]); 
     });
 
-    var ws = XLSX.utils.aoa_to_sheet(datosExportar);
-    XLSX.utils.book_append_sheet(wb, ws, "Inventario");
+    return datosExportar;
+}
 
-    // Construcción del nombre del archivo: inventario_[nombre_bodega].xlsx
+// Descarga directa a Excel (.xlsx)
+function exportarExcel() {
+    var datosExportar = construirEstructuraExcel();
+    if (datosExportar.length <= 3) {
+        alert("No hay productos o datos suficientes para exportar.");
+        return;
+    }
+
+    var wb = XLSX.utils.book_new();
+    var ws = XLSX.utils.aoa_to_sheet(datosExportar);
+    XLSX.utils.book_append_sheet(wb, ws, "Kardex_Inventario");
+
     var nombreBodegaLimpio = "<?php echo preg_replace('/[^A-Za-z0-9_\-]/', '_', $nombre_bodega); ?>";
-    var nombreArchivo = "inventario_" + nombreBodegaLimpio + ".xlsx";
+    var nombreArchivo = "kardex_inventario_" + nombreBodegaLimpio + ".xlsx";
 
     XLSX.writeFile(wb, nombreArchivo);
 }
 
+// Muestra u oculta la burbuja desplegable de envío de correo
+function toggleBurbujaMail() {
+    var burbuja = document.getElementById('burbujaMail');
+    if (burbuja.style.display === 'block') {
+        burbuja.style.display = 'none';
+    } else {
+        burbuja.style.display = 'block';
+        document.getElementById('buscar_personal').focus();
+    }
+}
+
+// Filtra la lista del select de personal en tiempo real usando el campo 'nombres'
+function filtrarPersonal() {
+    var filtro = document.getElementById('buscar_personal').value.toLowerCase().trim();
+    var select = document.getElementById('select_personal');
+    var opciones = select.getElementsByTagName('option');
+
+    for (var i = 1; i < opciones.length; i++) {
+        var nombre = opciones[i].getAttribute('data-nombre') || "";
+        var email = opciones[i].value.toLowerCase();
+        if (nombre.indexOf(filtro) > -1 || email.indexOf(filtro) > -1) {
+            opciones[i].style.display = "";
+        } else {
+            opciones[i].style.display = "none";
+        }
+    }
+}
+
+// Copia el correo seleccionado al input de correo destino
+function seleccionarCorreoPersonal() {
+    var select = document.getElementById('select_personal');
+    var emailInput = document.getElementById('email_destinatario');
+    if (select.value !== "") {
+        emailInput.value = select.value;
+    }
+}
+
+// Genera el HTML exacto de la tabla e información de Bodega y lo envía en la variable POST 'contenido'
+function procesarEnvioMail() {
+    var email = document.getElementById('email_destinatario').value.trim();
+    if (email === "") {
+        alert("Por favor, ingrese un correo electrónico válido.");
+        return;
+    }
+
+    // Clonar el contenedor para remover elementos no deseados (botones de acción, select) en el cuerpo del correo
+    var areaClonada = document.getElementById('area-imprimible-kardex').cloneNode(true);
+    
+    // Eliminar botones y campos flotantes con la clase no-print en la copia enviada
+    var elementosNoDeseados = areaClonada.querySelectorAll('.no-print, script');
+    elementosNoDeseados.forEach(function(el) {
+        el.remove();
+    });
+
+    var htmlEnviar = areaClonada.innerHTML;
+
+    if (!htmlEnviar || htmlEnviar.trim() === "") {
+        alert("No hay información en el reporte para enviar.");
+        return;
+    }
+
+    // Se construye el FormData asegurando enviar la variable 'contenido' esperada por enviar_mail.php
+    var formData = new FormData();
+    formData.append('email', email);
+    formData.append('contenido', htmlEnviar);
+
+    toggleBurbujaMail();
+    alert("Enviando correo, por favor espere...");
+
+    fetch('enviar_mail.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(function(response) { return response.text(); })
+    .then(function(data) {
+        alert(data);
+    })
+    .catch(function(error) {
+        alert("Ocurrió un error al intentar enviar el correo: " + error);
+    });
+}
 </script>
 
 <?php

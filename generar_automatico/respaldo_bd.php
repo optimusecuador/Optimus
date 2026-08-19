@@ -5,40 +5,18 @@
 $db_host = 'localhost';
 $db_user = 'root'; 
 $db_pass = 'Optimus2023';     
-//$db_name = 'optimus_global_telecom';
+$db_name = 'optimus_optimus';
 
-$db_name = '';
-
-$stmt = mysqli_prepare(
-    $conpersonal,
-    "SELECT base_datos FROM usuarios WHERE contrasena = ? LIMIT 1"
-);
-
-mysqli_stmt_bind_param($stmt, "s", $personal);
-
-mysqli_stmt_execute($stmt);
-
-$resultado = mysqli_stmt_get_result($stmt);
-
-if ($fila = mysqli_fetch_assoc($resultado)) {
-
-    $db_name = $fila['base_datos'];
-
-}
-
-
-// Ahora la variable $db_name contiene el valor recuperado
-//echo $db_name;
-// Ruta del directorio de respaldos
-$backup_dir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'respaldo' . DIRECTORY_SEPARATOR;
+// RUTA ABSOLUTA FORZADA PARA CRON
+$backup_dir = '/var/www/html/optimus/respaldo/';
 
 // Crear el directorio si no existe y asignar permisos
 if (!file_exists($backup_dir)) {
     mkdir($backup_dir, 0755, true);
 }
 
-// Conexión mediante MySQLi (Debe estar descomentada para que funcionen las consultas)
-//$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
+// Conexión mediante MySQLi
+$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
 if ($conn->connect_error) {
     die("Error de conexión a la base de datos: " . $conn->connect_error);
 }
@@ -87,7 +65,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restaurar_respaldo'])
             $letra_disco = substr(__DIR__, 0, 2); 
             $ejecutable_mysql = '"' . $letra_disco . '\\xampp\\mysql\\bin\\mysql.exe"';
         } else {
-            // En Ubuntu, usualmente 'mysql' es accesible globalmente si está instalado
             $ejecutable_mysql = 'mysql'; 
         }
 
@@ -98,7 +75,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restaurar_respaldo'])
 
         if ($return_var !== 0) {
             $error_sistema = implode("<br>", $output);
-            // Si el error es solo un warning de la contraseña, no siempre es fatal, pero lo capturamos
             $mensaje = "<div class='alert error'>
                             <strong>Error al restaurar la base de datos:</strong><br><br>
                             <strong>Código de salida:</strong> $return_var<br>
@@ -113,9 +89,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restaurar_respaldo'])
 }
 
 // ==========================================
-// LÓGICA DE CREACIÓN DE RESPALDO Y ROTACIÓN
+// LÓGICA DE CREACIÓN AUTOMÁTICA DE RESPALDO
+// (Se ejecuta automáticamente al cargar la página o por CLI/Cron)
 // ==========================================
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_respaldo'])) {
+if (!isset($_GET['descargar']) && !isset($_POST['restaurar_respaldo'])) {
     
     $fecha_actual = date('Y-m-d_H-i-s');
     $nombre_archivo = $db_name . '_' . $fecha_actual . '.sql';
@@ -130,12 +107,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_respaldo'])) {
     
     $pass_param = empty($db_pass) ? '' : "--password=" . escapeshellarg($db_pass);
     
-    // IMPORTANTE: Se usa --result-file en lugar de ">" para que las advertencias no corrompan el archivo .sql
     $comando = "{$ejecutable} --user={$db_user} {$pass_param} --host={$db_host} {$db_name} --result-file=" . escapeshellarg($ruta_completa) . " 2>&1";
     
     exec($comando, $output, $return_var);
     
-    // Ignoramos el return_var si el archivo se creó correctamente, ya que mysqldump suele devolver error en Ubuntu solo por usar la contraseña en texto.
     if (!file_exists($ruta_completa) || filesize($ruta_completa) === 0) {
         $error_sistema = implode("<br>", $output);
         $mensaje = "<div class='alert error'><strong>Error crítico al generar el respaldo:</strong><br><code>$error_sistema</code></div>";
@@ -165,9 +140,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_respaldo'])) {
                 $conn->query("DELETE FROM respaldo WHERE id = " . $viejo['id']);
             }
             $stmt_old->close();
-            $mensaje = "<div class='alert success'>Respaldo creado con éxito. Se eliminaron archivos antiguos (Límite 30).</div>";
+            $mensaje = "<div class='alert success'>Respaldo automático generado con éxito. Se eliminaron archivos antiguos (Límite 30).</div>";
         } else {
-            $mensaje = "<div class='alert success'>Respaldo creado con éxito. Total actual: $total_respaldos de 30.</div>";
+            $mensaje = "<div class='alert success'>Respaldo automático generado con éxito. Total actual: $total_respaldos de 30.</div>";
         }
     }
 }
@@ -179,9 +154,6 @@ $result_lista = $conn->query("SELECT * FROM respaldo ORDER BY id DESC");
 <div class="panel-dark">
     <div class="acciones-header">
         <h1>Respaldos del Sistema (Máximo 30)</h1>
-        <form method="POST">
-            <button type="submit" name="crear_respaldo" class="boton-azul">Generar Nuevo Respaldo</button>
-        </form>
     </div>
 
     <?= $mensaje ?>
@@ -204,7 +176,7 @@ $result_lista = $conn->query("SELECT * FROM respaldo ORDER BY id DESC");
                         <td><?= htmlspecialchars($row['fecha']) ?></td>
                         <td class="acciones-td">
                             <br>
-                            <a href="" class="boton-azul">Descargar</a>
+                            <a href="?descargar=<?= urlencode($row['archivo']) ?>" class="boton-azul">Descargar</a>
                             <br><br><br>
                             <form method="POST" style="margin: 0;" onsubmit="return confirm('ATENCIÓN: ¿Estás seguro de que deseas restaurar este respaldo? \n\n¡Esto sobrescribirá toda la base de datos actual y los datos no guardados se perderán permanentemente!');">
                                 <input type="hidden" name="archivo_restaurar" value="<?= htmlspecialchars($row['archivo']) ?>">

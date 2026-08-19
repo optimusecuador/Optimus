@@ -7,10 +7,14 @@ $db_user = 'root';
 $db_pass = 'Optimus2023';     
 $db_name = 'optimus_optimus';
 
+// CREDENCIALES DIRECTAS DE TRACCAR
+$traccar_user = 'soldaniela416@gmail.com';
+$traccar_pass = 'Optimus2023';
+$traccar_port = '30206';
+
 // RUTA ABSOLUTA PARA RESPALDOS DE TRACCAR
 $backup_dir = '/var/www/html/optimus/respaldo_traccar/';
 
-// Crear el directorio si no existe y asignar permisos
 if (!file_exists($backup_dir)) {
     mkdir($backup_dir, 0755, true);
 }
@@ -24,7 +28,6 @@ if ($conexion->connect_error) {
 }
 $conexion->set_charset("utf8mb4");
 
-// Asegurar que exista la tabla para el historial de traccar
 $conexion->query("CREATE TABLE IF NOT EXISTS respaldo_traccar (
     id INT AUTO_INCREMENT PRIMARY KEY,
     archivo VARCHAR(255) NOT NULL,
@@ -40,25 +43,10 @@ if ($resultado && $fila = $resultado->fetch_assoc()) {
     $api_key = trim($fila['api']);
     $truenas_url = trim($fila['ip']);
 
-    // Limpiar protocolo si viene incluido para el ping
     $host_ping = preg_replace("(^https?://)", "", $truenas_url);
     $host_ping = parse_url("http://" . $host_ping, PHP_URL_HOST);
     if (!$host_ping) {
         $host_ping = $truenas_url;
-    }
-
-    // Ping de verificación
-    $ping_cmd = "ping -c 1 -W 1 " . escapeshellarg($host_ping);
-    exec($ping_cmd, $output, $status);
-
-    if ($status === 0) {
-        echo '<script>console.log("TrueNAS Goldeye (' . htmlspecialchars($truenas_url) . ') en línea.");</script>';
-    } else {
-        echo '<script>
-            alert("No se puede conectar al equipo TrueNAS (' . htmlspecialchars($truenas_url) . '). Será redirigido a la configuración.");
-            window.location.href = "../configuracion/truenas.php";
-        </script>';
-        exit;
     }
 } else {
     echo '<script>
@@ -68,9 +56,7 @@ if ($resultado && $fila = $resultado->fetch_assoc()) {
     exit;
 }
 
-// ==========================================
-// FUNCIÓN API TRUENAS 25.10 GOLDEYE (HTTP API)
-// ==========================================
+// FUNCIÓN DE LLAMADA A TRUENAS API
 function call_truenas_api($path, $method = 'GET', $data = []) {
     global $truenas_url, $api_key;
     $base_url = (strpos($truenas_url, 'http') === 0 ? $truenas_url : 'http://' . $truenas_url);
@@ -80,7 +66,7 @@ function call_truenas_api($path, $method = 'GET', $data = []) {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
     
     $headers = [
         "Authorization: Bearer " . $api_key,
@@ -107,7 +93,7 @@ function call_truenas_api($path, $method = 'GET', $data = []) {
 $mensaje = '';
 
 // ==========================================
-// LÓGICA DE DESCARGA DE RESPALDOS LOCALES
+// LÓGICA DE DESCARGA
 // ==========================================
 if (isset($_GET['descargar'])) {
     $archivo_descarga = basename($_GET['descargar']);
@@ -119,7 +105,7 @@ if (isset($_GET['descargar'])) {
         }
         
         header('Content-Description: File Transfer');
-        header('Content-Type: application/sql');
+        header('Content-Type: application/octet-stream');
         header('Content-Disposition: attachment; filename="' . $archivo_descarga . '"');
         header('Expires: 0');
         header('Cache-Control: must-revalidate');
@@ -141,7 +127,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restaurar_respaldo'])
     $ruta_restaurar = $backup_dir . $archivo_restaurar;
 
     if (file_exists($ruta_restaurar)) {
-        // Restauración mediante la API de TrueNAS 25.10
         $res_restore = call_truenas_api("app/restore", "POST", [
             "app_name" => "traccar",
             "backup_name" => pathinfo($archivo_restaurar, PATHINFO_FILENAME)
@@ -159,82 +144,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restaurar_respaldo'])
 }
 
 // ==========================================
-// CREACIÓN DE RESPALDO DE BASE DE DATOS
+// GENERACIÓN RÁPIDA DE RESPALDO EN PUERTO 30206
 // ==========================================
 if (!isset($_GET['descargar']) && !isset($_POST['restaurar_respaldo'])) {
     
     $fecha_actual = date('Y-m-d_H-i-s');
-    $nombre_archivo = 'traccar_' . $fecha_actual . '.sql';
+    $nombre_archivo = 'traccar_' . $fecha_actual . '.zip';
     $ruta_completa = $backup_dir . $nombre_archivo;
     
-    // 1. Crear el Snapshot de seguridad en TrueNAS vía API
+    // 1. Snapshot de TrueNAS vía API Goldeye
     $backup_name = 'backup_' . $fecha_actual;
     call_truenas_api("app/backup", "POST", [
         "app_name" => "traccar",
         "backup_name" => $backup_name
     ]);
 
+    // 2. Extraer datos directamente por API REST de Traccar en el puerto 30206
+    $traccar_api_base = "http://" . $host_ping . ":" . $traccar_port . "/api";
+    
+    // Consultar dispositivos
+    $ch = curl_init($traccar_api_base . "/devices");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_USERPWD, "$traccar_user:$traccar_pass");
+    curl_setopt($ch, CURLOPT_TIMEOUT, 4);
+    $devices_json = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    // Consultar posiciones
+    $ch2 = curl_init($traccar_api_base . "/positions");
+    curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch2, CURLOPT_USERPWD, "$traccar_user:$traccar_pass");
+    curl_setopt($ch2, CURLOPT_TIMEOUT, 4);
+    $positions_json = curl_exec($ch2);
+    curl_close($ch2);
+
     $dump_exitoso = false;
-    $salida_dump = '';
 
-    // Obtener el ID del contenedor activo de Traccar en TrueNAS
-    $cmd_get_container = "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 root@" . escapeshellarg($host_ping) . " \"docker ps -q -f name=traccar | head -n 1\"";
-    $container_id = trim(shell_exec($cmd_get_container));
-
-    if (!empty($container_id)) {
-
-        // INTENTO 1: Si utiliza MySQL / MariaDB
-        $cmd_mysql = "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 root@" . escapeshellarg($host_ping) . " \"docker exec " . $container_id . " mysqldump -u root -pOptimus2023 traccar\" 2>&1";
-        $salida_dump = shell_exec($cmd_mysql);
-
-        if (!empty($salida_dump) && (strpos($salida_dump, 'MySQL dump') !== false || strpos($salida_dump, 'CREATE TABLE') !== false)) {
-            file_put_contents($ruta_completa, $salida_dump);
+    if ($http_code === 200 && !empty($devices_json)) {
+        // Guardar respaldo JSON completo en archivo ZIP
+        $zip = new ZipArchive();
+        if ($zip->open($ruta_completa, ZipArchive::CREATE | ZipArchive::OVERWRITE) === TRUE) {
+            $zip->addFromString('devices.json', $devices_json);
+            if (!empty($positions_json)) {
+                $zip->addFromString('positions.json', $positions_json);
+            }
+            $zip->addFromString('backup_info.txt', "Backup Traccar 1.2.33 / Puerto " . $traccar_port . " generado el " . date('Y-m-d H:i:s'));
+            $zip->close();
             $dump_exitoso = true;
         }
-
-        // INTENTO 2: Si PostgreSQL está corriendo en un contenedor independiente
-        if (!$dump_exitoso) {
-            $cmd_postgres_alt = "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 root@" . escapeshellarg($host_ping) . " \"docker exec $(docker ps -q -f name=postgres | head -n 1) pg_dump -U postgres traccar\" 2>&1";
-            $salida_dump = shell_exec($cmd_postgres_alt);
-
-            if (!empty($salida_dump) && (strpos($salida_dump, 'PostgreSQL database dump') !== false || strpos($salida_dump, 'CREATE TABLE') !== false)) {
-                file_put_contents($ruta_completa, $salida_dump);
-                $dump_exitoso = true;
-            }
-        }
-
-        // INTENTO 3: Si Traccar usa H2 Database (Copiar configuración y datos)
-        if (!$dump_exitoso) {
-            $cmd_copy_h2 = "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 root@" . escapeshellarg($host_ping) . " \"docker exec " . $container_id . " cat /opt/traccar/conf/traccar.xml\" 2>&1";
-            $xml_content = shell_exec($cmd_copy_h2);
-
-            if (!empty($xml_content) && strpos($xml_content, 'entry') !== false) {
-                $sql_h2  = "-- RESPALDO DE CONFIGURACION Y ESTRUCTURA TRACCAR\n";
-                $sql_h2 .= "-- Fecha: " . date('Y-m-d H:i:s') . "\n\n";
-                $sql_h2 .= $xml_content;
-                file_put_contents($ruta_completa, $sql_h2);
-                $dump_exitoso = true;
-            }
-        }
-
     } else {
-        $salida_dump = "No se encontró ningún contenedor activo con el nombre 'traccar' en TrueNAS.";
+        // Fallback rápido por SSH sin bloqueos
+        $cmd_quick = "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 root@" . escapeshellarg($host_ping) . " \"docker exec \$(docker ps -q -f name=traccar | head -n 1) cat /opt/traccar/data/database.mv.db 2>/dev/null | base64\"";
+        $b64_data = shell_exec($cmd_quick);
+
+        if (!empty($b64_data)) {
+            $clean_b64 = preg_replace('/[^A-Za-z0-9+\/=]/', '', $b64_data);
+            $binary_db = base64_decode($clean_b64);
+            if ($binary_db !== false && strlen($binary_db) > 50) {
+                $zip = new ZipArchive();
+                if ($zip->open($ruta_completa, ZipArchive::CREATE | ZipArchive::OVERWRITE) === TRUE) {
+                    $zip->addFromString('database.mv.db', $binary_db);
+                    $zip->close();
+                    $dump_exitoso = true;
+                }
+            }
+        }
     }
 
-    // Si fallan las extracciones de BD directas, registrar el motivo
     if (!$dump_exitoso) {
-        $info_backup  = "-- ========================================================\n";
-        $info_backup .= "-- ERROR AL EXTRAER BASE DE DATOS DE TRACCAR EN TRUENAS\n";
-        $info_backup .= "-- Fecha: " . date('Y-m-d H:i:s') . "\n";
-        $info_backup .= "-- Contenedor ID: " . $container_id . "\n";
-        $info_backup .= "-- Detalle devuelto por SSH:\n";
-        $info_backup .= "-- " . str_replace("\n", "\n-- ", trim($salida_dump)) . "\n";
-        $info_backup .= "-- ========================================================\n";
-        file_put_contents($ruta_completa, $info_backup);
-    }
-
-    if (!file_exists($ruta_completa) || filesize($ruta_completa) === 0) {
-        $mensaje = "<div class='alert error'><strong>Error crítico al generar el respaldo de Traccar.</strong></div>";
+        $mensaje = "<div class='alert error'><strong>Snapshot API TrueNAS creado.</strong> No se pudo conectar al puerto {$traccar_port}. Verifica que la IP/Host sea accesible desde este servidor.</div>";
         if (file_exists($ruta_completa)) unlink($ruta_completa);
     } else {
         $fecha_registro = date('d-m-Y H:i:s');
@@ -262,20 +241,20 @@ if (!isset($_GET['descargar']) && !isset($_POST['restaurar_respaldo'])) {
                 $conexion->query("DELETE FROM respaldo_traccar WHERE id = " . $viejo['id']);
             }
             $stmt_old->close();
-            $mensaje = "<div class='alert success'>Respaldo de Traccar generado con éxito en TrueNAS 25.10.4 ({$truenas_url}). Se eliminaron respaldos antiguos (Límite 30).</div>";
+            $mensaje = "<div class='alert success'>Respaldo comprimido (.ZIP) generado en puerto {$traccar_port}. Limpieza aplicada (Máximo 30).</div>";
         } else {
-            $mensaje = "<div class='alert success'>Respaldo de Traccar generado con éxito en TrueNAS 25.10.4 ({$truenas_url}). Total actual: $total_respaldos de 30.</div>";
+            $mensaje = "<div class='alert success'>Respaldo comprimido (.ZIP) generado con éxito desde TrueNAS puerto {$traccar_port}. Total: $total_respaldos de 30.</div>";
         }
     }
 }
 
-// Obtener la lista actual de respaldos para la tabla
+// Obtener lista para la tabla
 $result_lista = $conexion->query("SELECT * FROM respaldo_traccar ORDER BY id DESC");
 ?>
 
 <div class="panel-dark">
     <div class="acciones-header">
-        <h1>Respaldos Traccar 1.2.33 (TrueNAS 25.10 Goldeye: <?= htmlspecialchars($truenas_url) ?>)</h1>
+        <h1>Respaldos Traccar 1.2.33 (TrueNAS 25.10.4 Goldeye: <?= htmlspecialchars($truenas_url) ?>:30206)</h1>
     </div>
 
     <?= $mensaje ?>

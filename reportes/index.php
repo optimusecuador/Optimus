@@ -639,7 +639,7 @@ if ($total_anterior > 0) {
     <!-- INDICADORES -->
 
     <div class="metric-grid">
-	<div class="isp-card isp-purple">
+	<div class="isp-card isp-purple" onclick="window.location.href='contratos.php';" style="cursor:pointer;">
             <div class="isp-card-title">Contratos</div>
             <div class="isp-card-value"><?php echo $totalcontratos ?></div>
             

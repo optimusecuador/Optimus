@@ -296,24 +296,59 @@ $mikrotikconfiguracion = "no";
       
       <section class="metric-grid"></section>
       <!-- InstanceBeginEditable name="principal" -->
-		
-		<?php
-// Conexión a la base de datos (asegúrate de que $conn esté definida)
-$sql = "SELECT cliente, COUNT(*) cantidad, SUM(total) total FROM ventas WHERE estado='pendiente' GROUP BY cliente ORDER BY cliente";
-$res = mysqli_query($conn, $sql);
+								<?php
+$numerocontratos = 0;
 
-// Consulta para cargar el personal con correo registrado para la burbuja de mail
+// Obtención del personal registrado con correo para el menú de la burbuja
 $personal_list = [];
 $sql_personal = "SELECT nombres, mail FROM `personal` WHERE mail IS NOT NULL AND mail != '' ORDER BY nombres ASC";
-$res_personal = mysqli_query($conn, $sql_personal);
+$res_personal = mysqli_query($con, $sql_personal);
 if ($res_personal) {
     while ($row_p = mysqli_fetch_assoc($res_personal)) {
         $personal_list[] = $row_p;
     }
 }
+
+if (isset($_GET['nodo'])) {
+    $nodo = $_GET['nodo'];
+}
+if (isset($_GET['codigo'])) {
+    $clientecodigo = $_GET['codigo'];
+}
+if (isset($_POST['producto'])) {
+    $producto = $_POST['producto'];
+    $sqlcl = "SELECT * from `clientes` WHERE `nombres` LIKE '%$producto%' order by fecha DESC";
+    $resultcl = mysqli_query($con, $sqlcl);
+    while ($crowcl = mysqli_fetch_assoc($resultcl)) {
+        $clientecodigo = $crowcl['codigo'];
+    }
+    $sql = "SELECT * from `contratos` WHERE `cliente` LIKE '$clientecodigo' order by fecha DESC";
+    $result = mysqli_query($con, $sql);
+    $result2 = mysqli_query($con, $sql);
+} else {
+    $estado = "activo";
+    $sql = "SELECT * from `contratos` WHERE `estado` LIKE '$estado' order by fecha DESC";
+    $result = mysqli_query($con, $sql); 
+    $result2 = mysqli_query($con, $sql); 
+    $serie = "Ingrese Valor";
+    $producto = "Ingrese Valor";
+    $codigo = "Ingrese Valor";
+    $apellidos = "Ingrese Valor";
+}
+
+if (isset($_GET['codigo'])) {
+    $clientecodigo = $_GET['codigo'];
+    $sql = "SELECT * from `contratos` WHERE (`numero` LIKE '$clientecodigo') AND (`nodo` LIKE '$nodo') order by fecha DESC";
+    $result = mysqli_query($con, $sql);
+    $result2 = mysqli_query($con, $sql);
+}
+
+while ($crow = mysqli_fetch_assoc($result2)) {   
+    $numerocontratos = $numerocontratos + 1; 
+}
 ?>
 
-<!-- Estilos CSS para Pantalla e Impresión Limpia -->
+<!-- Estilos específicos ajustados al tema oscuro de styles.css -->
 <style>
     .header-panel-container {
         display: flex;
@@ -321,9 +356,7 @@ if ($res_personal) {
         align-items: center;
         flex-wrap: wrap;
         gap: 15px;
-        padding: 10px 0;
-        width: 100%;
-        box-sizing: border-box;
+        margin-bottom: 20px;
     }
 
     .acciones-panel {
@@ -334,64 +367,54 @@ if ($res_personal) {
         position: relative;
     }
 
-    /* Burbuja desplegable para Envío de Correo */
+    /* Burbuja de correo integrada con variables del archivo styles.css */
     .burbuja-email {
         display: none;
         position: absolute;
         top: 110%;
         right: 0;
-        background-color: #2b2a3a;
-        border: 1px solid #3c3a50;
+        background: var(--panel, #071d31);
+        border: 1px solid var(--line, rgba(118, 168, 207, 0.12));
         padding: 16px;
-        border-radius: 8px;
-        box-shadow: 0px 6px 16px rgba(0,0,0,0.6);
+        border-radius: 12px;
+        box-shadow: var(--shadow, 0 18px 42px rgba(0, 0, 0, 0.34));
         z-index: 1000;
         width: 310px;
-        color: #ffffff;
+        color: var(--text, #e8f3ff);
         text-align: left;
         box-sizing: border-box;
     }
 
     .burbuja-email label {
         display: block;
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 600;
         margin-bottom: 6px;
-        color: #ffffff;
+        color: var(--muted, #8da4bc);
+        text-transform: uppercase;
     }
 
     .burbuja-email input[type="email"],
     .burbuja-email input[type="text"],
     .burbuja-email select {
         width: 100%;
-        padding: 8px 10px;
-        margin-bottom: 14px;
-        border-radius: 6px;
-        border: 1px solid #48455e;
-        background-color: #1c1b26;
-        color: #e0e0e0;
+        height: 38px;
+        padding: 0 10px;
+        margin-bottom: 12px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background-color: #081f34;
+        color: var(--text, #e8f3ff);
         box-sizing: border-box;
         font-size: 13px;
         outline: none;
-    }
-
-    .burbuja-email select {
-        cursor: pointer;
-        appearance: none;
-        -webkit-appearance: none;
-        -moz-appearance: none;
-        background-image: url('data:image/svg+xml;utf8,<svg fill="%23ffffff" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
-        background-repeat: no-repeat;
-        background-position: right 8px center;
-        background-size: 18px;
-        padding-right: 28px;
     }
 
     .burbuja-email-acciones {
         display: flex;
         justify-content: flex-end;
         gap: 10px;
-        margin-top: 4px;
+        margin-top: 6px;
     }
 
     .btn-burbuja-cancelar {
@@ -399,60 +422,52 @@ if ($res_personal) {
         border: none;
         color: #ffffff;
         padding: 8px 16px;
-        border-radius: 6px;
+        border-radius: 8px;
         cursor: pointer;
         font-weight: 600;
         font-size: 13px;
     }
 
     .btn-burbuja-enviar {
-        background-color: #27ad52;
+        background: linear-gradient(135deg, var(--green, #0faf76), #067a53);
         border: none;
         color: #ffffff;
         padding: 8px 18px;
-        border-radius: 6px;
+        border-radius: 8px;
         cursor: pointer;
         font-weight: 600;
         font-size: 13px;
     }
 
-    .btn-mail {
-        background-color: #007bff;
-        color: #fff;
-        border: none;
-        padding: 8px 16px;
-        font-weight: bold;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        border-radius: 4px;
-    }
-
+    /* Ocultar elementos en la impresión de reporte */
     @media print {
-        .no-print, .burbuja-email, .btn-mail {
+        .no-print, .burbuja-email, form {
             display: none !important;
         }
     }
 </style>
 
 <div class="panel-dark">
+    <!-- Encabezado del Panel -->
     <div class="header-panel-container">
-        <h3 style="margin: 0;">CLIENTES CON FACTURAS PENDIENTES</h3>
-        
-        <!-- Botón y Burbuja flotante -->
+        <div>
+            <h2 class="clientes-title">LISTADO DE CONTRATOS</h2>
+            <div class="clientes-subtitle">Contratos Activos: <strong><?php echo $numerocontratos; ?></strong></div>
+        </div>
+
+        <!-- Botón y Burbuja Flotante -->
         <div class="acciones-panel no-print">
-            <button type="button" onclick="toggleBurbujaMail();" class="btn-mail">
+            <button type="button" onclick="toggleBurbujaMail();" class="boton-azul" style="padding: 10px 18px; font-size: 14px;">
                 📧 Enviar por Mail
             </button>
 
             <div id="burbujaMail" class="burbuja-email">
                 <label>🔍 Buscar Personal:</label>
-                <input type="text" id="buscar_personal" placeholder="Escriba nombres o apellidos..." onkeyup="filtrarSelectPersonal();">
+                <input type="text" id="buscar_personal" placeholder="Escriba nombres..." onkeyup="filtrarSelectPersonal();">
                 
-                <label>👤 Seleccionar Destinatario:</label>
+                <label>👤 Destinatario:</label>
                 <select id="select_personal" onchange="seleccionarCorreoSelect();">
-                    <option value="">-- Seleccione un destinatario --</option>
+                    <option value="">-- Seleccionar destinatario --</option>
                     <?php foreach ($personal_list as $p): ?>
                         <option value="<?php echo htmlspecialchars($p['mail']); ?>" data-nombre="<?php echo htmlspecialchars(mb_strtolower($p['nombres'])); ?>">
                             <?php echo htmlspecialchars($p['nombres']); ?>
@@ -471,54 +486,116 @@ if ($res_personal) {
         </div>
     </div>
 
-    <table id="tabla" class="table-dark">
-        <thead>
-            <tr>
-                <th>Código</th><th>Cliente</th><th>Facturas</th><th>Total</th><th class="no-print">WhatsApp</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php
-            while($r = mysqli_fetch_assoc($res)){
-                $codigo = $r['cliente'];
-                $c = mysqli_query($conn, "SELECT nombres,telefono1 FROM clientes WHERE codigo='".mysqli_real_escape_string($conn, $codigo)."' LIMIT 1");
-                $cli = mysqli_fetch_assoc($c);
-                $nombre = $cli['nombres'] ?? '';
-                $tel = preg_replace('/\D/', '', $cli['telefono1'] ?? '');
-                if(strlen($tel) == 10 && substr($tel, 0, 1) == "0") $tel = "593".substr($tel, 1);
+    <!-- Acciones de Exportación -->
+    <?php if (isset($puesto_personal) && ($puesto_personal == "admin" OR (isset($exportar) && $exportar == "si"))) { ?>
+        <div class="acciones no-print" style="justify-content: flex-start; margin-bottom: 20px;">
+            <button id="btnExportar" class="icon-text">Hoja de Cálculo</button>
+            <button id="btnExportar" class="icon-text">Acrobat Reader</button>
+            <button id="btnExportar" class="primary">Reporte Administrador</button>
+        </div>
+    <?php } ?>
 
-                $det = mysqli_query($conn, "SELECT numero,total FROM ventas WHERE estado='pendiente' AND cliente='".mysqli_real_escape_string($conn, $codigo)."'");
-                $msg = "Estimado(a) ".$nombre."%0A%0AHemos detectado que mantiene valores pendientes.%0A%0A";
-                
-                if(mysqli_num_rows($det) == 1){
-                    $d = mysqli_fetch_assoc($det);
-                    $msg .= "Factura ".$d['numero']." por $".number_format($d['total'], 2)." %0A";
-                } else {
-                    $msg .= "Facturas pendientes:%0A";
-                    while($d = mysqli_fetch_assoc($det)){
-                        $msg .= "• ".$d['numero']." - $".number_format($d['total'], 2)."%0A";
-                    }
-                }
-                $msg .= "%0ATotal pendiente: $".number_format($r['total'], 2)."%0A%0ALe solicitamos acercarse a cancelar. Gracias.";
+    <!-- Tabla con estilos table-dark de styles.css -->
+    <div class="table-scroll">
+        <table class="table-dark" id="tabla">
+            <thead>
+                <tr>
+                    <th style='width:50px'>CONTRATO</th>
+                    <th>
+                        NOMBRES
+                        <form action="productos.php" method="post" name="form1" id="form2" class="no-print" style="margin-top: 5px;">
+                            <input name="producto" id="tag2" class="clientes-input" style="height: 30px; font-size: 12px;" placeholder="Buscar cliente...">
+                            <img src="" id="avatar2">
+                            <script type="text/javascript">
+                                $(document).ready(function () {
+                                    var items = <?= json_encode($array ?? []) ?>;
 
-                echo "<tr>";
-                echo "<td>{$codigo}</td>";
-                echo "<td>{$nombre}</td>";
-                echo "<td>{$r['cantidad']}</td>";
-                echo "<td>$ ".number_format($r['total'], 2)."</td>";
-                if($tel != ""){
-                    echo "<td class='no-print'><a class='boton-azul' target='_blank' href='https://wa.me/".$tel."?text=".$msg."'>Enviar WhatsApp</a></td>";
-                } else {
-                    echo "<td class='no-print'><button class='btn btn-secondary btn-sm' disabled>Sin teléfono</button></td>";
-                }
-                echo "</tr>";
-            }
-            ?>
-        </tbody>
-    </table>
+                                    $("#tag").autocomplete({
+                                        source: items,
+                                        select: function (event, item) {
+                                            var params = { equipo: item.item.value };
+                                            $.get("getEquipo.php", params, function (response) {
+                                                var json = JSON.parse(response);
+                                                if (json.status == 200){
+                                                    $("#nombre").html(json.nombre);
+                                                    $("#avatar").attr("src", json.icono);
+                                                }
+                                            });
+                                        }
+                                    });
+                                });
+                            </script>
+                        </form>
+                    </th>
+                    <th>MEGAS</th>
+                    <th>IP</th>
+                    <th>TELÉFONO</th>
+                    <th>ESTADO</th>
+                    <th>FECHA</th>
+                    <th>TIEMPO MÍNIMO</th>
+                    <th>CORTADO</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php
+                while ($crow = mysqli_fetch_assoc($result)) {   
+                ?>
+                    <tr>
+                        <td align="center"><strong><?php echo $crow['numero']; ?></strong></td>
+                        <td><?php echo $crow['cliente'] . " / " . $crow['nombres']; ?></td>
+                        <td align="center">
+                            <?php 
+                            $productobuscar = $crow['producto'];
+                            $sqlcl = "SELECT * from `productos` WHERE `codigo` LIKE '$productobuscar'";
+                            $resultcl = mysqli_query($con, $sqlcl);
+                            while ($crowcl = mysqli_fetch_assoc($resultcl)) {
+                                echo $crowcl['megass'] . " / " . $crowcl['megasb'];
+                            }
+                            ?>
+                        </td>
+                        <td><?php echo $crow['ip']; ?></td>
+                        <td><?php echo $crow['telefono']; ?></td>
+                        <td>
+                            <span class="estado estado-activo"><?php echo $crow['estado']; ?></span>
+                        </td>
+                        <td align="center"><?php echo $crow['fecha']; ?></td>
+                        <?php 
+                        $cadena = $crow['fecha'];
+                        list($fecha_actual) = explode('(', $cadena);
+                        $fechavencimiento = date("Y-m-d", strtotime($fecha_actual . "+ 1 year"));
+                        $fecha = date("Y-m-d ", time());
+                        $firstDate = $fecha;
+                        $secondDate = $fechavencimiento;
+                        $dateDifference = abs(strtotime($secondDate) - strtotime($firstDate));
+                        $years  = floor($dateDifference / (365 * 60 * 60 * 24));
+                        $months = floor(($dateDifference - $years * 365 * 60 * 60 * 24) / (30 * 60 * 60 * 24));
+                        $days   = floor(($dateDifference - $years * 365 * 60 * 60 * 24 - $months * 30 * 60 * 60 * 24) / (60 * 60 * 24));
+
+                        $clase_estado_venc = ($years <= 0 && $months <= 0 && $days <= 0) ? "estado-pagado" : "estado-vencido";
+                        ?>
+                        <td>
+                            <span class="estado <?php echo $clase_estado_venc; ?>">
+                                <?php echo "Vencimiento: " . $fechavencimiento . '<br>'; echo "Faltan: " . $years . " Años, " . $months . " Meses y " . $days . " Días"; ?>
+                            </span>
+                        </td>
+                        <?php 
+                        $clase_estado_cortado = ($crow['cortado'] == "no") ? "estado-activo" : "estado-cortado";
+                        ?>
+                        <td>
+                            <span class="estado <?php echo $clase_estado_cortado; ?>">
+                                <?php echo $crow['cortado']; ?>
+                            </span>
+                        </td>
+                    </tr>
+                <?php 
+                } 
+                ?>
+            </tbody>
+        </table>
+    </div>
 </div>
 
-<!-- JavaScript para gestionar la Burbuja de Correo -->
+<!-- Lógica JavaScript -->
 <script>
 function toggleBurbujaMail() {
     var burbuja = document.getElementById('burbujaMail');
@@ -565,15 +642,16 @@ function procesarEnvioMail() {
         return;
     }
 
-    // Clona la tabla para remover elementos interactivos antes de enviar
     var tablaClonada = tabla.cloneNode(true);
-    var elementosOcultar = tablaClonada.querySelectorAll('.no-print');
+    
+    // Limpia elementos interactivos e insumos de filtro no requeridos en el Mail
+    var elementosOcultar = tablaClonada.querySelectorAll('.no-print, form, script');
     elementosOcultar.forEach(function(el) {
         el.remove();
     });
 
     var htmlEnviar = `
-        <h3 style="font-family: Arial, sans-serif; color: #333;">Reporte - Clientes con Facturas Pendientes</h3>
+        <h3 style="font-family: Arial, sans-serif; color: #333;">Reporte - Listado de Contratos Activos</h3>
         <table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; font-size: 12px; color: #333;">
             ${tablaClonada.innerHTML}
         </table>
@@ -599,9 +677,7 @@ function procesarEnvioMail() {
     });
 }
 </script>
-
-		
-		<!-- InstanceEndEditable --></main>
+									<!-- InstanceEndEditable --></main>
   </div>
 
   <!--<script src="https://unpkg.com/lucide@latest"></script>-->

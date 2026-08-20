@@ -21,12 +21,10 @@ crontab -e
 #montar unidades
 cd
 cd ..
-cd var/www/html
+cd var/www
 mkdir ALMACENAMIENTO
 cd ALMACENAMIENTO
-mkdir OPTIMUS
-mkdir USB
-mkdir MEMORIA
+mkdir PRINCIPAL
 mkdir MULTIMEDIA1
 mkdir MULTIMEDIA2
 mkdir MULTIMEDIA3
@@ -52,31 +50,30 @@ mkdir MULTIMEDIA22
 mkdir MULTIMEDIA23
 mkdir MULTIMEDIA24
 mkdir MULTIMEDIA25
-mount -t cifs //192.168.88.6/OPTIMUS -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/OPTIMUS
-mount -t cifs //192.168.88.6/USB -o username=nelo416,password=Optimus2023 /var/html/ALMACENAMIENTO/USB
-mount -t cifs //192.168.88.6/MEMORIA -o username=nelo416,password=Optimus2023 /var/html/ALMACENAMIENTO/MEMORIA
-mount -t cifs //192.168.88.6/MULTIMEDIA1 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA1
-mount -t cifs //192.168.88.6/MULTIMEDIA2 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA2
-mount -t cifs //192.168.88.6/MULTIMEDIA3 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA3
-mount -t cifs //192.168.88.6/MULTIMEDIA4 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA4
-mount -t cifs //192.168.88.6/MULTIMEDIA5 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA5
-mount -t cifs //192.168.88.6/MULTIMEDIA6 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA6
-mount -t cifs //192.168.88.6/MULTIMEDIA7 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA7
-mount -t cifs //192.168.88.6/MULTIMEDIA8 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA8
-mount -t cifs //192.168.88.6/MULTIMEDIA9 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA9
-mount -t cifs //192.168.88.6/MULTIMEDIA10 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA10
-mount -t cifs //192.168.88.6/MULTIMEDIA11 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA11
-mount -t cifs //192.168.88.6/MULTIMEDIA12 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA12
-mount -t cifs //192.168.88.6/MULTIMEDIA13 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA13
-mount -t cifs //192.168.88.6/MULTIMEDIA14 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA14
-mount -t cifs //192.168.88.6/MULTIMEDIA15 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA15
-mount -t cifs //192.168.88.6/MULTIMEDIA16 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA16
-mount -t cifs //192.168.88.6/MULTIMEDIA17 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA17
-mount -t cifs //192.168.88.6/MULTIMEDIA18 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA18
-mount -t cifs //192.168.88.6/MULTIMEDIA19 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA19
-mount -t cifs //192.168.88.6/MULTIMEDIA20 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA20
-mount -t cifs //192.168.88.6/MULTIMEDIA21 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA21
-mount -t cifs //192.168.88.6/MULTIMEDIA22 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA22
-mount -t cifs //192.168.88.6/MULTIMEDIA23 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA23
-mount -t cifs //192.168.88.6/MULTIMEDIA24 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA24
-mount -t cifs //192.168.88.6/MULTIMEDIA25 -o username=nelo416,password=Optimus2023 /var/www/html/ALMACENAMIENTO/MULTIMEDIA25
+mount -t cifs //10.8.0.10/PRINCIPAL -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/PRINCIPAL
+mount -t cifs //10.8.0.10/MULTIMEDIA1 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA1
+mount -t cifs //10.8.0.10/MULTIMEDIA2 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA2
+mount -t cifs //10.8.0.10/MULTIMEDIA3 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA3
+mount -t cifs //10.8.0.10/MULTIMEDIA4 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA4
+mount -t cifs //10.8.0.10/MULTIMEDIA5 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA5
+mount -t cifs //10.8.0.10/MULTIMEDIA6 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA6
+mount -t cifs //10.8.0.10/MULTIMEDIA7 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA7
+mount -t cifs //10.8.0.10/MULTIMEDIA8 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA8
+mount -t cifs //10.8.0.10/MULTIMEDIA9 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA9
+mount -t cifs //10.8.0.10/MULTIMEDIA10 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA10
+mount -t cifs //10.8.0.10/MULTIMEDIA11 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA11
+mount -t cifs //10.8.0.10/MULTIMEDIA12 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA12
+mount -t cifs //10.8.0.10/MULTIMEDIA13 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA13
+mount -t cifs //10.8.0.10/MULTIMEDIA14 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA14
+mount -t cifs //10.8.0.10/MULTIMEDIA15 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA15
+mount -t cifs //10.8.0.10/MULTIMEDIA16 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA16
+mount -t cifs //10.8.0.10/MULTIMEDIA17 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA17
+mount -t cifs //10.8.0.10/MULTIMEDIA18 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA18
+mount -t cifs //10.8.0.10/MULTIMEDIA19 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA19
+mount -t cifs //10.8.0.10/MULTIMEDIA20 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA20
+mount -t cifs //10.8.0.10/MULTIMEDIA21 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA21
+mount -t cifs //10.8.0.10/MULTIMEDIA22 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA22
+mount -t cifs //10.8.0.10/MULTIMEDIA23 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA23
+mount -t cifs //10.8.0.10/MULTIMEDIA24 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA24
+mount -t cifs //10.8.0.10/MULTIMEDIA25 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA25
+chmod -R 777 /var/www

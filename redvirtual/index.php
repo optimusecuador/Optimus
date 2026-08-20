@@ -57,6 +57,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .btn-eliminar { position: absolute; top: -8px; right: -8px; background: #e74c3c; color: white; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; font-size: 12px; text-align: center; line-height: 20px; z-index: 10; }
         .disp-item { background: #34495e; padding: 8px; margin-bottom: 5px; border-radius: 4px; cursor: pointer; font-size: 12px; border: 1px solid #455a64; }
         line { cursor: pointer; stroke-width: 6; }
+        .btn-descargar { background: #2980b9; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .btn-descargar:hover { background: #3498db; }
     </style>
 </head>
 <body>
@@ -73,6 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div style="padding:15px; border-bottom: 1px solid #ddd; display: flex; gap: 10px; align-items: center;">
         <input type="text" id="txt-busqueda" placeholder="Buscar nombre...">
         <button onclick="buscarRegistros()">Buscar</button>
+        <button class="btn-descargar" onclick="descargarJSON()">📥 Descargar JSON</button>
         <div id="resultado-seleccionado" style="font-weight: bold; color: #2c3e50;"></div>
         <div id="lista-resultados" style="position: absolute; top: 55px; background: white; z-index: 100; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
     </div>
@@ -101,6 +104,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             elementos.push({ id: el.id, type: el.classList.contains('equipo') ? 'pc' : 'text', tipoBase: el.getAttribute('data-tipo'), left: el.style.left, top: el.style.top, label: el.querySelector('.label') ? el.querySelector('.label').innerText : el.innerText.replace('×',''), interfaces: el.querySelector('.info-txt') ? el.querySelector('.info-txt').innerHTML : "" });
         });
         await fetch('index.php', { method: 'POST', body: JSON.stringify({ archivo_nombre: clienteSeleccionado, elementos, conexiones }), headers: {'Content-Type': 'application/json'} });
+    }
+
+    function descargarJSON() {
+        let elementos = [];
+        document.querySelectorAll('.equipo, .texto-nodo').forEach(el => {
+            elementos.push({ 
+                id: el.id, 
+                type: el.classList.contains('equipo') ? 'pc' : 'text', 
+                tipoBase: el.getAttribute('data-tipo'), 
+                left: el.style.left, 
+                top: el.style.top, 
+                label: el.querySelector('.label') ? el.querySelector('.label').innerText : el.innerText.replace('×',''), 
+                interfaces: el.querySelector('.info-txt') ? el.querySelector('.info-txt').innerHTML : "" 
+            });
+        });
+
+        let dataGuardar = {
+            archivo_nombre: clienteSeleccionado || "red_config",
+            elementos: elementos,
+            conexiones: conexiones
+        };
+
+        let jsonStr = JSON.stringify(dataGuardar, null, 2);
+        let blob = new Blob([jsonStr], { type: "application/json" });
+        let url = URL.createObjectURL(blob);
+        let a = document.createElement("a");
+        
+        let nombreDescarga = (clienteSeleccionado ? clienteSeleccionado : "red_config") + ".json";
+        a.href = url;
+        a.download = nombreDescarga;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 
     function dibujarLineas() {

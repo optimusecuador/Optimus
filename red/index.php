@@ -297,17 +297,202 @@ $mikrotikconfiguracion = "no";
       <section class="metric-grid"></section>
       <!-- InstanceBeginEditable name="principal" -->
 <?php
-// --- INICIO DE INTEGRACIÓN PHP ---
-$data_contratos = [];
-$sql = "SELECT numero, nombres, router FROM contratos WHERE caja = 0";
-$result = $conn->query($sql);
-if ($result) {
-    while($row = $result->fetch_assoc()) { $data_contratos[] = $row; }
+// 1. DECLARACIONES DE NAMESPACE
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
+// 2. INCLUIR CONEXIÓN A BASE DE DATOS
+if (file_exists('conexion.php')) {
+    include_once('conexion.php');
+} elseif (file_exists('../conexion.php')) {
+    include_once('../conexion.php');
 }
-// --- FIN DE INTEGRACIÓN PHP ---
+
+// 3. PROCESO DE ENVÍO DE EMAIL CON PHPMAILER
+if (isset($_POST['action']) && $_POST['action'] === 'enviar_email') {
+    header('Content-Type: application/json');
+
+    require_once '../generar_automatico/PHPMailer/src/Exception.php';
+    require_once '../generar_automatico/PHPMailer/src/PHPMailer.php';
+    require_once '../generar_automatico/PHPMailer/src/SMTP.php';
+
+    $destinatario = filter_var($_POST['email'] ?? '', FILTER_VALIDATE_EMAIL);
+    // Se recibe el HTML codificado y se decodifica para evitar bloqueos del servidor
+    $htmlContent = urldecode($_POST['html'] ?? '');
+
+    if (!$destinatario || empty($htmlContent)) {
+        echo json_encode(['status' => 'error', 'message' => 'Email o contenido inválido.']);
+        exit;
+    }
+
+    $mail = new PHPMailer(true);
+    try {
+        $mail->isSMTP();
+        $mail->Host       = 'localhost'; 
+        $mail->SMTPAuth   = false;
+        $mail->Port       = 25;
+
+        $mail->setFrom('notificaciones@redes-ftth.local', 'Sistema Diagrama FTTH');
+        $mail->addAddress($destinatario);
+
+        $mail->isHTML(true);
+        $mail->CharSet = 'UTF-8';
+        $mail->Subject = 'Avance del Diagrama de Red FTTH - ' . date('d/m/Y');
+        
+        $mail->Body    = "
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 15px; }
+                    .node-content { border: 1px solid #ccc; padding: 10px; margin: 5px 0; border-radius: 4px; }
+                </style>
+            </head>
+            <body>
+                <h2>Avance de Diagrama FTTH Generado</h2>
+                <hr>
+                {$htmlContent}
+            </body>
+            </html>";
+
+        $mail->send();
+        echo json_encode(['status' => 'success', 'message' => 'Correo enviado correctamente a ' . $destinatario]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => 'Error PHPMailer: ' . $mail->ErrorInfo]);
+    }
+    exit;
+}
+
+// 4. CONSULTAS A LA BASE DE DATOS
+$data_contratos = [];
+if (isset($conn)) {
+    $sql = "SELECT numero, nombres, router FROM contratos WHERE caja = 0";
+    $result = $conn->query($sql);
+    if ($result) {
+        while($row = $result->fetch_assoc()) { $data_contratos[] = $row; }
+    }
+}
+
+$data_personal = [];
+if (isset($conn)) {
+    // Consulta usando el campo 'mail'
+    $sql_p = "SELECT id, nombres, mail FROM personal WHERE mail IS NOT NULL AND mail != ''";
+    $res_p = $conn->query($sql_p);
+    if ($res_p) {
+        while($row_p = $res_p->fetch_assoc()) { $data_personal[] = $row_p; }
+    }
+}
 ?>
 
 <style>
+    .toolbar {
+        background: #1e293b;
+        padding: 12px 20px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        border-radius: 6px;
+        margin-bottom: 15px;
+        flex-wrap: wrap;
+    }
+    .btn-action {
+        background-color: #2563eb;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: bold;
+        border-radius: 4px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: background 0.2s;
+    }
+    .btn-action:hover { background-color: #1d4ed8; }
+    .btn-success { background-color: #16a34a; }
+    .btn-success:hover { background-color: #15803d; }
+    .btn-pdf { background-color: #dc2626; }
+    .btn-pdf:hover { background-color: #b91c1c; }
+    .btn-mail { background-color: #d97706; }
+    .btn-mail:hover { background-color: #b45309; }
+
+    /* ESTILOS DE LA BURBUJA */
+    .mail-bubble-container {
+        position: relative;
+        display: inline-block;
+    }
+    .mail-bubble {
+        display: none;
+        position: absolute;
+        top: 45px;
+        right: 0;
+        background-color: #232733;
+        border: 1px solid #3b4252;
+        padding: 18px;
+        border-radius: 8px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        z-index: 100;
+        width: 310px;
+        box-sizing: border-box;
+        font-family: Arial, sans-serif;
+    }
+    .mail-bubble label { 
+        color: #f1f5f9; 
+        font-size: 12px; 
+        font-weight: bold; 
+        margin-bottom: 6px; 
+        display: flex; 
+        align-items: center; 
+        gap: 6px; 
+    }
+    .mail-bubble input, .mail-bubble select {
+        width: 100%;
+        background-color: #181b22;
+        border: 1px solid #475569;
+        color: #e2e8f0;
+        padding: 8px 10px;
+        font-size: 12px;
+        border-radius: 6px;
+        box-sizing: border-box;
+        margin-bottom: 12px;
+        outline: none;
+    }
+    .mail-bubble input:focus, .mail-bubble select:focus {
+        border-color: #38bdf8;
+    }
+    .mail-bubble input::placeholder {
+        color: #64748b;
+    }
+    .mail-bubble-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 5px;
+    }
+    .btn-modal-cancel {
+        background-color: #64748b;
+        color: white;
+        border: none;
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: bold;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .btn-modal-cancel:hover { background-color: #475569; }
+    .btn-modal-send {
+        background-color: #22c55e;
+        color: white;
+        border: none;
+        padding: 6px 16px;
+        font-size: 12px;
+        font-weight: bold;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .btn-modal-send:hover { background-color: #16a34a; }
+
+    /* ESTILOS DE LA ESTRUCTURA PRINCIPAL */
     .panel-dark { width: 100%; overflow-x: auto; padding: 20px; box-sizing: border-box; }
     .branch { display: flex !important; align-items: center; position: relative; margin: 10px 0; }
     .children { display: flex !important; flex-direction: column !important; margin-left: 30px; padding-left: 30px; position: relative; justify-content: center; border-left: 3px solid #2c3e50; }
@@ -330,7 +515,55 @@ if ($result) {
     .ac-list { position: absolute; background: white; border: 1px solid #bdc3c7; width: 100%; z-index: 10; max-height: 120px; overflow-y: auto; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     .ac-item { padding: 5px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 10px; color: black !important; }
     .ac-item:hover { background: #f0f0f0; }
+
+    @media print {
+        .toolbar, .ac-list, .mail-bubble { display: none !important; }
+        body, html { margin: 0; padding: 0; background: #fff !important; }
+        .panel-dark { overflow: visible !important; padding: 0 !important; width: 100% !important; }
+        .node-content { box-shadow: none !important; break-inside: avoid; }
+        input, select { border: 1px solid #999 !important; background: transparent !important; }
+        @page { size: landscape; margin: 10mm; }
+    }
 </style>
+
+<!-- BARRA DE HERRAMIENTAS -->
+<div class="toolbar">
+    <button class="btn-action btn-success" onclick="descargarAvance()">
+        📥 Descargar Avance (.json)
+    </button>
+    <button class="btn-action" onclick="document.getElementById('file-input').click()">
+        📤 Cargar Avance
+    </button>
+    <button class="btn-action btn-pdf" onclick="exportarPDF()">
+        📄 Exportar a PDF
+    </button>
+    
+    <!-- CONTENEDOR MODAL DE MAIL -->
+    <div class="mail-bubble-container">
+        <button class="btn-action btn-mail" onclick="toggleMailBubble()">
+            ✉️ Enviar por Mail
+        </button>
+        <div class="mail-bubble" id="mail-bubble">
+            <label>🔍 Buscar Personal:</label>
+            <input type="text" id="search-personal" placeholder="Escriba nombres o apellidos..." oninput="filtrarPersonalSelect(this)">
+
+            <label>👤 Seleccionar Destinatario:</label>
+            <select id="select-personal" onchange="seleccionarDestinatario(this)">
+                <option value="">-- Seleccione un destinatario --</option>
+            </select>
+
+            <label>✉️ Correo Destinatario:</label>
+            <input type="email" id="email-target" placeholder="ejemplo@correo.com">
+
+            <div class="mail-bubble-actions">
+                <button class="btn-modal-cancel" onclick="toggleMailBubble()">Cancelar</button>
+                <button class="btn-modal-send" onclick="procesarEnvioMail()">Enviar</button>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="file-input" style="display:none" accept=".json" onchange="cargarArchivoAvance(event)">
+</div>
 
 <div class="panel-dark" id="main-panel">
     <div class="branch" id="root-branch">
@@ -355,50 +588,230 @@ if ($result) {
 
 <script>
     const contratos = <?php echo json_encode($data_contratos); ?>;
+    const personal = <?php echo json_encode($data_personal); ?>;
     const colores = ["Azul", "Naranja", "Verde", "Marrón", "Gris", "Blanco", "Rojo", "Negro"];
     const hexCol = ["#0000FF", "#FFA500", "#008000", "#8B4513", "#808080", "#E6E6E6", "#FF0000", "#000000"];
     const atenuacionSplitter = {'1': 0.5, '2': 3.5, '4': 7.0, '8': 10.5, '16': 14.0, '32': 17.5, '64': 21.0};
 
+    // MOSTRAR / OCULTAR LA BURBUJA DE MAIL
+    function toggleMailBubble() {
+        const bubble = document.getElementById('mail-bubble');
+        const display = bubble.style.display === 'block' ? 'none' : 'block';
+        bubble.style.display = display;
+        if (display === 'block') {
+            poblarSelectPersonal(personal);
+        }
+    }
+
+    // POBLAR EL SELECT UTILIZANDO LA PROPIEDAD 'mail'
+    function poblarSelectPersonal(lista) {
+        const select = document.getElementById('select-personal');
+        select.innerHTML = '<option value="">-- Seleccione un destinatario --</option>';
+        lista.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.mail;
+            opt.textContent = p.nombres;
+            select.appendChild(opt);
+        });
+    }
+
+    // FILTRAR PERSONAL EN EL SELECT
+    function filtrarPersonalSelect(input) {
+        const query = input.value.toUpperCase();
+        const filtrados = personal.filter(p => p.nombres.toUpperCase().includes(query) || (p.mail && p.mail.toUpperCase().includes(query)));
+        poblarSelectPersonal(filtrados);
+    }
+
+    // SELECCIONAR MAIL Y ASIGNARLO AL CAMPO CORRESPONDIENTE
+    function seleccionarDestinatario(select) {
+        const emailInput = document.getElementById('email-target');
+        emailInput.value = select.value;
+    }
+
+    // PROCESAR ENVÍO VÍA FETCH AJAX CON CODIFICACIÓN SEGURA
+    function procesarEnvioMail() {
+        const mailInput = document.getElementById('email-target').value;
+        if (!mailInput) {
+            alert('Por favor, ingresa o selecciona un correo destinatario.');
+            return;
+        }
+
+        document.querySelectorAll('#root-branch input').forEach(el => {
+            el.setAttribute('value', el.value);
+        });
+
+        const dataForm = new FormData();
+        dataForm.append('action', 'enviar_email');
+        dataForm.append('email', mailInput);
+        
+        // Uso de encodeURIComponent para evitar que WAF/Servidor aborte la petición por caracteres HTML
+        const htmlLimpio = encodeURIComponent(document.getElementById('root-branch').innerHTML);
+        dataForm.append('html', htmlLimpio);
+
+        fetch(window.location.href, {
+            method: 'POST',
+            body: dataForm
+        })
+        .then(async res => {
+            const text = await res.text();
+            try {
+                return JSON.parse(text);
+            } catch (err) {
+                console.error('Respuesta bruta del servidor:', text);
+                throw new Error('El servidor devolvió una respuesta no válida. Revisa la consola F12 para más detalles.');
+            }
+        })
+        .then(res => {
+            alert(res.message);
+            if (res.status === 'success') {
+                toggleMailBubble();
+            }
+        })
+        .catch(err => {
+            alert('Error: ' + err.message);
+        });
+    }
+
     document.getElementById('main-panel').addEventListener('input', (e) => {
         if(e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
-            e.target.classList.add('save-me'); // Asegurar que se guarde
-            guardarEstado();
+            e.target.classList.add('save-me'); 
+            if(e.target.tagName === 'INPUT') {
+                e.target.setAttribute('value', e.target.value);
+            }
             if(e.target.classList.contains('select-splitter')) actualizarCaja(e.target);
             if(e.target.classList.contains('select-modo')) cambiarModo(e.target);
+            
             recalcularPotencias();
+            guardarEstado();
         }
     });
 
-    function guardarEstado() {
-        const data = { html: document.getElementById('root-branch').innerHTML, inputs: {} };
-        // Usamos una clase .save-me para identificar todos los campos que deben persistir
+    document.getElementById('main-panel').addEventListener('change', (e) => {
+        if(e.target.tagName === 'SELECT') {
+            Array.from(e.target.options).forEach(opt => {
+                if(opt.value === e.target.value) {
+                    opt.setAttribute('selected', 'selected');
+                } else {
+                    opt.removeAttribute('selected');
+                }
+            });
+            guardarEstado();
+        }
+    });
+
+    function exportarPDF() {
+        document.querySelectorAll('#root-branch input').forEach(el => {
+            el.setAttribute('value', el.value);
+        });
+        window.print();
+    }
+
+    function obtenerObjetoEstado() {
+        document.querySelectorAll('#root-branch input').forEach(el => {
+            el.setAttribute('value', el.value);
+        });
+        
+        const data = { 
+            fecha_guardado: new Date().toLocaleString(),
+            html: document.getElementById('root-branch').innerHTML, 
+            inputs: {} 
+        };
+        
         document.querySelectorAll('.save-me').forEach((el, idx) => {
             el.setAttribute('data-idx', idx); 
             data.inputs[idx] = el.value; 
         });
+        return data;
+    }
+
+    function guardarEstado() {
+        const data = obtenerObjetoEstado();
         localStorage.setItem('config_red', JSON.stringify(data));
+    }
+
+    function descargarAvance() {
+        const data = obtenerObjetoEstado();
+        const jsonStr = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        const fecha = new Date().toISOString().slice(0,10);
+        a.download = `avance_red_ftth_${fecha}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    function cargarArchivoAvance(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (data && data.html && data.inputs) {
+                    localStorage.setItem('config_red', JSON.stringify(data));
+                    cargarEstado();
+                    alert("¡Avance cargado correctamente!");
+                } else {
+                    alert("El archivo no tiene un formato válido.");
+                }
+            } catch (err) {
+                alert("Error al leer el archivo JSON.");
+            }
+        };
+        reader.readAsText(file);
     }
 
     function cargarEstado() {
         const data = JSON.parse(localStorage.getItem('config_red'));
         if(!data) return;
+        
         document.getElementById('root-branch').innerHTML = data.html;
+        
         document.querySelectorAll('.save-me').forEach((el, idx) => { 
-            if(data.inputs[idx] !== undefined) el.value = data.inputs[idx]; 
+            if(data.inputs[idx] !== undefined) {
+                el.value = data.inputs[idx];
+                if(el.tagName === 'INPUT') el.setAttribute('value', data.inputs[idx]);
+            }
         });
-        document.querySelectorAll('.select-modo').forEach(sel => cambiarModo(sel));
+
+        document.querySelectorAll('.select-modo').forEach(sel => cambiarModo(sel, false));
         recalcularPotencias();
     }
 
     function ejecutarBusqueda(input) {
         const val = input.value.toUpperCase();
+        input.setAttribute('value', input.value);
         let list = input.nextElementSibling;
-        if (!list || !list.classList.contains('ac-list')) { list = document.createElement('div'); list.className = 'ac-list'; input.parentNode.appendChild(list); }
+        if (!list || !list.classList.contains('ac-list')) { 
+            list = document.createElement('div'); 
+            list.className = 'ac-list'; 
+            input.parentNode.appendChild(list); 
+        }
         list.innerHTML = '';
         if (!val) return;
+        
         contratos.filter(c => c.nombres.toUpperCase().includes(val) || c.numero.toString().includes(val)).forEach(c => {
-            const item = document.createElement('div'); item.className = 'ac-item'; item.innerHTML = `<strong>${c.numero}</strong> - ${c.nombres}`;
-            item.onclick = () => { input.value = c.nombres; const node = input.closest('.node-content'); const serial = node.querySelector('.serial-input'); if (serial) serial.value = c.router; list.innerHTML = ''; guardarEstado(); };
+            const item = document.createElement('div'); 
+            item.className = 'ac-item'; 
+            item.innerHTML = `<strong>${c.numero}</strong> - ${c.nombres}`;
+            item.onclick = () => { 
+                input.value = c.nombres; 
+                input.setAttribute('value', c.nombres);
+                const node = input.closest('.node-content'); 
+                const serial = node.querySelector('.serial-input'); 
+                if (serial) {
+                    serial.value = c.router;
+                    serial.setAttribute('value', c.router);
+                }
+                list.innerHTML = ''; 
+                guardarEstado(); 
+            };
             list.appendChild(item);
         });
     }
@@ -412,12 +825,33 @@ if ($result) {
     function propagarPotencia(branch, powerIn) {
         const nodeContent = branch.querySelector(':scope > .node-content');
         if (!nodeContent) return;
-        const potIngreso = nodeContent.querySelector('.pot-ingreso'); if (potIngreso) potIngreso.value = powerIn.toFixed(2);
+        
+        const potIngreso = nodeContent.querySelector('.pot-ingreso'); 
+        if (potIngreso) {
+            potIngreso.value = powerIn.toFixed(2);
+            potIngreso.setAttribute('value', powerIn.toFixed(2));
+        }
+        
         const selectModo = nodeContent.querySelector('.select-modo');
-        if (selectModo && selectModo.value === 'ONU') { const potOnu = nodeContent.querySelector('.pot-onu'); if (potOnu) potOnu.value = powerIn.toFixed(2); }
+        if (selectModo && selectModo.value === 'ONU') { 
+            const potOnu = nodeContent.querySelector('.pot-onu'); 
+            if (potOnu) {
+                potOnu.value = powerIn.toFixed(2);
+                potOnu.setAttribute('value', powerIn.toFixed(2));
+            }
+        }
+        
         const splitterSelect = nodeContent.querySelector('.select-splitter');
         let powerOut = powerIn;
-        if (splitterSelect && splitterSelect.value !== "0") { powerOut = powerIn - (atenuacionSplitter[splitterSelect.value] || 0); const potSalida = nodeContent.querySelector('.pot-salida'); if (potSalida) potSalida.value = powerOut.toFixed(2); }
+        if (splitterSelect && splitterSelect.value !== "0") { 
+            powerOut = powerIn - (atenuacionSplitter[splitterSelect.value] || 0); 
+            const potSalida = nodeContent.querySelector('.pot-salida'); 
+            if (potSalida) {
+                potSalida.value = powerOut.toFixed(2);
+                potSalida.setAttribute('value', powerOut.toFixed(2));
+            }
+        }
+        
         branch.querySelector(':scope > .children')?.querySelectorAll(':scope > .branch').forEach(b => propagarPotencia(b, powerOut));
     }
 
@@ -437,18 +871,29 @@ if ($result) {
                 childrenDiv.appendChild(childBranch);
             }
         }
+        guardarEstado();
     }
 
-    function cambiarModo(selectElement) {
+    function cambiarModo(selectElement, limpiarHijos = true) {
         const nodeContent = selectElement.closest('.node-content');
         const splFields = nodeContent.querySelector('.spl-fields');
         const onuFields = nodeContent.querySelector('.onu-fields');
         const childrenDiv = selectElement.closest('.branch').querySelector(':scope > .children');
+        
         onuFields.style.display = (selectElement.value === 'ONU') ? 'block' : 'none';
+        
         if (selectElement.value === 'SPL') {
             splFields.style.display = 'block';
-            splFields.innerHTML = `<label>Nombre Nueva Caja:</label><input type="text" class="save-me" placeholder="Ej. NAP-02"><label>Color de Fibra:</label><select class="save-me">${colores.map(c => `<option value="${c}">${c}</option>`).join('')}</select><div class="power-grid"><div><label>Pot. Ingreso:</label><input type="text" class="pot-ingreso" readonly></div><div><label>Pot. Salida:</label><input type="text" class="pot-salida" readonly></div></div><label>Tipo de Splitter:</label><select class="select-splitter save-me"><option value="0">Seleccionar...</option><option value="2">Splitter 1:2</option><option value="4">Splitter 1:4</option><option value="8">Splitter 1:8</option><option value="16">Splitter 1:16</option><option value="32">Splitter 1:32</option><option value="64">Splitter 1:64</option></select>`;
-        } else { splFields.style.display = 'none'; childrenDiv.innerHTML = ''; }
+            if (!splFields.innerHTML.trim()) {
+                splFields.innerHTML = `<label>Nombre Nueva Caja:</label><input type="text" class="save-me" placeholder="Ej. NAP-02"><label>Color de Fibra:</label><select class="save-me">${colores.map(c => `<option value="${c}">${c}</option>`).join('')}</select><div class="power-grid"><div><label>Pot. Ingreso:</label><input type="text" class="pot-ingreso" readonly></div><div><label>Pot. Salida:</label><input type="text" class="pot-salida" readonly></div></div><label>Tipo de Splitter:</label><select class="select-splitter save-me"><option value="0">Seleccionar...</option><option value="2">Splitter 1:2</option><option value="4">Splitter 1:4</option><option value="8">Splitter 1:8</option><option value="16">Splitter 1:16</option><option value="32">Splitter 1:32</option><option value="64">Splitter 1:64</option></select>`;
+            }
+        } else { 
+            splFields.style.display = 'none'; 
+            if (limpiarHijos) {
+                childrenDiv.innerHTML = ''; 
+            }
+        }
+        if (limpiarHijos) guardarEstado();
     }
 
     window.onload = cargarEstado;

@@ -297,35 +297,62 @@ $mikrotikconfiguracion = "no";
       <section class="metric-grid"></section>
       <!-- InstanceBeginEditable name="principal" -->
 <?php
+
 // =========================================================================
 // 1. PROCESAMIENTO AJAX / PHPMAILER Y RESPALDO (AL PRINCIPIO ABSOLUTO)
 // =========================================================================
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-// A) RESPALDO AUTOMÁTICO / MANUAL EN SERVIDOR
-if (isset($_POST['action']) && $_POST['action'] === 'crear_respaldo') {
-    // Limpia cualquier contenido HTML previo generado por la plantilla
-    while (ob_get_level()) { 
-        ob_end_clean(); 
-    }
-    
+// A) RESPALDO AUTOMÁTICO (diagrama_guardado.json)
+if (isset($_POST['action']) && $_POST['action'] === 'guardado_automatico') {
+    while (ob_get_level()) { ob_end_clean(); }
     header('Content-Type: application/json; charset=utf-8');
 
     try {
+        $jsonContent = $_POST['data_json'] ?? '';
+        if (empty($jsonContent)) {
+            echo json_encode(['status' => 'error', 'message' => 'No hay datos.']);
+            exit;
+        }
+
+        $filepath = 'diagrama_guardado.json';
+
+        if (file_put_contents($filepath, $jsonContent) !== false) {
+            echo json_encode(['status' => 'success', 'message' => 'Guardado automático realizado']);
+        } else {
+            echo json_encode(['status' => 'error', 'message' => 'Error al guardar diagrama_guardado.json']);
+        }
+    } catch (\Throwable $t) {
+        echo json_encode(['status' => 'error', 'message' => $t->getMessage()]);
+    }
+    exit;
+}
+
+// B) RESPALDO MANUAL CON BOTÓN (Crea archivo con fecha en carpeta respaldo_red)
+if (isset($_POST['action']) && $_POST['action'] === 'crear_respaldo') {
+    while (ob_get_level()) { ob_end_clean(); }
+    header('Content-Type: application/json; charset=utf-8');
+
+    try {
+        $dir = '../respaldo_red/';
+        if (!file_exists($dir)) {
+            mkdir($dir, 0777, true);
+        }
+
         $jsonContent = $_POST['data_json'] ?? '';
         if (empty($jsonContent)) {
             echo json_encode(['status' => 'error', 'message' => 'No hay datos para respaldar.']);
             exit;
         }
 
-        // Se guarda en la misma carpeta con el nombre exacto "diagrama_guardado.json"
-        $filepath = 'diagrama_guardado.json';
+        $filename = 'avance_red_ftth_' . date('Y-m-d_H-i-s') . '.json';
+        $filepath = $dir . $filename;
 
         if (file_put_contents($filepath, $jsonContent) !== false) {
             echo json_encode([
                 'status' => 'success', 
-                'message' => 'Respaldo realizado satisfactoriamente'
+                'message' => 'Respaldo realizado satisfactoriamente: ' . $filename
             ]);
         } else {
             echo json_encode(['status' => 'error', 'message' => 'No se pudo escribir el archivo en el servidor.']);
@@ -333,15 +360,12 @@ if (isset($_POST['action']) && $_POST['action'] === 'crear_respaldo') {
     } catch (\Throwable $t) {
         echo json_encode(['status' => 'error', 'message' => 'Error Fatal: ' . $t->getMessage()]);
     }
-    exit; // Detiene la ejecución para no cargar el resto del HTML/plantilla
+    exit;
 }
 
-// B) ENVÍO DE EMAIL
+// C) ENVÍO DE EMAIL
 if (isset($_POST['action']) && $_POST['action'] === 'enviar_email') {
-    while (ob_get_level()) {
-        ob_end_clean();
-    }
-    
+    while (ob_get_level()) { ob_end_clean(); }
     header('Content-Type: application/json; charset=utf-8');
 
     try {
@@ -585,7 +609,7 @@ if (isset($conn) && $conn instanceof mysqli && !$conn->connect_error) {
     <button class="btn-action" onclick="document.getElementById('file-input').click()">
         📤 Cargar Avance
     </button>
-    <button class="btn-action btn-respaldo" onclick="respaldarEnServidor(true)">
+    <button class="btn-action btn-respaldo" onclick="respaldarEnServidor()">
         💾 Respaldo
     </button>
     <button class="btn-action btn-pdf" onclick="exportarPDF()">
@@ -647,7 +671,8 @@ if (isset($conn) && $conn instanceof mysqli && !$conn->connect_error) {
     const hexCol = ["#0000FF", "#FFA500", "#008000", "#8B4513", "#808080", "#E6E6E6", "#FF0000", "#000000"];
     const atenuacionSplitter = {'1': 0.5, '2': 3.5, '4': 7.0, '8': 10.5, '16': 14.0, '32': 17.5, '64': 21.0};
 
-    function respaldarEnServidor(mostrarAlerta = false) {
+    // Función del Botón Respaldo (Guardar copia con fecha en carpeta ../respaldo_red/)
+    function respaldarEnServidor() {
         const data = obtenerObjetoEstado();
         const jsonStr = JSON.stringify(data, null, 2);
 
@@ -664,22 +689,35 @@ if (isset($conn) && $conn instanceof mysqli && !$conn->connect_error) {
             try {
                 return JSON.parse(text);
             } catch (err) {
-                if (mostrarAlerta) {
-                    alert('El servidor no devolvió un JSON válido. Detalle:\n\n' + text.substring(0, 200));
-                }
+                alert('El servidor no devolvió un JSON válido. Detalle:\n\n' + text.substring(0, 200));
                 throw new Error('Formato de respuesta incorrecto.');
             }
         })
         .then(res => {
             if (res.status === 'success') {
-                if (mostrarAlerta) alert(res.message);
+                alert(res.message);
             } else {
-                if (mostrarAlerta) alert('Error: ' + res.message);
+                alert('Error: ' + res.message);
             }
         })
         .catch(err => {
             console.error(err);
         });
+    }
+
+    // Función de Guardado Automático Continuo (diagrama_guardado.json)
+    function guardarEnServidorSilencioso() {
+        const data = obtenerObjetoEstado();
+        const jsonStr = JSON.stringify(data, null, 2);
+
+        const dataForm = new FormData();
+        dataForm.append('action', 'guardado_automatico');
+        dataForm.append('data_json', jsonStr);
+
+        fetch(window.location.href, {
+            method: 'POST',
+            body: dataForm
+        }).catch(err => console.error(err));
     }
 
     function toggleMailBubble() {
@@ -813,8 +851,8 @@ if (isset($conn) && $conn instanceof mysqli && !$conn->connect_error) {
     function guardarEstado() {
         const data = obtenerObjetoEstado();
         localStorage.setItem('config_red', JSON.stringify(data));
-        // Guarda de forma automática silenciosa en el servidor (sin alertar)
-        respaldarEnServidor(false);
+        // Se guarda en background en diagrama_guardado.json
+        guardarEnServidorSilencioso();
     }
 
     function descargarAvance() {
@@ -955,6 +993,7 @@ if (isset($conn) && $conn instanceof mysqli && !$conn->connect_error) {
                     <select class="select-modo save-me"><option value="nada">Seleccionar destino...</option><option value="ONU">Hacia Cliente (ONU)</option><option value="SPL">Hacia Nueva Caja (Splitter)</option><option value="ROT">Fibra Rota</option></select>
                     <div class="extra-fields onu-fields"><div class="ac-wrapper"><label>Nombre del Cliente:</label><input type="text" class="save-me" placeholder="Buscar..." oninput="ejecutarBusqueda(this)"></div><label>Serial ONU:</label><input type="text" class="serial-input save-me" placeholder="Ej. HWTC12345"><label>Potencia Recibida (dBm):</label><input type="text" class="pot-onu" readonly></div>
                     <div class="extra-fields spl-fields"></div>
+
                 </div><div class="children"></div>`;
                 childrenDiv.appendChild(childBranch);
             }

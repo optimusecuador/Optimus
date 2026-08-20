@@ -297,36 +297,76 @@ $mikrotikconfiguracion = "no";
       <section class="metric-grid"></section>
       <!-- InstanceBeginEditable name="principal" -->
 <?php
-// 1. DECLARACIONES DE NAMESPACE
+// =========================================================================
+// 1. PROCESAMIENTO AJAX / PHPMAILER Y RESPALDO (AL PRINCIPIO ABSOLUTO)
+// =========================================================================
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-// 2. INCLUIR CONEXIÓN A BASE DE DATOS
-if (file_exists('conexion.php')) {
-    include_once('conexion.php');
-} elseif (file_exists('../conexion.php')) {
-    include_once('../conexion.php');
+// A) RESPALDO AUTOMÁTICO / MANUAL EN SERVIDOR
+if (isset($_POST['action']) && $_POST['action'] === 'crear_respaldo') {
+    // Limpia cualquier contenido HTML previo generado por la plantilla
+    while (ob_get_level()) { 
+        ob_end_clean(); 
+    }
+    
+    header('Content-Type: application/json; charset=utf-8');
+
+    try {
+        $jsonContent = $_POST['data_json'] ?? '';
+        if (empty($jsonContent)) {
+            echo json_encode(['status' => 'error', 'message' => 'No hay datos para respaldar.']);
+            exit;
+        }
+
+        // Se guarda en la misma carpeta con el nombre exacto "diagrama_guardado.json"
+        $filepath = 'diagrama_guardado.json';
+
+        if (file_put_contents($filepath, $jsonContent) !== false) {
+            echo json_encode([
+                'status' => 'success', 
+                'message' => 'Respaldo realizado satisfactoriamente'
+            ]);
+        } else {
+            echo json_encode(['status' => 'error', 'message' => 'No se pudo escribir el archivo en el servidor.']);
+        }
+    } catch (\Throwable $t) {
+        echo json_encode(['status' => 'error', 'message' => 'Error Fatal: ' . $t->getMessage()]);
+    }
+    exit; // Detiene la ejecución para no cargar el resto del HTML/plantilla
 }
 
-// 3. PROCESO DE ENVÍO DE EMAIL CON PHPMAILER
+// B) ENVÍO DE EMAIL
 if (isset($_POST['action']) && $_POST['action'] === 'enviar_email') {
-    header('Content-Type: application/json');
-
-    require_once '../generar_automatico/PHPMailer/src/Exception.php';
-    require_once '../generar_automatico/PHPMailer/src/PHPMailer.php';
-    require_once '../generar_automatico/PHPMailer/src/SMTP.php';
-
-    $destinatario = filter_var($_POST['email'] ?? '', FILTER_VALIDATE_EMAIL);
-    // Se recibe el HTML codificado y se decodifica para evitar bloqueos del servidor
-    $htmlContent = urldecode($_POST['html'] ?? '');
-
-    if (!$destinatario || empty($htmlContent)) {
-        echo json_encode(['status' => 'error', 'message' => 'Email o contenido inválido.']);
-        exit;
+    while (ob_get_level()) {
+        ob_end_clean();
     }
+    
+    header('Content-Type: application/json; charset=utf-8');
 
-    $mail = new PHPMailer(true);
     try {
+        $phpmailer_path = '../generar_automatico/PHPMailer/src/';
+        if (!file_exists($phpmailer_path . 'PHPMailer.php')) {
+            echo json_encode([
+                'status' => 'error', 
+                'message' => 'Ruta de PHPMailer no encontrada en: ' . $phpmailer_path
+            ]);
+            exit;
+        }
+
+        require_once $phpmailer_path . 'Exception.php';
+        require_once $phpmailer_path . 'PHPMailer.php';
+        require_once $phpmailer_path . 'SMTP.php';
+
+        $destinatario = filter_var($_POST['email'] ?? '', FILTER_VALIDATE_EMAIL);
+        $htmlContent = urldecode($_POST['html'] ?? '');
+
+        if (!$destinatario || empty($htmlContent)) {
+            echo json_encode(['status' => 'error', 'message' => 'Email o contenido del gráfico está vacío.']);
+            exit;
+        }
+
+        $mail = new PHPMailer(true);
         $mail->isSMTP();
         $mail->Host       = 'localhost'; 
         $mail->SMTPAuth   = false;
@@ -357,14 +397,24 @@ if (isset($_POST['action']) && $_POST['action'] === 'enviar_email') {
         $mail->send();
         echo json_encode(['status' => 'success', 'message' => 'Correo enviado correctamente a ' . $destinatario]);
     } catch (Exception $e) {
-        echo json_encode(['status' => 'error', 'message' => 'Error PHPMailer: ' . $mail->ErrorInfo]);
+        echo json_encode(['status' => 'error', 'message' => 'Error PHPMailer: ' . $e->getMessage()]);
+    } catch (\Throwable $t) {
+        echo json_encode(['status' => 'error', 'message' => 'Error Fatal PHP: ' . $t->getMessage()]);
     }
     exit;
 }
 
-// 4. CONSULTAS A LA BASE DE DATOS
+// =========================================================================
+// 2. CONEXIÓN A BASE DE DATOS Y CONSULTAS
+// =========================================================================
+if (file_exists('conexion.php')) {
+    include_once('conexion.php');
+} elseif (file_exists('../conexion.php')) {
+    include_once('../conexion.php');
+}
+
 $data_contratos = [];
-if (isset($conn)) {
+if (isset($conn) && $conn instanceof mysqli && !$conn->connect_error) {
     $sql = "SELECT numero, nombres, router FROM contratos WHERE caja = 0";
     $result = $conn->query($sql);
     if ($result) {
@@ -373,8 +423,7 @@ if (isset($conn)) {
 }
 
 $data_personal = [];
-if (isset($conn)) {
-    // Consulta usando el campo 'mail'
+if (isset($conn) && $conn instanceof mysqli && !$conn->connect_error) {
     $sql_p = "SELECT id, nombres, mail FROM personal WHERE mail IS NOT NULL AND mail != ''";
     $res_p = $conn->query($sql_p);
     if ($res_p) {
@@ -415,6 +464,8 @@ if (isset($conn)) {
     .btn-pdf:hover { background-color: #b91c1c; }
     .btn-mail { background-color: #d97706; }
     .btn-mail:hover { background-color: #b45309; }
+    .btn-respaldo { background-color: #8b5cf6; }
+    .btn-respaldo:hover { background-color: #7c3aed; }
 
     /* ESTILOS DE LA BURBUJA */
     .mail-bubble-container {
@@ -534,6 +585,9 @@ if (isset($conn)) {
     <button class="btn-action" onclick="document.getElementById('file-input').click()">
         📤 Cargar Avance
     </button>
+    <button class="btn-action btn-respaldo" onclick="respaldarEnServidor(true)">
+        💾 Respaldo
+    </button>
     <button class="btn-action btn-pdf" onclick="exportarPDF()">
         📄 Exportar a PDF
     </button>
@@ -593,7 +647,41 @@ if (isset($conn)) {
     const hexCol = ["#0000FF", "#FFA500", "#008000", "#8B4513", "#808080", "#E6E6E6", "#FF0000", "#000000"];
     const atenuacionSplitter = {'1': 0.5, '2': 3.5, '4': 7.0, '8': 10.5, '16': 14.0, '32': 17.5, '64': 21.0};
 
-    // MOSTRAR / OCULTAR LA BURBUJA DE MAIL
+    function respaldarEnServidor(mostrarAlerta = false) {
+        const data = obtenerObjetoEstado();
+        const jsonStr = JSON.stringify(data, null, 2);
+
+        const dataForm = new FormData();
+        dataForm.append('action', 'crear_respaldo');
+        dataForm.append('data_json', jsonStr);
+
+        fetch(window.location.href, {
+            method: 'POST',
+            body: dataForm
+        })
+        .then(async res => {
+            const text = await res.text();
+            try {
+                return JSON.parse(text);
+            } catch (err) {
+                if (mostrarAlerta) {
+                    alert('El servidor no devolvió un JSON válido. Detalle:\n\n' + text.substring(0, 200));
+                }
+                throw new Error('Formato de respuesta incorrecto.');
+            }
+        })
+        .then(res => {
+            if (res.status === 'success') {
+                if (mostrarAlerta) alert(res.message);
+            } else {
+                if (mostrarAlerta) alert('Error: ' + res.message);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+        });
+    }
+
     function toggleMailBubble() {
         const bubble = document.getElementById('mail-bubble');
         const display = bubble.style.display === 'block' ? 'none' : 'block';
@@ -603,32 +691,28 @@ if (isset($conn)) {
         }
     }
 
-    // POBLAR EL SELECT UTILIZANDO LA PROPIEDAD 'mail'
     function poblarSelectPersonal(lista) {
         const select = document.getElementById('select-personal');
         select.innerHTML = '<option value="">-- Seleccione un destinatario --</option>';
         lista.forEach(p => {
             const opt = document.createElement('option');
-            opt.value = p.mail;
+            opt.value = p.mail || ''; 
             opt.textContent = p.nombres;
             select.appendChild(opt);
         });
     }
 
-    // FILTRAR PERSONAL EN EL SELECT
     function filtrarPersonalSelect(input) {
         const query = input.value.toUpperCase();
         const filtrados = personal.filter(p => p.nombres.toUpperCase().includes(query) || (p.mail && p.mail.toUpperCase().includes(query)));
         poblarSelectPersonal(filtrados);
     }
 
-    // SELECCIONAR MAIL Y ASIGNARLO AL CAMPO CORRESPONDIENTE
     function seleccionarDestinatario(select) {
         const emailInput = document.getElementById('email-target');
         emailInput.value = select.value;
     }
 
-    // PROCESAR ENVÍO VÍA FETCH AJAX CON CODIFICACIÓN SEGURA
     function procesarEnvioMail() {
         const mailInput = document.getElementById('email-target').value;
         if (!mailInput) {
@@ -644,7 +728,6 @@ if (isset($conn)) {
         dataForm.append('action', 'enviar_email');
         dataForm.append('email', mailInput);
         
-        // Uso de encodeURIComponent para evitar que WAF/Servidor aborte la petición por caracteres HTML
         const htmlLimpio = encodeURIComponent(document.getElementById('root-branch').innerHTML);
         dataForm.append('html', htmlLimpio);
 
@@ -657,18 +740,21 @@ if (isset($conn)) {
             try {
                 return JSON.parse(text);
             } catch (err) {
-                console.error('Respuesta bruta del servidor:', text);
-                throw new Error('El servidor devolvió una respuesta no válida. Revisa la consola F12 para más detalles.');
+                console.error('Respuesta recibida:', text);
+                alert('El servidor no devolvió un JSON válido. Detalle:\n\n' + text.substring(0, 200));
+                throw new Error('Formato de respuesta incorrecto.');
             }
         })
         .then(res => {
-            alert(res.message);
             if (res.status === 'success') {
+                alert(res.message);
                 toggleMailBubble();
+            } else {
+                alert('Error: ' + res.message);
             }
         })
         .catch(err => {
-            alert('Error: ' + err.message);
+            console.error(err);
         });
     }
 
@@ -727,6 +813,8 @@ if (isset($conn)) {
     function guardarEstado() {
         const data = obtenerObjetoEstado();
         localStorage.setItem('config_red', JSON.stringify(data));
+        // Guarda de forma automática silenciosa en el servidor (sin alertar)
+        respaldarEnServidor(false);
     }
 
     function descargarAvance() {

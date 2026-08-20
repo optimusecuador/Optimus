@@ -573,7 +573,7 @@ echo $mensajeAlerta;
             <a href="../configuracion/mikrotik.php" class="boton-azul">Mikrotik</a>
             <a href="../configuracion/nodo/nodo_nuevo.php" class="boton-azul">Nodo</a>
             <a href="../respaldo/index.php" class="boton-azul">Respaldo Bd</a>
-            <a href="../respaldo_mikrotik/index.php" class="boton-azul">Respaldo Mikrotik</a>
+            <a href="../respaldo_mikrotik/index.php" class="boton-azul">Respaldo Mikrotik</a><a href="../respaldo_traccar/index.php" class="boton-azul">Respaldo Traccar</a>
             <a href="../respaldo_olt/index.php" class="boton-azul">Respaldo Olt</a>
         </div>
 

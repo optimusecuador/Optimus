@@ -298,10 +298,11 @@ $mikrotikconfiguracion = "no";
       <!-- InstanceBeginEditable name="principal" -->
 		
 		<?php
-// Configuración de errores y tiempo límite de ejecución
-ini_set('display_errors', 1);
+// Configuración de errores y tiempo límite de ejecución ilimitado para segundo plano
+ini_set('display_errors', 0);
 error_reporting(E_ALL);
-set_time_limit(600); 
+set_time_limit(0); 
+ignore_user_abort(true); // Permite que PHP siga corriendo aunque el usuario cierre el navegador
 
 // Reutilizar la conexión a la base de datos existente
 require_once __DIR__ . '/../conectar.php';
@@ -310,12 +311,12 @@ require_once __DIR__ . '/../conectar.php';
 $dir_base = '/var/www/ALMACENAMIENTO';
 $dir_portadas = realpath(__DIR__ . '/../peliculas') ? realpath(__DIR__ . '/../peliculas') . '/portadas' : __DIR__ . '/../peliculas/portadas';
 
-// Límite máximo de archivos a procesar
-$limite_maximo = 10000;
+// Carpetas a ignorar dentro de $dir_base
+$carpeta_excluida = 'PRINCIPAL';
 
 // Crear carpeta de portadas local si no existe
 if (!file_exists($dir_portadas)) {
-    mkdir($dir_portadas, 0755, true);
+    @mkdir($dir_portadas, 0755, true);
 }
 
 if (!is_dir($dir_base)) {
@@ -456,7 +457,6 @@ function buscarInfoPeliculaTmdb($nombreArchivo, $apiKey, $bearerToken, $mapaCate
     $titulo = $nombreArchivo;
     $anioDetectadoNombre = '';
 
-    // Intentar extraer el año si viene en formato "Pelicula (2022)" o "Pelicula 2022"
     if (preg_match('/^(.*?)\s*[\(\.\[\_\-]?\s*(19\d{2}|20\d{2})\s*[\)\.\]\_\-]?/i', $nombreArchivo, $coincidencias)) {
         $titulo = trim($coincidencias[1]);
         $anioDetectadoNombre = $coincidencias[2];
@@ -491,7 +491,6 @@ function buscarInfoPeliculaTmdb($nombreArchivo, $apiKey, $bearerToken, $mapaCate
         }
     }
 
-    // Reintento sin filtro estricto de año si no devolvió resultados
     if (!$resultadoPelicula && !empty($anioDetectadoNombre)) {
         unset($params['year']);
         $urlTmdbSimple = "https://api.themoviedb.org/3/search/movie?" . http_build_query($params);
@@ -512,12 +511,10 @@ function buscarInfoPeliculaTmdb($nombreArchivo, $apiKey, $bearerToken, $mapaCate
     $anioEstreno = !empty($anioDetectadoNombre) ? $anioDetectadoNombre : 'N/A';
 
     if ($resultadoPelicula) {
-        // 1. Obtener la portada
         if (!empty($resultadoPelicula['poster_path'])) {
             $urlPortada = "https://image.tmdb.org/t/p/w500" . $resultadoPelicula['poster_path'];
         }
 
-        // 2. Mapear géneros
         if (isset($resultadoPelicula['genre_ids']) && is_array($resultadoPelicula['genre_ids'])) {
             $nombresGeneros = [];
             foreach ($resultadoPelicula['genre_ids'] as $idGenero) {
@@ -530,17 +527,14 @@ function buscarInfoPeliculaTmdb($nombreArchivo, $apiKey, $bearerToken, $mapaCate
             }
         }
 
-        // 3. Descripción
         if (!empty($resultadoPelicula['overview'])) {
             $resumenPelicula = trim($resultadoPelicula['overview']);
         }
 
-        // 4. Actores
         if (isset($resultadoPelicula['id'])) {
             $cadenaActores = obtenerActoresTmdb($resultadoPelicula['id'], $apiKey, $bearerToken, 10);
         }
 
-        // 5. Extracción explícita del año de estreno desde TMDb
         $fechaTmdb = $resultadoPelicula['release_date'] ?? $resultadoPelicula['first_air_date'] ?? '';
         if (!empty($fechaTmdb) && strlen($fechaTmdb) >= 4) {
             $anioEstreno = substr($fechaTmdb, 0, 4);
@@ -572,100 +566,22 @@ function procesarMedia($nombreArchivo, $dirPortadas, $apiKey, $bearerToken, $map
     return [$urlRemota, $categorias, $descripcion, $actores, $estreno];
 }
 
-$archivos_procesados = 0;
-$portadas_encontradas = 0;
-
-// Recorrido del directorio
-$iterator = new RecursiveIteratorIterator(
-    new RecursiveDirectoryIterator($dir_base, RecursiveDirectoryIterator::SKIP_DOTS),
-    RecursiveIteratorIterator::SELF_FIRST
-);
-
-// Inserción en BD (PDO / MySQLi)
+// Cargar registros existentes en la BD para mostrar en la tabla inicial
+$listaPeliculas = [];
 if (isset($pdo) && $pdo instanceof PDO) {
-    $sql = "INSERT INTO peliculas (id_peliculas, id_categoria, nombre, descripcion, actores, estreno, fecha, pelicula_url, portada_url) 
-            VALUES (NULL, :id_categoria, :nombre, :descripcion, :actores, :estreno, :fecha, :pelicula_url, :portada_url)";
-    $stmt = $pdo->prepare($sql);
-
-    foreach ($iterator as $item) {
-        if ($archivos_procesados >= $limite_maximo) {
-            break;
-        }
-
-        if ($item->isFile()) {
-            $extension = strtolower(pathinfo($item->getFilename(), PATHINFO_EXTENSION));
-
-            if (in_array($extension, $extensiones_permitidas)) {
-                $nombre = pathinfo($item->getFilename(), PATHINFO_FILENAME);
-                $fecha = date('Y-m-d H:i:s', $item->getMTime());
-                $ruta_completa = str_replace('\\', '/', $item->getPathname());
-
-                list($portada_url, $categoria, $descripcion, $actores, $estreno) = procesarMedia($nombre, $dir_portadas, $tmdb_api_key, $tmdb_bearer_token, $mapaCategorias);
-                
-                if ($portada_url !== '0') {
-                    $portadas_encontradas++;
-                }
-
-                $stmt->execute([
-                    ':id_categoria' => $categoria,
-                    ':nombre'       => $nombre,
-                    ':descripcion'  => $descripcion,
-                    ':actores'      => $actores,
-                    ':estreno'      => $estreno,
-                    ':fecha'        => $fecha,
-                    ':pelicula_url' => $ruta_completa,
-                    ':portada_url'  => $portada_url
-                ]);
-
-                $archivos_procesados++;
-            }
-        }
-    }
-
-    $stmtResultados = $pdo->query("SELECT * FROM peliculas ORDER BY id_peliculas DESC LIMIT " . intval($limite_maximo));
-    $listaPeliculas = $stmtResultados->fetchAll(PDO::FETCH_ASSOC);
-
+    $stmtResultados = $pdo->query("SELECT * FROM peliculas ORDER BY id_peliculas DESC LIMIT 50");
+    $listaPeliculas = $stmtResultados ? $stmtResultados->fetchAll(PDO::FETCH_ASSOC) : [];
 } elseif (isset($conn) && ($conn instanceof mysqli || is_resource($conn))) {
-    $sql = "INSERT INTO peliculas (id_peliculas, id_categoria, nombre, descripcion, actores, estreno, fecha, pelicula_url, portada_url) 
-            VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?)";
-    $stmt = $conn->prepare($sql);
-
-    foreach ($iterator as $item) {
-        if ($archivos_procesados >= $limite_maximo) {
-            break;
-        }
-
-        if ($item->isFile()) {
-            $extension = strtolower(pathinfo($item->getFilename(), PATHINFO_EXTENSION));
-
-            if (in_array($extension, $extensiones_permitidas)) {
-                $nombre = pathinfo($item->getFilename(), PATHINFO_FILENAME);
-                $fecha = date('Y-m-d H:i:s', $item->getMTime());
-                $ruta_completa = str_replace('\\', '/', $item->getPathname());
-
-                list($portada_url, $categoria, $descripcion, $actores, $estreno) = procesarMedia($nombre, $dir_portadas, $tmdb_api_key, $tmdb_bearer_token, $mapaCategorias);
-                
-                if ($portada_url !== '0') {
-                    $portadas_encontradas++;
-                }
-
-                $stmt->bind_param('ssssssss', $categoria, $nombre, $descripcion, $actores, $estreno, $fecha, $ruta_completa, $portada_url);
-                $stmt->execute();
-
-                $archivos_procesados++;
-            }
+    $resResultados = $conn->query("SELECT * FROM peliculas ORDER BY id_peliculas DESC LIMIT 50");
+    if ($resResultados) {
+        while ($row = $resResultados->fetch_assoc()) {
+            $listaPeliculas[] = $row;
         }
     }
-    $stmt->close();
-
-    $resResultados = $conn->query("SELECT * FROM peliculas ORDER BY id_peliculas DESC LIMIT " . intval($limite_maximo));
-    $listaPeliculas = [];
-    while ($row = $resResultados->fetch_assoc()) {
-        $listaPeliculas[] = $row;
-    }
-} else {
-    die("Error: No se encontró la variable de conexión ($pdo o $conn) desde ../conectar.php.");
 }
+
+// Iniciar captura del búfer de salida para responder inmediatamente al cliente
+ob_start();
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -674,16 +590,52 @@ if (isset($pdo) && $pdo instanceof PDO) {
     <title>Resultado de Indexación</title>
     <style>
         body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; }
-        .container { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .container { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); margin-bottom: 20px; position: relative; }
         h1, h2 { color: #2c3e50; }
         .success { color: #27ae60; font-weight: bold; }
         
+        .toast-burbuja {
+            position: fixed;
+            top: 25px;
+            right: 25px;
+            background-color: #2c3e50;
+            color: #ffffff;
+            padding: 16px 24px;
+            border-radius: 50px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            z-index: 9999;
+            animation: fadeIn 0.4s ease-out;
+            border-left: 5px solid #3498db;
+        }
+
+        .toast-burbuja .spinner {
+            width: 18px;
+            height: 18px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #3498db;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #fff; table-layout: fixed; }
         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; vertical-align: top; }
         th { background-color: #34495e; color: white; }
         tr:nth-child(even) { background-color: #f9f9f9; }
         
-        /* Definición de anchos de columnas */
         .col-id { width: 40px; }
         .col-portada { width: 100px; }
         .col-nombre { width: 12%; }
@@ -709,26 +661,24 @@ if (isset($pdo) && $pdo instanceof PDO) {
             word-break: break-word; 
         }
 
-        .actores-text {
-            color: #2c3e50;
-            font-weight: 500;
-        }
-
-        .ruta-text {
-            font-size: 11px;
-            color: #666;
-            word-break: break-all;
-        }
+        .actores-text { color: #2c3e50; font-weight: 500; }
+        .ruta-text { font-size: 11px; color: #666; word-break: break-all; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Escaneo de Películas con TMDb</h1>
-        <p class="success">Se procesaron <?php echo $archivos_procesados; ?> películas correctamente.</p>
-        <p><strong>Portadas obtenidas:</strong> <?php echo $portadas_encontradas; ?> / <?php echo $archivos_procesados; ?></p>
+
+    <div class="toast-burbuja" id="burbuja-notificacion">
+        <div class="spinner"></div>
+        <span>Indexación iniciada (Carpeta 'PRINCIPAL' excluida)...</span>
     </div>
 
-    <h2>Registros en la Base de Datos (`peliculas`)</h2>
+    <div class="container">
+        <h1>Escaneo de Películas con TMDb</h1>
+        <p class="success">El escaneo ha sido iniciado correctamente.</p>
+        <p>Se procesarán los archivos disponibles ignorando la carpeta <strong>/ALMACENAMIENTO/PRINCIPAL</strong>.</p>
+    </div>
+
+    <h2>Últimos Registros en la Base de Datos (`peliculas`)</h2>
     <table>
         <thead>
             <tr>
@@ -781,13 +731,136 @@ if (isset($pdo) && $pdo instanceof PDO) {
                 <?php endforeach; ?>
             <?php else: ?>
                 <tr>
-                    <td colspan="9" style="text-align:center;">No se encontraron registros.</td>
+                    <td colspan="9" style="text-align:center;">No se encontraron registros previos.</td>
                 </tr>
             <?php endif; ?>
         </tbody>
     </table>
+
+    <script>
+        setTimeout(() => {
+            const burbuja = document.getElementById('burbuja-notificacion');
+            if(burbuja) {
+                burbuja.style.transition = "opacity 0.6s ease, transform 0.6s ease";
+                burbuja.style.opacity = "0";
+                burbuja.style.transform = "translateY(-20px)";
+                setTimeout(() => burbuja.remove(), 600);
+            }
+        }, 6000);
+    </script>
 </body>
 </html>
+<?php
+// Enviar respuesta inmediata al navegador y cerrar conexión HTTP
+$size = ob_get_length();
+header("Content-Length: $size");
+header('Connection: close');
+ob_end_flush();
+@ob_flush();
+flush();
+
+if (session_id()) {
+    session_write_close();
+}
+
+if (function_exists('fastcgi_finish_request')) {
+    fastcgi_finish_request();
+}
+
+// =========================================================================
+// CONTINUACIÓN DEL PROCESO EN SEGUNDO PLANO
+// =========================================================================
+
+$iterator = new RecursiveIteratorIterator(
+    new RecursiveDirectoryIterator($dir_base, RecursiveDirectoryIterator::SKIP_DOTS),
+    RecursiveIteratorIterator::SELF_FIRST
+);
+
+$rutaExcluida = rtrim(str_replace('\\', '/', $dir_base), '/') . '/' . $carpeta_excluida . '/';
+
+if (isset($pdo) && $pdo instanceof PDO) {
+    $sql = "INSERT INTO peliculas (id_peliculas, id_categoria, nombre, descripcion, actores, estreno, fecha, pelicula_url, portada_url) 
+            VALUES (NULL, :id_categoria, :nombre, :descripcion, :actores, :estreno, :fecha, :pelicula_url, :portada_url)";
+    $stmt = $pdo->prepare($sql);
+
+    foreach ($iterator as $item) {
+        if ($item->isFile()) {
+            $ruta_completa = str_replace('\\', '/', $item->getPathname());
+
+            // Omitir cualquier archivo dentro de la carpeta PRINCIPAL
+            if (stripos($ruta_completa, $rutaExcluida) === 0 || stripos($ruta_completa, '/' . $carpeta_excluida . '/') !== false) {
+                continue;
+            }
+
+            $extension = strtolower(pathinfo($item->getFilename(), PATHINFO_EXTENSION));
+
+            if (in_array($extension, $extensiones_permitidas)) {
+                $nombre = pathinfo($item->getFilename(), PATHINFO_FILENAME);
+                $fecha = date('Y-m-d H:i:s', $item->getMTime());
+
+                // Omitir si la película ya existe en la base de datos
+                $chk = $pdo->prepare("SELECT id_peliculas FROM peliculas WHERE pelicula_url = :url LIMIT 1");
+                $chk->execute([':url' => $ruta_completa]);
+                if ($chk->fetch()) {
+                    continue;
+                }
+
+                list($portada_url, $categoria, $descripcion, $actores, $estreno) = procesarMedia($nombre, $dir_portadas, $tmdb_api_key, $tmdb_bearer_token, $mapaCategorias);
+
+                $stmt->execute([
+                    ':id_categoria' => $categoria,
+                    ':nombre'       => $nombre,
+                    ':descripcion'  => $descripcion,
+                    ':actores'      => $actores,
+                    ':estreno'      => $estreno,
+                    ':fecha'        => $fecha,
+                    ':pelicula_url' => $ruta_completa,
+                    ':portada_url'  => $portada_url
+                ]);
+            }
+        }
+    }
+
+} elseif (isset($conn) && ($conn instanceof mysqli || is_resource($conn))) {
+    $sql = "INSERT INTO peliculas (id_peliculas, id_categoria, nombre, descripcion, actores, estreno, fecha, pelicula_url, portada_url) 
+            VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $stmt = $conn->prepare($sql);
+
+    foreach ($iterator as $item) {
+        if ($item->isFile()) {
+            $ruta_completa = str_replace('\\', '/', $item->getPathname());
+
+            // Omitir cualquier archivo dentro de la carpeta PRINCIPAL
+            if (stripos($ruta_completa, $rutaExcluida) === 0 || stripos($ruta_completa, '/' . $carpeta_excluida . '/') !== false) {
+                continue;
+            }
+
+            $extension = strtolower(pathinfo($item->getFilename(), PATHINFO_EXTENSION));
+
+            if (in_array($extension, $extensiones_permitidas)) {
+                $nombre = pathinfo($item->getFilename(), PATHINFO_FILENAME);
+                $fecha = date('Y-m-d H:i:s', $item->getMTime());
+
+                // Omitir si la película ya existe en la base de datos
+                $chk = $conn->prepare("SELECT id_peliculas FROM peliculas WHERE pelicula_url = ? LIMIT 1");
+                $chk->bind_param('s', $ruta_completa);
+                $chk->execute();
+                $res = $chk->get_result();
+                if ($res && $res->num_rows > 0) {
+                    continue;
+                }
+
+                list($portada_url, $categoria, $descripcion, $actores, $estreno) = procesarMedia($nombre, $dir_portadas, $tmdb_api_key, $tmdb_bearer_token, $mapaCategorias);
+
+                $stmt->bind_param('ssssssss', $categoria, $nombre, $descripcion, $actores, $estreno, $fecha, $ruta_completa, $portada_url);
+                $stmt->execute();
+            }
+        }
+    }
+    $stmt->close();
+}
+exit;
+	?>
 		<!-- InstanceEndEditable --></main>
   </div>
 

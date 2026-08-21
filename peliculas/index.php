@@ -124,11 +124,33 @@ if ($resultado) {
             width: 100%;
         }
 
+        /* Contenedor de la portada con posicionamiento relativo */
+        .portada-container {
+            position: relative;
+            width: 100%;
+        }
+
         .pelicula-portada {
             width: 100%;
             aspect-ratio: 2 / 3;
             object-fit: cover;
             background-color: #eee;
+            display: block;
+        }
+
+        /* Logo superpuesto: Reducido un 25% (max-width: 120px) manteniendo el fondo con 50% de transparencia */
+        .logo-empresa-overlay {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            max-width: 120px;
+            max-height: 60px;
+            object-fit: contain;
+            background-color: rgba(255, 255, 255, 0.5);
+            padding: 5px 8px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            pointer-events: none;
         }
 
         .pelicula-info {
@@ -218,7 +240,12 @@ if ($resultado) {
                 data-titulo="<?php echo htmlspecialchars(mb_strtolower($nombre, 'UTF-8')); ?>" 
                 data-categorias="<?php echo htmlspecialchars($cats_atributo); ?>"
             >
-                <img src="<?php echo htmlspecialchars($portada); ?>" alt="Portada de <?php echo htmlspecialchars($nombre); ?>" class="pelicula-portada">
+                <!-- PORTADA CON LOGO SUPERPUESTO (REDUCIDO 25%) -->
+                <div class="portada-container">
+                    <img src="<?php echo htmlspecialchars($portada); ?>" alt="Portada de <?php echo htmlspecialchars($nombre); ?>" class="pelicula-portada">
+                    <img src="../images/empresa/logo.png" alt="Logo Empresa" class="logo-empresa-overlay">
+                </div>
+
                 <div class="pelicula-info">
                     <h3><?php echo htmlspecialchars($nombre); ?></h3>
                     <div>

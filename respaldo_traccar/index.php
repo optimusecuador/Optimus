@@ -203,6 +203,7 @@ $mikrotikconfiguracion = "no";
       <a href="../truenas/truenas.php"><i data-lucide="hard-drive"></i> NAS</a>
       <a href="../traccar/traccar.php"><i data-lucide="map-pin"></i> Rastreo</a>
       <a href="../streaming/index.php"><i data-lucide="play-circle"></i> Streaming</a>
+      <a href="../peliculas/index.php"><i data-lucide="play-circle"></i> Peliculas</a>
       <a href="../zkteco/index.php"><i data-lucide="fingerprint"></i> ZKTeco</a>
 	  <a href="../red/index.php"><i data-lucide="shield-check"></i> Mapeo Red</a>
 	  <a href="../redvirtual/index.php"><i data-lucide="shield-check"></i> Red Virtual</a>
@@ -607,7 +608,7 @@ if (isset($conexion) && $conexion instanceof mysqli) {
   </div>
 
   <!--<script src="https://unpkg.com/lucide@latest"></script>-->
-  <script src="../js/lucide@latest.js"></script>
+  <script src="../js/lucide%40latest.js"></script>
   <!--<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>-->
   <script src="../js/chart.js"></script>
   <script src="../js/app.js"></script>

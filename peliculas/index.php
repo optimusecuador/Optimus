@@ -203,7 +203,7 @@ $mikrotikconfiguracion = "no";
       <a href="../truenas/truenas.php"><i data-lucide="hard-drive"></i> NAS</a>
       <a href="../traccar/traccar.php"><i data-lucide="map-pin"></i> Rastreo</a>
       <a href="../streaming/index.php"><i data-lucide="play-circle"></i> Streaming</a>
-      <a href="../peliculas/index.php"><i data-lucide="play-circle"></i> Peliculas</a>
+      <a href="index.php"><i data-lucide="play-circle"></i> Peliculas</a>
       <a href="../zkteco/index.php"><i data-lucide="fingerprint"></i> ZKTeco</a>
 	  <a href="../red/index.php"><i data-lucide="shield-check"></i> Mapeo Red</a>
 	  <a href="../redvirtual/index.php"><i data-lucide="shield-check"></i> Red Virtual</a>
@@ -213,7 +213,7 @@ $mikrotikconfiguracion = "no";
       <summary class="menu-label">SISTEMA</summary>
       <a href="../estado/index.php"><i data-lucide="badge-check"></i> Estado Contrato</a>
       <a href="#"><i data-lucide="calculator"></i> Contabilidad</a>
-      <a href="index.php"><i data-lucide="settings"></i> Configuración</a>
+      <a href="../configuracion/index.php"><i data-lucide="settings"></i> Configuración</a>
     </details>
   </nav>
 </aside>
@@ -296,62 +296,7 @@ $mikrotikconfiguracion = "no";
     <main class="content">
       
       <section class="metric-grid"></section>
-      <!-- InstanceBeginEditable name="principal" -->
-	<div>
-    <h2 style='color:white'>TRUENAS</h2>
-</div>
-
-<?php 
-// Inicialización de variables para TrueNAS
-$truenas_url = "Vacio";
-$api_key = "Vacio";
-?>
-
-<!-- Column -->
-<?php 
-// Buscamos el registro en la tabla truenas
-$sql_tn = "SELECT api, ip FROM `truenas` LIMIT 1";
-$result_tn = mysqli_query($con, $sql_tn);
-
-// Si existe el registro, asignamos los valores
-if ($result_tn && mysqli_num_rows($result_tn) > 0) {
-    $row_tn = mysqli_fetch_assoc($result_tn);
-    $truenas_url = $row_tn['ip'];
-    $api_key = $row_tn['api'];
-}
-?>	
-
-<div class="panel-dark">
-    <div class="cliente-info-title">Configuración TrueNAS</div>
-    
-    <form action="guardar_truenas.php" method="post" name="form_truenas" id="form_truenas">
-        <table width="90%" class="table-dark">
-            <tbody>
-                <tr>
-                    <td><strong>IP de acceso (URL):</strong></td>
-                    <td><input class="clientes-input" name="ip" type="text" id="ip" value="<?php echo htmlspecialchars($truenas_url); ?>"></td>
-                    <td><strong>API Key:</strong></td>
-                    <td><input class="clientes-input" name="api" type="text" id="api" value="<?php echo htmlspecialchars($api_key); ?>"></td>
-                </tr>
-                <tr>
-                  <td colspan="4" align="center"><br>
-                      <span class="buttons">
-                          <?php 
-                            $accion = ($truenas_url == "Vacio") ? "nuevo" : "editar";
-                            ?>
-                            <input name="iporiginal" type="hidden" id="iporiginal" value=<?php echo $truenas_url;?>>
-                          <input name="accion" type="hidden" id="accion" value="<?php echo $accion; ?>">
-                          <input name="submit2" type="submit" class="boton-azul" id="submit2" value="GUARDAR">
-                      </span>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    </form>
-</div>
-
-<p>&nbsp;</p>
-	  <!-- InstanceEndEditable --></main>
+      <!-- InstanceBeginEditable name="principal" -->aaaaaaaaaaaaaaaaaa<!-- InstanceEndEditable --></main>
   </div>
 
   <!--<script src="https://unpkg.com/lucide@latest"></script>-->

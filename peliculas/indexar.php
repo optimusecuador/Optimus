@@ -298,10 +298,11 @@ $mikrotikconfiguracion = "no";
       <!-- InstanceBeginEditable name="principal" -->
 		
 		<?php
-// Configuración de errores y tiempo límite de ejecución
-ini_set('display_errors', 1);
+// Configuración de errores y tiempo límite de ejecución ilimitado para segundo plano
+ini_set('display_errors', 0);
 error_reporting(E_ALL);
-set_time_limit(600); 
+set_time_limit(0); 
+ignore_user_abort(true); // Permite que PHP siga corriendo aunque el usuario cierre el navegador
 
 // Reutilizar la conexión a la base de datos existente
 require_once __DIR__ . '/../conectar.php';
@@ -315,7 +316,7 @@ $limite_maximo = 10;
 
 // Crear carpeta de portadas local si no existe
 if (!file_exists($dir_portadas)) {
-    mkdir($dir_portadas, 0755, true);
+    @mkdir($dir_portadas, 0755, true);
 }
 
 if (!is_dir($dir_base)) {
@@ -423,15 +424,42 @@ function obtenerMapaCategoriasTmdb($apiKey, $bearerToken) {
 $mapaCategorias = obtenerMapaCategoriasTmdb($tmdb_api_key, $tmdb_bearer_token);
 
 /**
- * Busca la película en TMDb y retorna [URL Portada, Categorías, Resumen]
+ * Obtiene los primeros N actores del reparto principal de una película
+ */
+function obtenerActoresTmdb($idPeliculaTmdb, $apiKey, $bearerToken, $limiteActores = 10) {
+    $params = ['language' => 'es-MX'];
+    if (!empty($apiKey)) {
+        $params['api_key'] = trim($apiKey);
+    }
+
+    $urlCredits = "https://api.themoviedb.org/3/movie/{$idPeliculaTmdb}/credits?" . http_build_query($params);
+    $json = ejecutarCurlTmdb($urlCredits, $bearerToken);
+
+    if ($json) {
+        $data = json_decode($json, true);
+        if (isset($data['cast']) && is_array($data['cast'])) {
+            $actores = [];
+            foreach (array_slice($data['cast'], 0, $limiteActores) as $castItem) {
+                if (!empty($castItem['name'])) {
+                    $actores[] = $castItem['name'];
+                }
+            }
+            return implode(', ', $actores);
+        }
+    }
+    return 'Sin Actores Registrados';
+}
+
+/**
+ * Busca la película en TMDb y retorna [URL Portada, Categorías, Resumen, Actores, Estreno]
  */
 function buscarInfoPeliculaTmdb($nombreArchivo, $apiKey, $bearerToken, $mapaCategorias) {
     $titulo = $nombreArchivo;
-    $anio = '';
+    $anioDetectadoNombre = '';
 
-    if (preg_match('/^(.*?)\s*\((19\d{2}|20\d{2})\)/', $nombreArchivo, $coincidencias)) {
+    if (preg_match('/^(.*?)\s*[\(\.\[\_\-]?\s*(19\d{2}|20\d{2})\s*[\)\.\]\_\-]?/i', $nombreArchivo, $coincidencias)) {
         $titulo = trim($coincidencias[1]);
-        $anio = $coincidencias[2];
+        $anioDetectadoNombre = $coincidencias[2];
     } else {
         $titulo = preg_replace('/[._-]/', ' ', $nombreArchivo);
         $titulo = preg_replace('/\b(1080p|720p|4k|2160p|bluray|brrip|web-dl|x264|x265)\b/i', '', $titulo);
@@ -444,8 +472,8 @@ function buscarInfoPeliculaTmdb($nombreArchivo, $apiKey, $bearerToken, $mapaCate
         'include_adult' => 'false'
     ];
 
-    if (!empty($anio)) {
-        $params['year'] = $anio;
+    if (!empty($anioDetectadoNombre)) {
+        $params['year'] = $anioDetectadoNombre;
     }
 
     if (!empty($apiKey)) {
@@ -463,8 +491,7 @@ function buscarInfoPeliculaTmdb($nombreArchivo, $apiKey, $bearerToken, $mapaCate
         }
     }
 
-    // Reintento sin filtro de año si no devolvió resultados
-    if (!$resultadoPelicula && !empty($anio)) {
+    if (!$resultadoPelicula && !empty($anioDetectadoNombre)) {
         unset($params['year']);
         $urlTmdbSimple = "https://api.themoviedb.org/3/search/movie?" . http_build_query($params);
         $jsonTmdbSimple = ejecutarCurlTmdb($urlTmdbSimple, $bearerToken);
@@ -480,14 +507,14 @@ function buscarInfoPeliculaTmdb($nombreArchivo, $apiKey, $bearerToken, $mapaCate
     $urlPortada = '0';
     $cadenaCategorias = 'Sin Categoría';
     $resumenPelicula = 'Sin descripción disponible';
+    $cadenaActores = 'Sin Actores Registrados';
+    $anioEstreno = !empty($anioDetectadoNombre) ? $anioDetectadoNombre : 'N/A';
 
     if ($resultadoPelicula) {
-        // 1. Obtener la portada
         if (!empty($resultadoPelicula['poster_path'])) {
             $urlPortada = "https://image.tmdb.org/t/p/w500" . $resultadoPelicula['poster_path'];
         }
 
-        // 2. Mapear y convertir los IDs de género a nombres separados por coma
         if (isset($resultadoPelicula['genre_ids']) && is_array($resultadoPelicula['genre_ids'])) {
             $nombresGeneros = [];
             foreach ($resultadoPelicula['genre_ids'] as $idGenero) {
@@ -500,20 +527,28 @@ function buscarInfoPeliculaTmdb($nombreArchivo, $apiKey, $bearerToken, $mapaCate
             }
         }
 
-        // 3. Obtener la descripción / resumen
         if (!empty($resultadoPelicula['overview'])) {
             $resumenPelicula = trim($resultadoPelicula['overview']);
         }
+
+        if (isset($resultadoPelicula['id'])) {
+            $cadenaActores = obtenerActoresTmdb($resultadoPelicula['id'], $apiKey, $bearerToken, 10);
+        }
+
+        $fechaTmdb = $resultadoPelicula['release_date'] ?? $resultadoPelicula['first_air_date'] ?? '';
+        if (!empty($fechaTmdb) && strlen($fechaTmdb) >= 4) {
+            $anioEstreno = substr($fechaTmdb, 0, 4);
+        }
     }
 
-    return [$urlPortada, $cadenaCategorias, $resumenPelicula];
+    return [$urlPortada, $cadenaCategorias, $resumenPelicula, $cadenaActores, $anioEstreno];
 }
 
 /**
- * Descarga y guarda la imagen válida en disco, retornando portada, categorías y resumen
+ * Procesar archivo local e información remota
  */
 function procesarMedia($nombreArchivo, $dirPortadas, $apiKey, $bearerToken, $mapaCategorias) {
-    list($urlRemota, $categorias, $descripcion) = buscarInfoPeliculaTmdb($nombreArchivo, $apiKey, $bearerToken, $mapaCategorias);
+    list($urlRemota, $categorias, $descripcion, $actores, $estreno) = buscarInfoPeliculaTmdb($nombreArchivo, $apiKey, $bearerToken, $mapaCategorias);
 
     if ($urlRemota !== '0') {
         $nombreImagenLocal = preg_replace('/[^a-zA-Z0-9_-]/', '_', $nombreArchivo) . '.jpg';
@@ -528,101 +563,25 @@ function procesarMedia($nombreArchivo, $dirPortadas, $apiKey, $bearerToken, $map
         }
     }
 
-    return [$urlRemota, $categorias, $descripcion];
+    return [$urlRemota, $categorias, $descripcion, $actores, $estreno];
 }
 
-$archivos_procesados = 0;
-$portadas_encontradas = 0;
-
-// Recorrido recursivo del directorio
-$iterator = new RecursiveIteratorIterator(
-    new RecursiveDirectoryIterator($dir_base, RecursiveDirectoryIterator::SKIP_DOTS),
-    RecursiveIteratorIterator::SELF_FIRST
-);
-
-// Detección del motor de base de datos ($pdo o $conn)
+// Cargar registros existentes en la BD ANTES de cerrar la salida HTTP
+$listaPeliculas = [];
 if (isset($pdo) && $pdo instanceof PDO) {
-    $sql = "INSERT INTO peliculas (id_peliculas, id_categoria, nombre, descripcion, fecha, pelicula_url, portada_url) 
-            VALUES (NULL, :id_categoria, :nombre, :descripcion, :fecha, :pelicula_url, :portada_url)";
-    $stmt = $pdo->prepare($sql);
-
-    foreach ($iterator as $item) {
-        if ($archivos_procesados >= $limite_maximo) {
-            break;
-        }
-
-        if ($item->isFile()) {
-            $extension = strtolower(pathinfo($item->getFilename(), PATHINFO_EXTENSION));
-
-            if (in_array($extension, $extensiones_permitidas)) {
-                $nombre = pathinfo($item->getFilename(), PATHINFO_FILENAME);
-                $fecha = date('Y-m-d H:i:s', $item->getMTime());
-                $ruta_completa = str_replace('\\', '/', $item->getPathname());
-
-                list($portada_url, $categoria, $descripcion) = procesarMedia($nombre, $dir_portadas, $tmdb_api_key, $tmdb_bearer_token, $mapaCategorias);
-                
-                if ($portada_url !== '0') {
-                    $portadas_encontradas++;
-                }
-
-                $stmt->execute([
-                    ':id_categoria' => $categoria,
-                    ':nombre'       => $nombre,
-                    ':descripcion'  => $descripcion,
-                    ':fecha'        => $fecha,
-                    ':pelicula_url' => $ruta_completa,
-                    ':portada_url'  => $portada_url
-                ]);
-
-                $archivos_procesados++;
-            }
-        }
-    }
-
     $stmtResultados = $pdo->query("SELECT * FROM peliculas ORDER BY id_peliculas DESC LIMIT " . intval($limite_maximo));
-    $listaPeliculas = $stmtResultados->fetchAll(PDO::FETCH_ASSOC);
-
+    $listaPeliculas = $stmtResultados ? $stmtResultados->fetchAll(PDO::FETCH_ASSOC) : [];
 } elseif (isset($conn) && ($conn instanceof mysqli || is_resource($conn))) {
-    $sql = "INSERT INTO peliculas (id_peliculas, id_categoria, nombre, descripcion, fecha, pelicula_url, portada_url) 
-            VALUES (NULL, ?, ?, ?, ?, ?, ?)";
-    $stmt = $conn->prepare($sql);
-
-    foreach ($iterator as $item) {
-        if ($archivos_procesados >= $limite_maximo) {
-            break;
-        }
-
-        if ($item->isFile()) {
-            $extension = strtolower(pathinfo($item->getFilename(), PATHINFO_EXTENSION));
-
-            if (in_array($extension, $extensiones_permitidas)) {
-                $nombre = pathinfo($item->getFilename(), PATHINFO_FILENAME);
-                $fecha = date('Y-m-d H:i:s', $item->getMTime());
-                $ruta_completa = str_replace('\\', '/', $item->getPathname());
-
-                list($portada_url, $categoria, $descripcion) = procesarMedia($nombre, $dir_portadas, $tmdb_api_key, $tmdb_bearer_token, $mapaCategorias);
-                
-                if ($portada_url !== '0') {
-                    $portadas_encontradas++;
-                }
-
-                $stmt->bind_param('ssssss', $categoria, $nombre, $descripcion, $fecha, $ruta_completa, $portada_url);
-                $stmt->execute();
-
-                $archivos_procesados++;
-            }
-        }
-    }
-    $stmt->close();
-
     $resResultados = $conn->query("SELECT * FROM peliculas ORDER BY id_peliculas DESC LIMIT " . intval($limite_maximo));
-    $listaPeliculas = [];
-    while ($row = $resResultados->fetch_assoc()) {
-        $listaPeliculas[] = $row;
+    if ($resResultados) {
+        while ($row = $resResultados->fetch_assoc()) {
+            $listaPeliculas[] = $row;
+        }
     }
-} else {
-    die("Error: No se encontró la variable de conexión ($pdo o $conn) desde ../conectar.php.");
 }
+
+// Activar el búfer de salida para renderizar la página HTML inmediatamente
+ob_start();
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -631,38 +590,109 @@ if (isset($pdo) && $pdo instanceof PDO) {
     <title>Resultado de Indexación</title>
     <style>
         body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; }
-        .container { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .container { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); margin-bottom: 20px; position: relative; }
         h1, h2 { color: #2c3e50; }
         .success { color: #27ae60; font-weight: bold; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #fff; }
+        
+        /* ESTILO DE LA BURBUJA DE NOTIFICACIÓN */
+        .toast-burbuja {
+            position: fixed;
+            top: 25px;
+            right: 25px;
+            background-color: #2c3e50;
+            color: #ffffff;
+            padding: 16px 24px;
+            border-radius: 50px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            z-index: 9999;
+            animation: fadeIn 0.4s ease-out;
+            border-left: 5px solid #3498db;
+        }
+
+        .toast-burbuja .spinner {
+            width: 18px;
+            height: 18px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #3498db;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #fff; table-layout: fixed; }
         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; vertical-align: top; }
         th { background-color: #34495e; color: white; }
         tr:nth-child(even) { background-color: #f9f9f9; }
+        
+        .col-id { width: 40px; }
+        .col-portada { width: 100px; }
+        .col-nombre { width: 12%; }
+        .col-cat { width: 12%; }
+        .col-desc { width: 24%; }
+        .col-actores { width: 15%; }
+        .col-estreno { width: 75px; text-align: center; }
+        .col-fecha { width: 95px; }
+        .col-ruta { width: 12%; }
+
         .img-poster { width: 90px; height: 135px; object-fit: cover; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
         .no-img { width: 90px; height: 135px; background: #e0e0e0; display: flex; align-items: center; justify-content: center; color: #777; font-size: 12px; border-radius: 6px; text-align: center; }
-        .badge-cat { display: inline-block; background: #e1f5fe; color: #0288d1; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
-        .desc-text { font-size: 13px; color: #555; line-height: 1.4; max-width: 300px; }
+        .badge-cat { display: inline-block; background: #e1f5fe; color: #0288d1; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .badge-estreno { display: inline-block; background: #fff3e0; color: #e65100; padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: bold; border: 1px solid #ffe0b2; }
+
+        .desc-text, .actores-text { 
+            font-size: 13px; 
+            color: #555; 
+            line-height: 1.5; 
+            white-space: normal; 
+            word-wrap: break-word; 
+            overflow-wrap: break-word; 
+            word-break: break-word; 
+        }
+
+        .actores-text { color: #2c3e50; font-weight: 500; }
+        .ruta-text { font-size: 11px; color: #666; word-break: break-all; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Escaneo con TMDb finalizado</h1>
-        <p class="success">Se insertaron <?php echo $archivos_procesados; ?> películas en la tabla <code>peliculas</code> (Límite: <?php echo $limite_maximo; ?>).</p>
-        <p><strong>Portadas TMDb obtenidas:</strong> <?php echo $portadas_encontradas; ?> / <?php echo $archivos_procesados; ?></p>
-        <p><strong>Idioma de búsqueda:</strong> Español Latino (es-MX)</p>
+
+    <!-- BURBUJA NOTIFICACIÓN -->
+    <div class="toast-burbuja" id="burbuja-notificacion">
+        <div class="spinner"></div>
+        <span>El proceso se realizará en segundo plano...</span>
     </div>
 
-    <h2>Registros en la Base de Datos (`peliculas`)</h2>
+    <div class="container">
+        <h1>Escaneo de Películas con TMDb</h1>
+        <p class="success">El escaneo ha sido iniciado correctamente.</p>
+        <p>Los archivos se están registrando progresivamente en segundo plano.</p>
+    </div>
+
+    <h2>Últimos Registros en la Base de Datos (`peliculas`)</h2>
     <table>
         <thead>
             <tr>
-                <th>ID</th>
-                <th>Portada</th>
-                <th>Nombre</th>
-                <th>Categorías</th>
-                <th>Descripción (Resumen)</th>
-                <th>Fecha</th>
-                <th>Ruta Película</th>
+                <th class="col-id">ID</th>
+                <th class="col-portada">Portada</th>
+                <th class="col-nombre">Nombre</th>
+                <th class="col-cat">Categorías</th>
+                <th class="col-desc">Descripción</th>
+                <th class="col-actores">Actores</th>
+                <th class="col-estreno">Estreno</th>
+                <th class="col-fecha">Fecha</th>
+                <th class="col-ruta">Ruta Película</th>
             </tr>
         </thead>
         <tbody>
@@ -693,19 +723,148 @@ if (isset($pdo) && $pdo instanceof PDO) {
                         <td><strong><?php echo htmlspecialchars($pelicula['nombre']); ?></strong></td>
                         <td><span class="badge-cat"><?php echo htmlspecialchars($pelicula['id_categoria']); ?></span></td>
                         <td><div class="desc-text"><?php echo htmlspecialchars($pelicula['descripcion']); ?></div></td>
+                        <td><div class="actores-text"><?php echo htmlspecialchars($pelicula['actores'] ?? 'N/A'); ?></div></td>
+                        <td style="text-align: center;">
+                            <span class="badge-estreno"><?php echo htmlspecialchars(!empty($pelicula['estreno']) ? $pelicula['estreno'] : 'N/A'); ?></span>
+                        </td>
                         <td><?php echo htmlspecialchars($pelicula['fecha']); ?></td>
-                        <td><small><?php echo htmlspecialchars($pelicula['pelicula_url']); ?></small></td>
+                        <td><div class="ruta-text"><?php echo htmlspecialchars($pelicula['pelicula_url']); ?></div></td>
                     </tr>
                 <?php endforeach; ?>
             <?php else: ?>
                 <tr>
-                    <td colspan="7">No se encontraron registros en la tabla <code>peliculas</code>.</td>
+                    <td colspan="9" style="text-align:center;">No se encontraron registros previos.</td>
                 </tr>
             <?php endif; ?>
         </tbody>
     </table>
+
+    <script>
+        // Ocultar suavemente la burbuja flotante tras 6 segundos
+        setTimeout(() => {
+            const burbuja = document.getElementById('burbuja-notificacion');
+            if(burbuja) {
+                burbuja.style.transition = "opacity 0.6s ease, transform 0.6s ease";
+                burbuja.style.opacity = "0";
+                burbuja.style.transform = "translateY(-20px)";
+                setTimeout(() => burbuja.remove(), 600);
+            }
+        }, 6000);
+    </script>
 </body>
 </html>
+<?php
+// Enviar toda la vista HTML al cliente inmediatamente
+$size = ob_get_length();
+header("Content-Length: $size");
+header('Connection: close');
+ob_end_flush();
+@ob_flush();
+flush();
+
+// Liberar de forma segura la sesión del cliente si existiera
+if (session_id()) {
+    session_write_close();
+}
+
+// Cierre explícito para FastCGI
+if (function_exists('fastcgi_finish_request')) {
+    fastcgi_finish_request();
+}
+
+// =========================================================================
+// EJECUCIÓN EN SEGUNDO PLANO (PHP CONTINÚA EN EL SERVIDOR)
+// =========================================================================
+
+$archivos_procesados = 0;
+
+$iterator = new RecursiveIteratorIterator(
+    new RecursiveDirectoryIterator($dir_base, RecursiveDirectoryIterator::SKIP_DOTS),
+    RecursiveIteratorIterator::SELF_FIRST
+);
+
+if (isset($pdo) && $pdo instanceof PDO) {
+    $sql = "INSERT INTO peliculas (id_peliculas, id_categoria, nombre, descripcion, actores, estreno, fecha, pelicula_url, portada_url) 
+            VALUES (NULL, :id_categoria, :nombre, :descripcion, :actores, :estreno, :fecha, :pelicula_url, :portada_url)";
+    $stmt = $pdo->prepare($sql);
+
+    foreach ($iterator as $item) {
+        if ($archivos_procesados >= $limite_maximo) {
+            break;
+        }
+
+        if ($item->isFile()) {
+            $extension = strtolower(pathinfo($item->getFilename(), PATHINFO_EXTENSION));
+
+            if (in_array($extension, $extensiones_permitidas)) {
+                $nombre = pathinfo($item->getFilename(), PATHINFO_FILENAME);
+                $fecha = date('Y-m-d H:i:s', $item->getMTime());
+                $ruta_completa = str_replace('\\', '/', $item->getPathname());
+
+                // Evitar duplicados si ya existe la ruta en la BD
+                $chk = $pdo->prepare("SELECT id_peliculas FROM peliculas WHERE pelicula_url = :url LIMIT 1");
+                $chk->execute([':url' => $ruta_completa]);
+                if ($chk->fetch()) {
+                    continue;
+                }
+
+                list($portada_url, $categoria, $descripcion, $actores, $estreno) = procesarMedia($nombre, $dir_portadas, $tmdb_api_key, $tmdb_bearer_token, $mapaCategorias);
+
+                $stmt->execute([
+                    ':id_categoria' => $categoria,
+                    ':nombre'       => $nombre,
+                    ':descripcion'  => $descripcion,
+                    ':actores'      => $actores,
+                    ':estreno'      => $estreno,
+                    ':fecha'        => $fecha,
+                    ':pelicula_url' => $ruta_completa,
+                    ':portada_url'  => $portada_url
+                ]);
+
+                $archivos_procesados++;
+            }
+        }
+    }
+
+} elseif (isset($conn) && ($conn instanceof mysqli || is_resource($conn))) {
+    $sql = "INSERT INTO peliculas (id_peliculas, id_categoria, nombre, descripcion, actores, estreno, fecha, pelicula_url, portada_url) 
+            VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $stmt = $conn->prepare($sql);
+
+    foreach ($iterator as $item) {
+        if ($archivos_procesados >= $limite_maximo) {
+            break;
+        }
+
+        if ($item->isFile()) {
+            $extension = strtolower(pathinfo($item->getFilename(), PATHINFO_EXTENSION));
+
+            if (in_array($extension, $extensiones_permitidas)) {
+                $nombre = pathinfo($item->getFilename(), PATHINFO_FILENAME);
+                $fecha = date('Y-m-d H:i:s', $item->getMTime());
+                $ruta_completa = str_replace('\\', '/', $item->getPathname());
+
+                // Evitar duplicados
+                $chk = $conn->prepare("SELECT id_peliculas FROM peliculas WHERE pelicula_url = ? LIMIT 1");
+                $chk->bind_param('s', $ruta_completa);
+                $chk->execute();
+                $res = $chk->get_result();
+                if ($res && $res->num_rows > 0) {
+                    continue;
+                }
+
+                list($portada_url, $categoria, $descripcion, $actores, $estreno) = procesarMedia($nombre, $dir_portadas, $tmdb_api_key, $tmdb_bearer_token, $mapaCategorias);
+
+                $stmt->bind_param('ssssssss', $categoria, $nombre, $descripcion, $actores, $estreno, $fecha, $ruta_completa, $portada_url);
+                $stmt->execute();
+
+                $archivos_procesados++;
+            }
+        }
+    }
+    $stmt->close();
+}
+exit;
 		<!-- InstanceEndEditable --></main>
   </div>
 

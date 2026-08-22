@@ -935,7 +935,7 @@ $extensiones_permitidas = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4
 // =========================================================================
 $tmdb_api_key = '';
 $tmdb_bearer_token = '';
-$omdb_api_key = ''; // Se obtendrá del campo `api` de la tabla `omdb`
+$omdb_api_key = ''; 
 
 if (isset($pdo) && $pdo instanceof PDO) {
     // TMDb
@@ -967,234 +967,315 @@ if (empty($tmdb_api_key) && empty($tmdb_bearer_token)) {
     die("Error: No se encontraron las credenciales de TMDb en la tabla 'tmdb'.");
 }
 
-function ejecutarCurl($url, $headers = []) {
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+// =========================================================================
+// FUNCIONES (Protegidas contra re-declaración)
+// =========================================================================
 
-    if (!empty($headers)) {
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+if (!function_exists('ejecutarCurl')) {
+    function ejecutarCurl($url, $headers = []) {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+
+        if (!empty($headers)) {
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        }
+
+        $respuesta = curl_exec($ch);
+        curl_close($ch);
+        return $respuesta;
     }
-
-    $respuesta = curl_exec($ch);
-    curl_close($ch);
-    return $respuesta;
 }
 
-function descargarImagenDirecta($urlImagen) {
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $urlImagen);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-    
-    $data = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
+if (!function_exists('descargarImagenDirecta')) {
+    function descargarImagenDirecta($urlImagen) {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $urlImagen);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        
+        $data = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
 
-    if ($httpCode === 200 && $data !== false) {
-        return $data;
+        if ($httpCode === 200 && $data !== false) {
+            return $data;
+        }
+        return false;
     }
-    return false;
 }
 
-function obtenerMapaCategoriasTmdb($apiKey, $bearerToken) {
-    $params = ['language' => 'es-MX'];
-    if (!empty($apiKey)) {
-        $params['api_key'] = trim($apiKey);
-    }
-    $urlGenres = "https://api.themoviedb.org/3/genre/movie/list?" . http_build_query($params);
-    $headers = !empty($bearerToken) ? ['Authorization: Bearer ' . trim($bearerToken), 'Accept: application/json'] : [];
-    $json = ejecutarCurl($urlGenres, $headers);
-    
-    $mapa = [];
-    if ($json) {
-        $data = json_decode($json, true);
-        if (isset($data['genres']) && is_array($data['genres'])) {
-            foreach ($data['genres'] as $genre) {
-                $mapa[$genre['id']] = $genre['name'];
+if (!function_exists('obtenerIdiomasAudio')) {
+    function obtenerIdiomasAudio($rutaArchivo) {
+        if (!function_exists('shell_exec')) {
+            return 'Error (shell_exec deshabilitado)';
+        }
+
+        // Agregamos "2>&1" al final para capturar errores del sistema si ffprobe falla
+        $comando = 'ffprobe -v error -select_streams a -show_entries stream=tags:language -of json ' . escapeshellarg($rutaArchivo) . ' 2>&1';
+        $salida = shell_exec($comando);
+
+        // Validamos si el comando falló porque ffprobe no está instalado o no se encuentra en el PATH
+        if (!$salida || stripos($salida, 'command not found') !== false || stripos($salida, 'not recognized') !== false) {
+            return 'Error: ffprobe no instalado o inaccesible';
+        }
+
+        $data = json_decode($salida, true);
+        $idiomasDetectados = [];
+
+        // Si falló el JSON, probablemente ffprobe devolvió un error de lectura
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return 'Audio (Sin metadatos legibles)';
+        }
+
+        // Validamos que haya encontrado streams (pistas)
+        if (isset($data['streams']) && is_array($data['streams'])) {
+            if (count($data['streams']) === 0) {
+                return 'Sin pistas de audio';
+            }
+
+            foreach ($data['streams'] as $stream) {
+                if (isset($stream['tags']['language']) && !empty(trim($stream['tags']['language']))) {
+                    $lang = strtolower(trim($stream['tags']['language']));
+                    
+                    // Mapa de idiomas (Soporta formatos ISO 639-2 (3 letras) e ISO 639-1 (2 letras))
+                    $mapaIdiomas = [
+                        'spa' => 'Español', 'es' => 'Español',
+                        'eng' => 'Inglés',  'en' => 'Inglés',
+                        'fre' => 'Francés', 'fr' => 'Francés',
+                        'ita' => 'Italiano','it' => 'Italiano',
+                        'jpn' => 'Japonés', 'ja' => 'Japonés',
+                        'por' => 'Portugués','pt' => 'Portugués',
+                        'ger' => 'Alemán',  'de' => 'Alemán',
+                        'und' => 'Desconocido'
+                    ];
+
+                    $idiomasDetectados[] = $mapaIdiomas[$lang] ?? strtoupper($lang);
+                } else {
+                    // La pista de audio existe, pero el archivo MKV/MP4 no tiene el idioma etiquetado
+                    $idiomasDetectados[] = 'Idioma No Definido';
+                }
             }
         }
+
+        if (empty($idiomasDetectados)) {
+            return 'Sin audio detectado';
+        }
+
+        // Limpiar duplicados por si hay 2 pistas en español (ej: "Español, Español" pasará a ser solo "Español")
+        return implode(', ', array_unique($idiomasDetectados));
     }
-    return $mapa;
+}
+
+if (!function_exists('obtenerMapaCategoriasTmdb')) {
+    function obtenerMapaCategoriasTmdb($apiKey, $bearerToken) {
+        $params = ['language' => 'es-MX'];
+        if (!empty($apiKey)) {
+            $params['api_key'] = trim($apiKey);
+        }
+        $urlGenres = "https://api.themoviedb.org/3/genre/movie/list?" . http_build_query($params);
+        $headers = !empty($bearerToken) ? ['Authorization: Bearer ' . trim($bearerToken), 'Accept: application/json'] : [];
+        $json = ejecutarCurl($urlGenres, $headers);
+        
+        $mapa = [];
+        if ($json) {
+            $data = json_decode($json, true);
+            if (isset($data['genres']) && is_array($data['genres'])) {
+                foreach ($data['genres'] as $genre) {
+                    $mapa[$genre['id']] = $genre['name'];
+                }
+            }
+        }
+        return $mapa;
+    }
 }
 
 $mapaCategorias = obtenerMapaCategoriasTmdb($tmdb_api_key, $tmdb_bearer_token);
 
-function obtenerActoresTmdb($idPeliculaTmdb, $apiKey, $bearerToken, $limiteActores = 10) {
-    $params = ['language' => 'es-MX'];
-    if (!empty($apiKey)) {
-        $params['api_key'] = trim($apiKey);
-    }
-    $urlCredits = "https://api.themoviedb.org/3/movie/{$idPeliculaTmdb}/credits?" . http_build_query($params);
-    $headers = !empty($bearerToken) ? ['Authorization: Bearer ' . trim($bearerToken), 'Accept: application/json'] : [];
-    $json = ejecutarCurl($urlCredits, $headers);
+if (!function_exists('obtenerActoresTmdb')) {
+    function obtenerActoresTmdb($idPeliculaTmdb, $apiKey, $bearerToken, $limiteActores = 10) {
+        $params = ['language' => 'es-MX'];
+        if (!empty($apiKey)) {
+            $params['api_key'] = trim($apiKey);
+        }
+        $urlCredits = "https://api.themoviedb.org/3/movie/{$idPeliculaTmdb}/credits?" . http_build_query($params);
+        $headers = !empty($bearerToken) ? ['Authorization: Bearer ' . trim($bearerToken), 'Accept: application/json'] : [];
+        $json = ejecutarCurl($urlCredits, $headers);
 
-    if ($json) {
-        $data = json_decode($json, true);
-        if (isset($data['cast']) && is_array($data['cast'])) {
-            $actores = [];
-            foreach (array_slice($data['cast'], 0, $limiteActores) as $castItem) {
-                if (!empty($castItem['name'])) {
-                    $actores[] = $castItem['name'];
+        if ($json) {
+            $data = json_decode($json, true);
+            if (isset($data['cast']) && is_array($data['cast'])) {
+                $actores = [];
+                foreach (array_slice($data['cast'], 0, $limiteActores) as $castItem) {
+                    if (!empty($castItem['name'])) {
+                        $actores[] = $castItem['name'];
+                    }
                 }
+                return implode(', ', $actores);
             }
-            return implode(', ', $actores);
         }
+        return 'Sin Actores Registrados';
     }
-    return 'Sin Actores Registrados';
 }
 
-function buscarInfoPeliculaTmdb($nombreArchivo, $apiKey, $bearerToken, $mapaCategorias) {
-    $titulo = $nombreArchivo;
-    $anioDetectadoNombre = '';
+if (!function_exists('buscarInfoPeliculaTmdb')) {
+    function buscarInfoPeliculaTmdb($nombreArchivo, $apiKey, $bearerToken, $mapaCategorias) {
+        $titulo = $nombreArchivo;
+        $anioDetectadoNombre = '';
 
-    if (preg_match('/^(.*?)\s*[\(\.\[\_\-]?\s*(19\d{2}|20\d{2})\s*[\)\.\]\_\-]?/i', $nombreArchivo, $coincidencias)) {
-        $titulo = trim($coincidencias[1]);
-        $anioDetectadoNombre = $coincidencias[2];
-    } else {
-        $titulo = preg_replace('/[._-]/', ' ', $nombreArchivo);
-        $titulo = preg_replace('/\b(1080p|720p|4k|2160p|bluray|brrip|web-dl|x264|x265)\b/i', '', $titulo);
-        $titulo = trim($titulo);
-    }
-
-    $params = ['query' => $titulo, 'language' => 'es-MX', 'include_adult' => 'false'];
-    if (!empty($anioDetectadoNombre)) $params['year'] = $anioDetectadoNombre;
-    if (!empty($apiKey)) $params['api_key'] = trim($apiKey);
-
-    $headers = !empty($bearerToken) ? ['Authorization: Bearer ' . trim($bearerToken), 'Accept: application/json'] : [];
-    
-    $urlTmdb = "https://api.themoviedb.org/3/search/movie?" . http_build_query($params);
-    $jsonTmdb = ejecutarCurl($urlTmdb, $headers);
-    $resultadoPelicula = null;
-
-    if ($jsonTmdb) {
-        $data = json_decode($jsonTmdb, true);
-        if (isset($data['results'][0])) $resultadoPelicula = $data['results'][0];
-    }
-
-    if (!$resultadoPelicula && !empty($anioDetectadoNombre)) {
-        unset($params['year']);
-        $urlTmdbSimple = "https://api.themoviedb.org/3/search/movie?" . http_build_query($params);
-        $jsonTmdbSimple = ejecutarCurl($urlTmdbSimple, $headers);
-        if ($jsonTmdbSimple) {
-            $dataSimple = json_decode($jsonTmdbSimple, true);
-            if (isset($dataSimple['results'][0])) $resultadoPelicula = $dataSimple['results'][0];
-        }
-    }
-
-    $urlPortada = '0';
-    $cadenaCategorias = 'Sin Categoría';
-    $resumenPelicula = 'Sin descripción disponible';
-    $cadenaActores = 'Sin Actores Registrados';
-    $anioEstreno = !empty($anioDetectadoNombre) ? $anioDetectadoNombre : 'N/A';
-
-    if ($resultadoPelicula) {
-        if (!empty($resultadoPelicula['poster_path'])) {
-            $urlPortada = "https://image.tmdb.org/t/p/w500" . $resultadoPelicula['poster_path'];
-        }
-        if (isset($resultadoPelicula['genre_ids']) && is_array($resultadoPelicula['genre_ids'])) {
-            $nombresGeneros = [];
-            foreach ($resultadoPelicula['genre_ids'] as $idGenero) {
-                if (isset($mapaCategorias[$idGenero])) {
-                    $nombresGeneros[] = $mapaCategorias[$idGenero];
-                }
-            }
-            if (!empty($nombresGeneros)) $cadenaCategorias = implode(', ', $nombresGeneros);
-        }
-        if (!empty($resultadoPelicula['overview'])) {
-            $resumenPelicula = trim($resultadoPelicula['overview']);
-        }
-        if (isset($resultadoPelicula['id'])) {
-            $cadenaActores = obtenerActoresTmdb($resultadoPelicula['id'], $apiKey, $bearerToken, 10);
-        }
-        $fechaTmdb = $resultadoPelicula['release_date'] ?? $resultadoPelicula['first_air_date'] ?? '';
-        if (!empty($fechaTmdb) && strlen($fechaTmdb) >= 4) {
-            $anioEstreno = substr($fechaTmdb, 0, 4);
-        }
-    }
-
-    return [$urlPortada, $cadenaCategorias, $resumenPelicula, $cadenaActores, $anioEstreno];
-}
-
-function buscarInfoPeliculaOmdb($nombreArchivo, $omdbApiKey) {
-    $titulo = $nombreArchivo;
-    $anioDetectadoNombre = '';
-    if (preg_match('/^(.*?)\s*[\(\.\[\_\-]?\s*(19\d{2}|20\d{2})/i', $nombreArchivo, $coincidencias)) {
-        $titulo = trim($coincidencias[1]);
-        $anioDetectadoNombre = $coincidencias[2];
-    } else {
-        $titulo = preg_replace('/[._-]/', ' ', $nombreArchivo);
-        $titulo = trim(preg_replace('/\b(1080p|720p|4k|2160p|bluray|brrip|web-dl)\b/i', '', $titulo));
-    }
-
-    $urlOmdb = "http://www.omdbapi.com/?t=" . urlencode($titulo) . "&apikey=" . urlencode(trim($omdbApiKey));
-    if(!empty($anioDetectadoNombre)) {
-        $urlOmdb .= "&y=" . urlencode($anioDetectadoNombre);
-    }
-    
-    $jsonOmdb = ejecutarCurl($urlOmdb);
-    
-    $urlPortada = '0';
-    $cadenaCategorias = 'Sin Categoría';
-    $resumenPelicula = 'Sin descripción disponible';
-    $cadenaActores = 'Sin Actores Registrados';
-    $anioEstreno = !empty($anioDetectadoNombre) ? $anioDetectadoNombre : 'N/A';
-
-    if ($jsonOmdb) {
-        $data = json_decode($jsonOmdb, true);
-        if (isset($data['Response']) && $data['Response'] === 'True') {
-            $urlPortada = (!empty($data['Poster']) && $data['Poster'] !== 'N/A') ? $data['Poster'] : '0';
-            $cadenaCategorias = (!empty($data['Genre']) && $data['Genre'] !== 'N/A') ? $data['Genre'] : 'Sin Categoría';
-            $resumenPelicula = (!empty($data['Plot']) && $data['Plot'] !== 'N/A') ? $data['Plot'] : 'Sin descripción disponible';
-            $cadenaActores = (!empty($data['Actors']) && $data['Actors'] !== 'N/A') ? $data['Actors'] : 'Sin Actores Registrados';
-            $anioEstreno = (!empty($data['Year']) && $data['Year'] !== 'N/A') ? substr($data['Year'], 0, 4) : $anioEstreno;
-        }
-    }
-
-    return [$urlPortada, $cadenaCategorias, $resumenPelicula, $cadenaActores, $anioEstreno];
-}
-
-function procesarMedia($nombreArchivo, $dirPortadas, $tmdbApi, $tmdbBearer, $mapaCat, $omdbApi) {
-    // 1. Intentar con TMDb
-    list($urlRemota, $categorias, $descripcion, $actores, $estreno) = buscarInfoPeliculaTmdb($nombreArchivo, $tmdbApi, $tmdbBearer, $mapaCat);
-
-    // 2. Respaldo con OMDb si TMDb no devuelve una portada o descripción útil, y existe la API Key de OMDb
-    if (($urlRemota === '0' || $descripcion === 'Sin descripción disponible') && !empty($omdbApi)) {
-        list($urlOmdb, $catOmdb, $descOmdb, $actOmdb, $estrOmdb) = buscarInfoPeliculaOmdb($nombreArchivo, $omdbApi);
-        
-        if ($urlOmdb !== '0' || $descOmdb !== 'Sin descripción disponible') {
-            $urlRemota = ($urlOmdb !== '0') ? $urlOmdb : $urlRemota;
-            $categorias = ($catOmdb !== 'Sin Categoría') ? $catOmdb : $categorias;
-            $descripcion = ($descOmdb !== 'Sin descripción disponible') ? $descOmdb : $descripcion;
-            $actores = ($actOmdb !== 'Sin Actores Registrados') ? $actOmdb : $actores;
-            $estreno = ($estrOmdb !== 'N/A') ? $estrOmdb : $estreno;
-        }
-    }
-
-    // 3. Descargar la imagen
-    if ($urlRemota !== '0') {
-        $nombreImagenLocal = preg_replace('/[^a-zA-Z0-9_-]/', '_', $nombreArchivo) . '.jpg';
-        $rutaImagenLocal = $dirPortadas . '/' . $nombreImagenLocal;
-
-        $contenidoImagen = descargarImagenDirecta($urlRemota);
-
-        if ($contenidoImagen && strlen($contenidoImagen) > 2000) {
-            file_put_contents($rutaImagenLocal, $contenidoImagen);
+        if (preg_match('/^(.*?)\s*[\(\.\[\_\-]?\s*(19\d{2}|20\d{2})\s*[\)\.\]\_\-]?/i', $nombreArchivo, $coincidencias)) {
+            $titulo = trim($coincidencias[1]);
+            $anioDetectadoNombre = $coincidencias[2];
         } else {
-            $urlRemota = '0';
+            $titulo = preg_replace('/[._-]/', ' ', $nombreArchivo);
+            $titulo = preg_replace('/\b(1080p|720p|4k|2160p|bluray|brrip|web-dl|x264|x265)\b/i', '', $titulo);
+            $titulo = trim($titulo);
         }
-    }
 
-    return [$urlRemota, $categorias, $descripcion, $actores, $estreno];
+        $params = ['query' => $titulo, 'language' => 'es-MX', 'include_adult' => 'false'];
+        if (!empty($anioDetectadoNombre)) $params['year'] = $anioDetectadoNombre;
+        if (!empty($apiKey)) $params['api_key'] = trim($apiKey);
+
+        $headers = !empty($bearerToken) ? ['Authorization: Bearer ' . trim($bearerToken), 'Accept: application/json'] : [];
+        
+        $urlTmdb = "https://api.themoviedb.org/3/search/movie?" . http_build_query($params);
+        $jsonTmdb = ejecutarCurl($urlTmdb, $headers);
+        $resultadoPelicula = null;
+
+        if ($jsonTmdb) {
+            $data = json_decode($jsonTmdb, true);
+            if (isset($data['results'][0])) $resultadoPelicula = $data['results'][0];
+        }
+
+        if (!$resultadoPelicula && !empty($anioDetectadoNombre)) {
+            unset($params['year']);
+            $urlTmdbSimple = "https://api.themoviedb.org/3/search/movie?" . http_build_query($params);
+            $jsonTmdbSimple = ejecutarCurl($urlTmdbSimple, $headers);
+            if ($jsonTmdbSimple) {
+                $dataSimple = json_decode($jsonTmdbSimple, true);
+                if (isset($dataSimple['results'][0])) $resultadoPelicula = $dataSimple['results'][0];
+            }
+        }
+
+        $urlPortada = '0';
+        $cadenaCategorias = 'Sin Categoría';
+        $resumenPelicula = 'Sin descripción disponible';
+        $cadenaActores = 'Sin Actores Registrados';
+        $anioEstreno = !empty($anioDetectadoNombre) ? $anioDetectadoNombre : 'N/A';
+
+        if ($resultadoPelicula) {
+            if (!empty($resultadoPelicula['poster_path'])) {
+                $urlPortada = "https://image.tmdb.org/t/p/w500" . $resultadoPelicula['poster_path'];
+            }
+            if (isset($resultadoPelicula['genre_ids']) && is_array($resultadoPelicula['genre_ids'])) {
+                $nombresGeneros = [];
+                foreach ($resultadoPelicula['genre_ids'] as $idGenero) {
+                    if (isset($mapaCategorias[$idGenero])) {
+                        $nombresGeneros[] = $mapaCategorias[$idGenero];
+                    }
+                }
+                if (!empty($nombresGeneros)) $cadenaCategorias = implode(', ', $nombresGeneros);
+            }
+            if (!empty($resultadoPelicula['overview'])) {
+                $resumenPelicula = trim($resultadoPelicula['overview']);
+            }
+            if (isset($resultadoPelicula['id'])) {
+                $cadenaActores = obtenerActoresTmdb($resultadoPelicula['id'], $apiKey, $bearerToken, 10);
+            }
+            $fechaTmdb = $resultadoPelicula['release_date'] ?? $resultadoPelicula['first_air_date'] ?? '';
+            if (!empty($fechaTmdb) && strlen($fechaTmdb) >= 4) {
+                $anioEstreno = substr($fechaTmdb, 0, 4);
+            }
+        }
+
+        return [$urlPortada, $cadenaCategorias, $resumenPelicula, $cadenaActores, $anioEstreno];
+    }
 }
+
+if (!function_exists('buscarInfoPeliculaOmdb')) {
+    function buscarInfoPeliculaOmdb($nombreArchivo, $omdbApiKey) {
+        $titulo = $nombreArchivo;
+        $anioDetectadoNombre = '';
+        if (preg_match('/^(.*?)\s*[\(\.\[\_\-]?\s*(19\d{2}|20\d{2})/i', $nombreArchivo, $coincidencias)) {
+            $titulo = trim($coincidencias[1]);
+            $anioDetectadoNombre = $coincidencias[2];
+        } else {
+            $titulo = preg_replace('/[._-]/', ' ', $nombreArchivo);
+            $titulo = trim(preg_replace('/\b(1080p|720p|4k|2160p|bluray|brrip|web-dl)\b/i', '', $titulo));
+        }
+
+        $urlOmdb = "http://www.omdbapi.com/?t=" . urlencode($titulo) . "&apikey=" . urlencode(trim($omdbApiKey));
+        if(!empty($anioDetectadoNombre)) {
+            $urlOmdb .= "&y=" . urlencode($anioDetectadoNombre);
+        }
+        
+        $jsonOmdb = ejecutarCurl($urlOmdb);
+        
+        $urlPortada = '0';
+        $cadenaCategorias = 'Sin Categoría';
+        $resumenPelicula = 'Sin descripción disponible';
+        $cadenaActores = 'Sin Actores Registrados';
+        $anioEstreno = !empty($anioDetectadoNombre) ? $anioDetectadoNombre : 'N/A';
+
+        if ($jsonOmdb) {
+            $data = json_decode($jsonOmdb, true);
+            if (isset($data['Response']) && $data['Response'] === 'True') {
+                $urlPortada = (!empty($data['Poster']) && $data['Poster'] !== 'N/A') ? $data['Poster'] : '0';
+                $cadenaCategorias = (!empty($data['Genre']) && $data['Genre'] !== 'N/A') ? $data['Genre'] : 'Sin Categoría';
+                $resumenPelicula = (!empty($data['Plot']) && $data['Plot'] !== 'N/A') ? $data['Plot'] : 'Sin descripción disponible';
+                $cadenaActores = (!empty($data['Actors']) && $data['Actors'] !== 'N/A') ? $data['Actors'] : 'Sin Actores Registrados';
+                $anioEstreno = (!empty($data['Year']) && $data['Year'] !== 'N/A') ? substr($data['Year'], 0, 4) : $anioEstreno;
+            }
+        }
+
+        return [$urlPortada, $cadenaCategorias, $resumenPelicula, $cadenaActores, $anioEstreno];
+    }
+}
+
+if (!function_exists('procesarMedia')) {
+    function procesarMedia($nombreArchivo, $dirPortadas, $tmdbApi, $tmdbBearer, $mapaCat, $omdbApi) {
+        list($urlRemota, $categorias, $descripcion, $actores, $estreno) = buscarInfoPeliculaTmdb($nombreArchivo, $tmdbApi, $tmdbBearer, $mapaCat);
+
+        if (($urlRemota === '0' || $descripcion === 'Sin descripción disponible') && !empty($omdbApi)) {
+            list($urlOmdb, $catOmdb, $descOmdb, $actOmdb, $estrOmdb) = buscarInfoPeliculaOmdb($nombreArchivo, $omdbApi);
+            
+            if ($urlOmdb !== '0' || $descOmdb !== 'Sin descripción disponible') {
+                $urlRemota = ($urlOmdb !== '0') ? $urlOmdb : $urlRemota;
+                $categorias = ($catOmdb !== 'Sin Categoría') ? $catOmdb : $categorias;
+                $descripcion = ($descOmdb !== 'Sin descripción disponible') ? $descOmdb : $descripcion;
+                $actores = ($actOmdb !== 'Sin Actores Registrados') ? $actOmdb : $actores;
+                $estreno = ($estrOmdb !== 'N/A') ? $estrOmdb : $estreno;
+            }
+        }
+
+        if ($urlRemota !== '0') {
+            $nombreImagenLocal = preg_replace('/[^a-zA-Z0-9_-]/', '_', $nombreArchivo) . '.jpg';
+            $rutaImagenLocal = $dirPortadas . '/' . $nombreImagenLocal;
+
+            $contenidoImagen = descargarImagenDirecta($urlRemota);
+
+            if ($contenidoImagen && strlen($contenidoImagen) > 2000) {
+                file_put_contents($rutaImagenLocal, $contenidoImagen);
+            } else {
+                $urlRemota = '0';
+            }
+        }
+
+        return [$urlRemota, $categorias, $descripcion, $actores, $estreno];
+    }
+}
+
+// =========================================================================
+// OBTENER LISTA DE PELÍCULAS PARA MOSTRAR
+// =========================================================================
 
 $listaPeliculas = [];
 if (isset($pdo) && $pdo instanceof PDO) {
@@ -1243,17 +1324,19 @@ ob_start();
         .col-id { width: 40px; }
         .col-portada { width: 100px; }
         .col-nombre { width: 12%; }
-        .col-cat { width: 12%; }
-        .col-desc { width: 24%; }
-        .col-actores { width: 15%; }
+        .col-cat { width: 10%; }
+        .col-desc { width: 22%; }
+        .col-actores { width: 12%; }
         .col-estreno { width: 75px; text-align: center; }
-        .col-fecha { width: 95px; }
-        .col-ruta { width: 12%; }
+        .col-audio { width: 85px; }
+        .col-fecha { width: 90px; }
+        .col-ruta { width: 10%; }
 
         .img-poster { width: 90px; height: 135px; object-fit: cover; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
         .no-img { width: 90px; height: 135px; background: #e0e0e0; display: flex; align-items: center; justify-content: center; color: #777; font-size: 12px; border-radius: 6px; text-align: center; }
         .badge-cat { display: inline-block; background: #e1f5fe; color: #0288d1; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
         .badge-estreno { display: inline-block; background: #fff3e0; color: #e65100; padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: bold; border: 1px solid #ffe0b2; }
+        .badge-audio { display: inline-block; background: #e8f5e9; color: #2e7d32; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; border: 1px solid #c8e6c9; margin-bottom: 3px;}
         .desc-text, .actores-text { font-size: 13px; color: #555; line-height: 1.5; white-space: normal; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; }
         .actores-text { color: #2c3e50; font-weight: 500; }
         .ruta-text { font-size: 11px; color: #666; word-break: break-all; }
@@ -1262,12 +1345,12 @@ ob_start();
 <body>
     <div class="toast-burbuja" id="burbuja-notificacion">
         <div class="spinner"></div>
-        <span>Indexación iniciada (TMDb / Respaldo OMDb)...</span>
+        <span>Indexación iniciada (TMDb/OMDb y Análisis de Audio)...</span>
     </div>
     <div class="container">
-        <h1>Escaneo de Películas con TMDb y OMDb</h1>
+        <h1>Escaneo de Películas y Análisis de Audio</h1>
         <p class="success">El escaneo ha sido iniciado correctamente.</p>
-        <p>Se procesarán los archivos disponibles. Si TMDb falla, se usará la API Key de OMDb registrada en tu tabla `omdb`.</p>
+        <p>El sistema obtendrá datos de TMDb/OMDb y usará <strong>ffprobe</strong> para extraer los idiomas del audio.</p>
     </div>
     <h2>Últimos Registros en la Base de Datos</h2>
     <table>
@@ -1280,6 +1363,7 @@ ob_start();
                 <th class="col-desc">Descripción</th>
                 <th class="col-actores">Actores</th>
                 <th class="col-estreno">Estreno</th>
+                <th class="col-audio">Audio</th>
                 <th class="col-fecha">Fecha</th>
                 <th class="col-ruta">Ruta Película</th>
             </tr>
@@ -1316,13 +1400,21 @@ ob_start();
                         <td style="text-align: center;">
                             <span class="badge-estreno"><?php echo htmlspecialchars(!empty($pelicula['estreno']) ? $pelicula['estreno'] : 'N/A'); ?></span>
                         </td>
+                        <td>
+                            <?php 
+                            $idiomas_db = !empty($pelicula['audio']) ? explode(',', $pelicula['audio']) : ['N/A'];
+                            foreach($idiomas_db as $idioma_db) {
+                                echo '<span class="badge-audio">' . htmlspecialchars(trim($idioma_db)) . '</span><br>';
+                            }
+                            ?>
+                        </td>
                         <td><?php echo htmlspecialchars($pelicula['fecha']); ?></td>
                         <td><div class="ruta-text"><?php echo htmlspecialchars($pelicula['pelicula_url']); ?></div></td>
                     </tr>
                 <?php endforeach; ?>
             <?php else: ?>
                 <tr>
-                    <td colspan="9" style="text-align:center;">No se encontraron registros previos.</td>
+                    <td colspan="10" style="text-align:center;">No se encontraron registros previos.</td>
                 </tr>
             <?php endif; ?>
         </tbody>
@@ -1354,6 +1446,7 @@ if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
 
 // =========================================================================
 // CONTINUACIÓN DEL PROCESO EN SEGUNDO PLANO
+
 // =========================================================================
 
 $iterator = new RecursiveIteratorIterator(
@@ -1364,8 +1457,8 @@ $iterator = new RecursiveIteratorIterator(
 $rutaExcluida = rtrim(str_replace('\\', '/', $dir_base), '/') . '/' . $carpeta_excluida . '/';
 
 if (isset($pdo) && $pdo instanceof PDO) {
-    $sql = "INSERT INTO peliculas (id_peliculas, id_categoria, nombre, descripcion, actores, estreno, fecha, pelicula_url, portada_url) 
-            VALUES (NULL, :id_categoria, :nombre, :descripcion, :actores, :estreno, :fecha, :pelicula_url, :portada_url)";
+    $sql = "INSERT INTO peliculas (id_peliculas, id_categoria, nombre, descripcion, actores, estreno, fecha, pelicula_url, portada_url, audio) 
+            VALUES (NULL, :id_categoria, :nombre, :descripcion, :actores, :estreno, :fecha, :pelicula_url, :portada_url, :audio)";
     $stmt = $pdo->prepare($sql);
 
     foreach ($iterator as $item) {
@@ -1386,8 +1479,8 @@ if (isset($pdo) && $pdo instanceof PDO) {
                 $chk->execute([':url' => $ruta_completa]);
                 if ($chk->fetch()) continue;
 
-                // Llamada a la función que procesa TMDb y usa OMDb de respaldo
                 list($portada_url, $categoria, $descripcion, $actores, $estreno) = procesarMedia($nombre, $dir_portadas, $tmdb_api_key, $tmdb_bearer_token, $mapaCategorias, $omdb_api_key);
+                $audio_detectado = obtenerIdiomasAudio($ruta_completa);
 
                 $stmt->execute([
                     ':id_categoria' => $categoria,
@@ -1397,14 +1490,15 @@ if (isset($pdo) && $pdo instanceof PDO) {
                     ':estreno'      => $estreno,
                     ':fecha'        => $fecha,
                     ':pelicula_url' => $ruta_completa,
-                    ':portada_url'  => $portada_url
+                    ':portada_url'  => $portada_url,
+                    ':audio'        => $audio_detectado
                 ]);
             }
         }
     }
 } elseif (isset($conn) && ($conn instanceof mysqli || is_resource($conn))) {
-    $sql = "INSERT INTO peliculas (id_peliculas, id_categoria, nombre, descripcion, actores, estreno, fecha, pelicula_url, portada_url) 
-            VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $sql = "INSERT INTO peliculas (id_peliculas, id_categoria, nombre, descripcion, actores, estreno, fecha, pelicula_url, portada_url, audio) 
+            VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     $stmt = $conn->prepare($sql);
 
     foreach ($iterator as $item) {
@@ -1428,8 +1522,9 @@ if (isset($pdo) && $pdo instanceof PDO) {
                 if ($res && $res->num_rows > 0) continue;
 
                 list($portada_url, $categoria, $descripcion, $actores, $estreno) = procesarMedia($nombre, $dir_portadas, $tmdb_api_key, $tmdb_bearer_token, $mapaCategorias, $omdb_api_key);
+                $audio_detectado = obtenerIdiomasAudio($ruta_completa);
 
-                $stmt->bind_param('ssssssss', $categoria, $nombre, $descripcion, $actores, $estreno, $fecha, $ruta_completa, $portada_url);
+                $stmt->bind_param('sssssssss', $categoria, $nombre, $descripcion, $actores, $estreno, $fecha, $ruta_completa, $portada_url, $audio_detectado);
                 $stmt->execute();
             }
         }

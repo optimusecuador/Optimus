@@ -1,10 +1,10 @@
 <?php
 // ==============================================================================
-// 1. CONEXIÓN A LA BASE DE DATOS Y CONSULTA
+// 1. CONEXIÓN A LA BASE DE DATOS Y CONSULTAS
 // ==============================================================================
 require('../conectar.php');
 
-// Obtener todas las películas
+// Consulta 1: Obtener todas las películas para el catálogo principal
 $query = "SELECT * FROM peliculas";
 $resultado = mysqli_query($conexion, $query);
 
@@ -32,8 +32,18 @@ if ($resultado) {
             }
         }
     }
-    // Ordenar categorías alfabéticamente
     ksort($conteo_categorias);
+}
+
+// Consulta 2: Obtener los 20 estrenos más recientes por el campo 'fecha'
+$query_estrenos = "SELECT * FROM peliculas ORDER BY fecha DESC LIMIT 20";
+$resultado_estrenos = mysqli_query($conexion, $query_estrenos);
+
+$ultimos_estrenos = [];
+if ($resultado_estrenos) {
+    while ($fila_estreno = mysqli_fetch_assoc($resultado_estrenos)) {
+        $ultimos_estrenos[] = $fila_estreno;
+    }
 }
 ?>
 
@@ -105,7 +115,45 @@ if ($resultado) {
             color: #ffffff;
         }
 
-        /* Rejilla 100% fluida que adapta las columnas según el ancho de la pantalla */
+        .seccion-estrenos {
+            margin-bottom: 25px;
+            background: #ffffff;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .seccion-estrenos h2 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 18px;
+            color: #333;
+            border-left: 4px solid #007bff;
+            padding-left: 10px;
+        }
+
+        .carrusel-estrenos {
+            display: flex;
+            gap: 15px;
+            overflow-x: auto;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 10px;
+        }
+
+        .carrusel-estrenos::-webkit-scrollbar {
+            height: 6px;
+        }
+        .carrusel-estrenos::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 4px;
+        }
+
+        .carrusel-estrenos .pelicula-card {
+            flex: 0 0 200px;
+            min-width: 200px;
+        }
+
         .grid-peliculas {
             width: 100%;
             display: grid;
@@ -124,10 +172,11 @@ if ($resultado) {
             width: 100%;
         }
 
-        /* Contenedor de la portada con posicionamiento relativo */
-        .portada-container {
+        .portada-link {
+            display: block;
             position: relative;
             width: 100%;
+            text-decoration: none;
         }
 
         .pelicula-portada {
@@ -138,7 +187,6 @@ if ($resultado) {
             display: block;
         }
 
-        /* Logo superpuesto: Reducido un 25% (max-width: 120px) manteniendo el fondo con 50% de transparencia */
         .logo-empresa-overlay {
             position: absolute;
             top: 10px;
@@ -151,6 +199,22 @@ if ($resultado) {
             border-radius: 4px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             pointer-events: none;
+        }
+
+        .audio-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            color: #ffffff;
+            font-size: 11px;
+            padding: 5px 8px;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            box-sizing: border-box;
         }
 
         .pelicula-info {
@@ -191,7 +255,7 @@ if ($resultado) {
 <body>
 
     <div class="panel-control">
-        <!-- BUSCADOR EN TEXTO PLANO -->
+        <!-- BUSCADOR -->
         <div class="buscador-box">
             <input 
                 type="text" 
@@ -201,7 +265,7 @@ if ($resultado) {
             >
         </div>
 
-        <!-- BOTONES DE CATEGORÍA CON CONTADOR -->
+        <!-- BOTONES DE CATEGORÍA -->
         <div class="contenedor-botones">
             <button 
                 class="btn-filtro activo" 
@@ -223,28 +287,62 @@ if ($resultado) {
         </div>
     </div>
 
-    <!-- LISTADO DE PELÍCULAS -->
+    <!-- SECCIÓN ÚLTIMOS ESTRENOS -->
+    <?php if (!empty($ultimos_estrenos)): ?>
+        <div class="seccion-estrenos">
+            <h2>Últimos Estrenos</h2>
+            <div class="carrusel-estrenos">
+                <?php foreach ($ultimos_estrenos as $peli_estreno): ?>
+                    <?php 
+                        $id_estreno = intval($peli_estreno['id_peliculas'] ?? 0);
+                        $cats_estreno = array_map('trim', explode(',', $peli_estreno['id_categoria']));
+                        $nombre_estreno = $peli_estreno['nombre'] ?? 'Sin nombre';
+                        $portada_estreno = !empty($peli_estreno['portada_url']) ? $peli_estreno['portada_url'] : 'https://via.placeholder.com/300x450?text=Sin+Portada';
+                        $audio_estreno = !empty($peli_estreno['audio']) ? $peli_estreno['audio'] : 'No especificado';
+                    ?>
+                    <div class="pelicula-card">
+                        <a href="ver.php?id=<?php echo $id_estreno; ?>" class="portada-link">
+                            <img src="<?php echo htmlspecialchars($portada_estreno); ?>" alt="Portada de <?php echo htmlspecialchars($nombre_estreno); ?>" class="pelicula-portada">
+                            <img src="../images/empresa/logo.png" alt="Logo Empresa" class="logo-empresa-overlay">
+                            <div class="audio-overlay">🔊 <?php echo htmlspecialchars($audio_estreno); ?></div>
+                        </a>
+                        <div class="pelicula-info">
+                            <h3><?php echo htmlspecialchars($nombre_estreno); ?></h3>
+                            <div>
+                                <strong>Categorías:</strong><br>
+                                <?php foreach ($cats_estreno as $c_estreno): ?>
+                                    <span class="badge-categoria"><?php echo htmlspecialchars(ucfirst($c_estreno)); ?></span>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    <?php endif; ?>
+
+    <!-- CATÁLOGO GENERAL -->
     <div class="grid-peliculas" id="contenedorPeliculas">
         <?php foreach ($peliculas as $peli): ?>
             <?php 
-                // Normalizar categorías para data-attribute (ej: "drama, terror")
+                $id_peli = intval($peli['id_peliculas'] ?? 0);
                 $cats_array = array_map('trim', explode(',', $peli['id_categoria']));
                 $cats_atributo = implode(',', $cats_array);
                 
-                // Mapeo con los campos requeridos
                 $nombre = $peli['nombre'] ?? 'Sin nombre';
                 $portada = !empty($peli['portada_url']) ? $peli['portada_url'] : 'https://via.placeholder.com/300x450?text=Sin+Portada';
+                $audio = !empty($peli['audio']) ? $peli['audio'] : 'No especificado';
             ?>
             <div 
                 class="pelicula-card" 
                 data-titulo="<?php echo htmlspecialchars(mb_strtolower($nombre, 'UTF-8')); ?>" 
                 data-categorias="<?php echo htmlspecialchars($cats_atributo); ?>"
             >
-                <!-- PORTADA CON LOGO SUPERPUESTO (REDUCIDO 25%) -->
-                <div class="portada-container">
+                <a href="ver.php?id=<?php echo $id_peli; ?>" class="portada-link">
                     <img src="<?php echo htmlspecialchars($portada); ?>" alt="Portada de <?php echo htmlspecialchars($nombre); ?>" class="pelicula-portada">
                     <img src="../images/empresa/logo.png" alt="Logo Empresa" class="logo-empresa-overlay">
-                </div>
+                    <div class="audio-overlay">🔊 <?php echo htmlspecialchars($audio); ?></div>
+                </a>
 
                 <div class="pelicula-info">
                     <h3><?php echo htmlspecialchars($nombre); ?></h3>
@@ -263,7 +361,7 @@ if ($resultado) {
         </div>
     </div>
 
-    <!-- SCRIPT DE FILTRADO COMBINADO -->
+    <!-- SCRIPT DE FILTRADO -->
     <script>
         let categoriaSeleccionada = 'todas';
 
@@ -277,7 +375,7 @@ if ($resultado) {
 
         function filtrarCatalogo() {
             const textoBusqueda = document.getElementById('inputBuscador').value.toLowerCase().trim();
-            const tarjetas = document.querySelectorAll('.pelicula-card');
+            const tarjetas = document.querySelectorAll('#contenedorPeliculas .pelicula-card');
             let visibles = 0;
 
             tarjetas.forEach(card => {

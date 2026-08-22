@@ -78,3 +78,4 @@ mount -t cifs //10.8.0.10/MULTIMEDIA24 -o username=nelo416,password=Optimus2023 
 mount -t cifs //10.8.0.10/MULTIMEDIA25 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA25
 chmod -R 777 /var/www
 pip install mysql-connector-python
+sudo apt install ffmpeg

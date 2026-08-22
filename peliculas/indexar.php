@@ -113,49 +113,62 @@ if (!function_exists('descargarImagenDirecta')) {
 
 if (!function_exists('obtenerIdiomasAudio')) {
     function obtenerIdiomasAudio($rutaArchivo) {
-        if (!function_exists('shell_exec')) {
-            return 'Sin audio detectado';
+        // Verifica si hay funciones habilitadas para ejecutar comandos
+        if (!function_exists('shell_exec') && !function_exists('exec')) {
+            return 'Funciones exec deshabilitadas';
         }
 
-        $comando = 'ffprobe -v error -select_streams a -show_entries stream=tags:language -of json ' . escapeshellarg($rutaArchivo) . ' 2>&1';
-        $salida = @shell_exec($comando);
+        // Comando ffprobe robusto para obtener información en JSON
+        $comando = 'ffprobe -v quiet -print_format json -show_streams -select_streams a ' . escapeshellarg($rutaArchivo);
+        
+        $salida = '';
+        if (function_exists('shell_exec')) {
+            $salida = @shell_exec($comando);
+        } else {
+            @exec($comando, $output);
+            if (!empty($output)) {
+                $salida = implode("\n", $output);
+            }
+        }
 
         if (!$salida || stripos($salida, 'command not found') !== false || stripos($salida, 'not recognized') !== false) {
-            return 'Audio N/A';
+            return 'Audio N/A (Sin ffprobe)';
         }
 
         $data = json_decode($salida, true);
         $idiomasDetectados = [];
 
-        if (json_last_error() !== JSON_ERROR_NONE) {
+        if (json_last_error() !== JSON_ERROR_NONE || !isset($data['streams'])) {
             return 'Audio N/A';
         }
 
-        if (isset($data['streams']) && is_array($data['streams'])) {
-            if (count($data['streams']) === 0) {
-                return 'Sin audio';
-            }
+        if (count($data['streams']) === 0) {
+            return 'Sin audio';
+        }
 
-            foreach ($data['streams'] as $stream) {
-                if (isset($stream['tags']['language']) && !empty(trim($stream['tags']['language']))) {
-                    $lang = strtolower(trim($stream['tags']['language']));
-                    
-                    $mapaIdiomas = [
-                        'spa' => 'Español', 'es' => 'Español',
-                        'eng' => 'Inglés',  'en' => 'Inglés',
-                        'fre' => 'Francés', 'fr' => 'Francés',
-                        'ita' => 'Italiano','it' => 'Italiano',
-                        'jpn' => 'Japonés', 'ja' => 'Japonés',
-                        'por' => 'Portugués','pt' => 'Portugués',
-                        'ger' => 'Alemán',  'de' => 'Alemán',
-                        'und' => 'Desconocido'
-                    ];
-
-                    $idiomasDetectados[] = $mapaIdiomas[$lang] ?? strtoupper($lang);
-                } else {
-                    $idiomasDetectados[] = 'Sin definir';
+        foreach ($data['streams'] as $stream) {
+            $lang = 'und'; // Default: undefined
+            
+            // Buscar etiquetas, ignorando si están en mayúsculas o minúsculas
+            if (isset($stream['tags']) && is_array($stream['tags'])) {
+                $tagsLower = array_change_key_case($stream['tags'], CASE_LOWER);
+                if (!empty($tagsLower['language'])) {
+                    $lang = strtolower(trim($tagsLower['language']));
                 }
             }
+            
+            $mapaIdiomas = [
+                'spa' => 'Español', 'es' => 'Español',
+                'eng' => 'Inglés',  'en' => 'Inglés',
+                'fre' => 'Francés', 'fr' => 'Francés',
+                'ita' => 'Italiano','it' => 'Italiano',
+                'jpn' => 'Japonés', 'ja' => 'Japonés',
+                'por' => 'Portugués','pt' => 'Portugués',
+                'ger' => 'Alemán',  'de' => 'Alemán',
+                'und' => 'Desconocido'
+            ];
+
+            $idiomasDetectados[] = $mapaIdiomas[$lang] ?? strtoupper($lang);
         }
 
         if (empty($idiomasDetectados)) {
@@ -281,7 +294,6 @@ if (!function_exists('buscarInfoPeliculaTmdb')) {
                 $resumenPelicula = trim($resultadoPelicula['overview']);
             }
             
-            // AUDIENCIA DESDE TMDB (vote_average convertido a porcentaje)
             if (isset($resultadoPelicula['vote_average']) && $resultadoPelicula['vote_average'] > 0) {
                 $audienciaTmdb = round($resultadoPelicula['vote_average'] * 10) . '%';
             }
@@ -289,7 +301,6 @@ if (!function_exists('buscarInfoPeliculaTmdb')) {
             if (isset($resultadoPelicula['id'])) {
                 $cadenaActores = obtenerActoresTmdb($resultadoPelicula['id'], $apiKey, $bearerToken, 10);
                 
-                // Buscar IMDb ID en TMDb para vincular Rotten Tomatoes si es posible
                 $urlExternal = "https://api.themoviedb.org/3/movie/{$resultadoPelicula['id']}/external_ids?" . http_build_query($params);
                 $jsonExternal = ejecutarCurl($urlExternal, $headers);
                 if ($jsonExternal) {
@@ -374,20 +385,16 @@ if (!function_exists('procesarMedia')) {
     function procesarMedia($nombreArchivo, $dirPortadas, $tmdbApi, $tmdbBearer, $mapaCat, $omdbApi) {
         list($urlRemota, $categorias, $descripcion, $actores, $estreno, $audienciaTmdb, $imdbId) = buscarInfoPeliculaTmdb($nombreArchivo, $tmdbApi, $tmdbBearer, $mapaCat);
         
-        // --- SOLUCIÓN: Utilizar la calificación de TMDB convertida como fallback para Rotten Tomatoes ---
         $rottenTomatoes = ($audienciaTmdb !== 'N/A') ? $audienciaTmdb : 'N/A';
         $audiencia = ($audienciaTmdb !== 'N/A') ? $audienciaTmdb : 'N/A';
 
-        // Obtener Rotten Tomatoes desde OMDb usando IMDb ID o título
         if (!empty($omdbApi)) {
             list($urlOmdb, $catOmdb, $descOmdb, $actOmdb, $estrOmdb, $rtOmdb, $audOmdb) = buscarInfoPeliculaOmdb($nombreArchivo, $omdbApi, $imdbId);
             
-            // Si OMDb devuelve un valor de Rotten Tomatoes válido, sobreescribimos el equivalente de TMDb
             if ($rtOmdb !== 'N/A') {
                 $rottenTomatoes = $rtOmdb;
             }
 
-            // Respaldos si TMDb no devolvió suficiente información
             if ($urlRemota === '0' && $urlOmdb !== '0') $urlRemota = $urlOmdb;
             if ($categorias === 'Sin Categoría' && $catOmdb !== 'Sin Categoría') $categorias = $catOmdb;
             if ($descripcion === 'Sin descripción disponible' && $descOmdb !== 'Sin descripción disponible') $descripcion = $descOmdb;
@@ -698,7 +705,6 @@ if (isset($pdo) && $pdo instanceof PDO) {
                 list($portada_url, $categoria, $descripcion, $actores, $estreno, $rotten_tomatoes, $audiencia) = procesarMedia($nombre, $dir_portadas, $tmdb_api_key, $tmdb_bearer_token, $mapaCategorias, $omdb_api_key);
                 $audio_detectado = obtenerIdiomasAudio($ruta_completa);
 
-                // Exactamente 11 tipos de datos ('sssssssssss') para 11 variables
                 $stmt->bind_param('sssssssssss', $categoria, $nombre, $descripcion, $actores, $estreno, $rotten_tomatoes, $audiencia, $fecha, $ruta_completa, $portada_url, $audio_detectado);
                 
                 if (!$stmt->execute()) {

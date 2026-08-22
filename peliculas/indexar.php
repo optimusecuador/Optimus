@@ -1,910 +1,4 @@
-<!DOCTYPE html>
-<html lang="es"><!-- InstanceBegin template="/Templates/Optimus_plantilla.dwt.php" codeOutsideHTMLIsLocked="false" -->
-<head>
-<!-- INICIO DE CODIGO PHP QUE TIENE QUE SER FIJO -->
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <?php
-date_default_timezone_set('America/Guayaquil');
-session_start();
-//setlocale(LC_TIME, 'es_ES', 'esp_esp');
-setlocale(LC_ALL, 'es_ES');
-setlocale(LC_TIME, 'es_ES.UTF-8'); //Linux
-/* ===============================
-   CONEXION BD  
-=================================*/
-require('../conectar.php');
-$oltconfiguracion = "no";
-$mikrotikconfiguracion = "no";
-	//--BUSCO EL NOMBRE DE LA EMPRESA Y EL LOGO
-		$sqlem = "SELECT * from `configuracion` order by ruc DESC";
-		$resultem = mysqli_query($con, $sqlem);
-		while($crowem = mysqli_fetch_assoc($resultem))
-        {
-			$_SESSION['empresamail']=$crowem['empresa'];
-			$empresa = $crowem['empresa'];
-			$logo = $crowem['logo'];
-			$colorfondo = $crowem['colorfondo'];
-			$carpeta = $crowem['carpeta'];
-			$tipoempresacontrol = $crowem['tipoempresa'];
-			$ip = $crowem['ip'];
-			$actualizacionanterior = $crowem['actualizacion'];
-			$ivadecimal =(100+$crowem['iva'])/100;
-			//#24a5dd
-		}
-	
-	if(isset($_SESSION['password']))
-	{
-
-		//--BUSCO EL NOMBRE DE LA EMPRESA Y EL LOGO
-		$sqlem = "SELECT * from `configuracion` order by ruc DESC";
-		$resultem = mysqli_query($con, $sqlem);
-		while($crowem = mysqli_fetch_assoc($resultem))
-        {
-			$_SESSION['empresamail']=$crowem['empresa'];
-			$empresa = $crowem['empresa'];
-			$logo = $crowem['logo'];
-			$colorfondo = $crowem['colorfondo'];
-			$carpeta = $crowem['carpeta'];
-			$tipoempresacontrol = $crowem['tipoempresa'];
-			$ip = $crowem['ip'];
-			$oltconfiguracion = $crowem['olt'];
-			$mikrotikconfiguracion = $crowem['mikrotik'];
-			$actualizacionanterior = $crowem['actualizacion'];
-			$ivadecimal =(100+$crowem['iva'])/100;
-			//#24a5dd
-		}
-
-//--BUSCO ACTUALIZACION NUEVA
-		$sqlac = "SELECT * from `actualizacion` order by fecha ASC";
-		$resultac = mysqli_query($conactualizacion, $sqlac);
-		while($crowac = mysqli_fetch_assoc($resultac))
-        {
-			$actualizacionnueva = $crowac['fecha'];
-			
-		}
-	
-	$personal = $_SESSION['password']; 
-	
-	$contrasenapersonal = $_SESSION['password'];
-	$sqlp = "SELECT * from `personal` WHERE `contrasena` LIKE '$contrasenapersonal' order by codigo DESC";
-	$resultp = mysqli_query($con, $sqlp);
-	while($crowp = mysqli_fetch_assoc($resultp))
-    {	
-		$sistema = "software";
-		$menu = $crowp['puesto'];	
-		if ($crowp['puesto'] == "instalador")
-		{
-			$sistema = "tecnico";
-		}
-		$puesto_personal=$crowp['puesto'];
-		$usuarionombre=$crowp['nombres']." ".$crowp['apellidos'];
-		$usuarionombre2=$crowp['nombres'];
-		$foto=$crowp['foto'];
-		$uno=$crowp['uno'];
-		$dos=$crowp['dos'];
-		$tres=$crowp['tres'];
-		$cuatro=$crowp['cuatro'];
-		$cinco 	=$crowp['cinco'];
-		$seis 	=$crowp['seis'];
-		$siete=$crowp['siete'];
-		$ocho=$crowp['ocho'];
-		$nueve 	=$crowp['nueve'];
-		$diez =$crowp['diez'];
-		$once =$crowp['once'];
-		$doce =$crowp['doce'];
-		$trece=$crowp['trece'];
-		$catorce =$crowp['catorce'];
-		$quince=$crowp['quince'];
-		$diezyseis =$crowp['diezyseis'];
-		$diezysiete=$crowp['diezysiete'];
-		$diezyocho =$crowp['diezyocho'];
-		$diezynueve =$crowp['diezynueve'];
-		$veinte =$crowp['veinte'];
-		$veinteyuno=$crowp['veinteyuno'];
-		$veinteydos=$crowp['veinteydos'];
-		$veinteytres=$crowp['veinteytres'];
-		$veinteycuatro=$crowp['veinteycuatro'];
-		$veinteycinco =$crowp['veinteycinco'];
-		$veinteyseis =$crowp['veinteyseis'];
-		$veinteysiete=$crowp['veinteysiete'];
-		$veinteyocho =$crowp['veinteyocho'];
-		$veinteynueve =$crowp['veinteynueve'];
-		$treinta =$crowp['treinta'];
-		$treintayuno =$crowp['treintayuno'];
-		$treintaydos =$crowp['treintaydos'];
-		$treintaytres=$crowp['treintaytres'];
-		$treintaycuatro=$crowp['treintaycuatro'];
-		$treintaycinco=$crowp['treintaycinco'];
-		$treintayseis=$crowp['treintayseis'];
-		$treintaysiete=$crowp['treintaysiete'];
-		$treintayocho =$crowp['treintayocho'];
-		$treintaynueve =$crowp['treintaynueve'];
-		$cuarenta =$crowp['cuarenta'];
-
-		$cuarentayuno=$crowp['cuarentayuno'];
-		$cuarentaydos =$crowp['cuarentaydos'];
-		$cuarentaytres =$crowp['cuarentaytres'];
-		$cuarentaycuatro =$crowp['cuarentaycuatro'];
-		$cuarentaycinco =$crowp['cuarentaycinco'];
-		$cuarentayseis =$crowp['cuarentayseis'];
-		$cuarentaysiete =$crowp['cuarentaysiete'];
-		$cuarentayocho =$crowp['cuarentayocho'];
-		$cuarentaynueve =$crowp['cuarentaynueve'];
-		$cincuenta =$crowp['cincuenta'];
-		$cincuentayuno =$crowp['cincuentayuno'];
-		$cincuentaydos =$crowp['cincuentaydos'];
-		$cincuentaytres =$crowp['cincuentaytres'];
-		$exportar =$crowp['exportar'];
-		$cambiarprecio =$crowp['cambiarprecio'];
-	}
-	// PHP program to get IP address of client
-	$IP = $_SERVER['REMOTE_ADDR'];
-	// PHP code to get the MAC address of Client
-	$MAC = exec('getmac');
-	$nombre = gethostbyaddr($_SERVER['REMOTE_ADDR']);
-  	// Storing 'getmac' value in $MAC
-	$MAC = strtok($MAC, ' ');
-	$fecha = date("Y-m-d (H:i:s)", time());
-	$url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "s") . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
-	//$sql = " INSERT INTO `acceso` ( `usuario`, `fecha`, `url`, `ip`, `mac`, `nombre`) VALUES ( '$personal', '$fecha', '$url', '$IP', '$MAC', '$nombre')"; 
-	//mysqli_query($con, $sql);
-
-	}
-	else
-	{
-		echo "no existe variable de sesion iniciada";
-	}
-	
-	
-	?>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  
-  <title>Global Net</title>
-	<!-- Aquí colocas tu icono -->
-    <link rel="icon" type="image/x-icon" href="../images/ico.png">
-    <link rel="shortcut icon" type="image/x-icon" href="../images/ico.png">
-  
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/styles.css" />
-<!-- InstanceBeginEditable name="head" -->
-<!-- InstanceEndEditable -->
-</head> 
-<body>
-  <div class="app-shell">
-    <aside class="sidebar">
-  <a class="brand" href="../resumen/index.php">
-    <img src="../img/logo.png" width="186" height="69" alt="Nexus ISP"/>
-  </a>
-
-  <nav class="main-nav">
-    <details class="menu-section">
-      <summary class="menu-label">GESTIÓN</summary>
-      <a href="../resumen/index.php"><i data-lucide="home"></i> Resumen</a>
-      <a href="../clientes/index.php"><i data-lucide="users"></i> Clientes</a>
-      <a href="../cuentas/index.php"><i data-lucide="landmark"></i> Cuentas Bancarias</a>
-      <a href="../reportes/index.php"><i data-lucide="bar-chart-3"></i> Reportes</a>
-    </details>
-
-    <details class="menu-section">
-      <summary class="menu-label">OPERACIONES</summary>
-      <a href="../productos/productos.php"><i data-lucide="boxes"></i> Inventario</a>
-      <a href="../personal/productos.php"><i data-lucide="user-round-cog"></i> Personal</a>
-      <a href="../serviciotecnico/index.php"><i data-lucide="wrench"></i> Servicio Técnico</a>
-    </details>
-
-    <details class="menu-section">
-      <summary class="menu-label">INFRAESTRUCTURA</summary>
-      <a href="../mikrotik/listado.php"><i data-lucide="shield-check"></i> MikroTik</a>
-      <a href="https://192.168.8.100/action/login.html" target="new"><i data-lucide="shield-check"></i> OLT</a>
-      <a href="http://10.7.0.254:15178/ViewPower/monitor?319" target="new"><i data-lucide="shield-check"></i> Ups</a>
-      <a href="../truenas/truenas.php"><i data-lucide="hard-drive"></i> NAS</a>
-      <a href="../traccar/traccar.php"><i data-lucide="map-pin"></i> Rastreo</a>
-      <a href="../streaming/index.php"><i data-lucide="play-circle"></i> Streaming</a>
-      <a href="../zkteco/index.php"><i data-lucide="fingerprint"></i> ZKTeco</a>
-	  <a href="../red/index.php"><i data-lucide="shield-check"></i> Mapeo Red</a>
-	  <a href="../redvirtual/index.php"><i data-lucide="shield-check"></i> Red Virtual</a>
-    </details>
-
-    <details class="menu-section">
-      <summary class="menu-label">SISTEMA</summary>
-      <a href="../estado/index.php"><i data-lucide="badge-check"></i> Estado Contrato</a>
-      <a href="#"><i data-lucide="calculator"></i> Contabilidad</a>
-      <a href="../configuracion/index.php"><i data-lucide="settings"></i> Configuración</a>
-    </details>
-  </nav>
-</aside>
-
-<style>
-  /* Animación de apertura suave */
-  .menu-section[open] {
-    animation: fadeIn 0.3s ease-out;
-  }
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-  .menu-section summary {
-    list-style: none;
-    cursor: pointer;
-    padding: 12px 20px;
-    font-size: 0.75rem;
-    color: var(--muted);
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    transition: color 0.3s;
-  }
-
-  .menu-section summary:hover { color: var(--cyan); }
-
-  .menu-section summary::after {
-    content: "chevron-down"; /* Si usas lucide, podrías incluso inyectar un icono aquí */
-    content: "▼";
-    font-size: 8px;
-    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .menu-section[open] summary::after { transform: rotate(180deg); color: var(--cyan); }
-
-  /* Estilo de los enlaces con efecto de deslizamiento */
-  .menu-section a {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 20px;
-    margin: 2px 10px;
-    color: var(--text);
-    font-size: 14px;
-    text-decoration: none;
-    border-radius: 6px;
-    transition: all 0.3s ease;
-    border-left: 2px solid transparent;
-  }
-
-  /* Efecto llamativo al pasar el ratón */
-  .menu-section a:hover {
-    background: var(--bg-soft);
-    border-left: 2px solid var(--cyan);
-    padding-left: 25px; /* Efecto de empuje hacia la derecha */
-    color: var(--cyan);
-  }
-
-  .menu-section a i {
-    transition: transform 0.3s;
-  }
-  
-  .menu-section a:hover i {
-    transform: scale(1.2); /* El icono crece un poco */
-  }
-
-/* ==== MENU PREMIUM ==== */
-.sidebar{background:linear-gradient(180deg,#111827,#0b1220);}
-.menu-section{border:1px solid rgba(255,255,255,.05);border-radius:12px;margin:8px;overflow:hidden;transition:.3s}
-.menu-section summary{list-style:none;cursor:pointer;padding:14px 18px;font-weight:700;letter-spacing:.08em}
-.menu-section summary::-webkit-details-marker{display:none}
-.menu-section summary::after{content:"▼";float:right;transition:.3s}
-.menu-section[open] summary::after{transform:rotate(180deg)}
-.menu-section a{display:flex;gap:12px;padding:11px 18px;margin:4px 8px;border-radius:8px;transition:.25s;text-decoration:none}
-.menu-section a:hover{transform:translateX(6px);background:rgba(0,255,255,.08)}
-
-</style>
-
-    <main class="content">
-      
-      <section class="metric-grid"></section>
-      <!-- InstanceBeginEditable name="principal" -->
-		
-		<?php
-// Configuración de errores y tiempo límite de ejecución ilimitado para segundo plano
-ini_set('display_errors', 0);
-error_reporting(E_ALL);
-set_time_limit(0); 
-ignore_user_abort(true);
-
-// Reutilizar la conexión a la base de datos existente
-require_once __DIR__ . '/../conectar.php';
-
-// Directorios del sistema
-$dir_base = '/var/www/ALMACENAMIENTO';
-$dir_portadas = realpath(__DIR__ . '/../peliculas') ? realpath(__DIR__ . '/../peliculas') . '/portadas' : __DIR__ . '/../peliculas/portadas';
-$carpeta_excluida = 'PRINCIPAL';
-
-// Crear carpeta de portadas local si no existe
-if (!file_exists($dir_portadas)) {
-    @mkdir($dir_portadas, 0755, true);
-}
-
-if (!is_dir($dir_base)) {
-    die("Error: La ruta '$dir_base' no existe o el servidor web no tiene permisos de lectura.");
-}
-
-$extensiones_permitidas = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v'];
-
-// =========================================================================
-// OBTIENE CREDENCIALES DE TMDb Y OMDb DESDE LA BASE DE DATOS
-// =========================================================================
-$tmdb_api_key = '';
-$tmdb_bearer_token = '';
-$omdb_api_key = ''; // Se obtendrá del campo `api` de la tabla `omdb`
-
-if (isset($pdo) && $pdo instanceof PDO) {
-    // TMDb
-    $stmt_tmdb = $pdo->query("SELECT api, token FROM tmdb LIMIT 1");
-    if ($row_tmdb = $stmt_tmdb->fetch(PDO::FETCH_ASSOC)) {
-        $tmdb_api_key = $row_tmdb['api'] ?? '';
-        $tmdb_bearer_token = $row_tmdb['token'] ?? '';
-    }
-    // OMDb
-    $stmt_omdb = $pdo->query("SELECT api FROM omdb LIMIT 1");
-    if ($row_omdb = $stmt_omdb->fetch(PDO::FETCH_ASSOC)) {
-        $omdb_api_key = $row_omdb['api'] ?? ''; 
-    }
-} elseif (isset($conn) && ($conn instanceof mysqli || is_resource($conn))) {
-    // TMDb
-    $res_tmdb = $conn->query("SELECT api, token FROM tmdb LIMIT 1");
-    if ($res_tmdb && $row_tmdb = $res_tmdb->fetch_assoc()) {
-        $tmdb_api_key = $row_tmdb['api'] ?? '';
-        $tmdb_bearer_token = $row_tmdb['token'] ?? '';
-    }
-    // OMDb
-    $res_omdb = $conn->query("SELECT api FROM omdb LIMIT 1");
-    if ($res_omdb && $row_omdb = $res_omdb->fetch_assoc()) {
-        $omdb_api_key = $row_omdb['api'] ?? '';
-    }
-}
-
-if (empty($tmdb_api_key) && empty($tmdb_bearer_token)) {
-    die("Error: No se encontraron las credenciales de TMDb en la tabla 'tmdb'.");
-}
-
-function ejecutarCurl($url, $headers = []) {
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 8);
-
-    if (!empty($headers)) {
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    }
-
-    $respuesta = curl_exec($ch);
-    curl_close($ch);
-    return $respuesta;
-}
-
-function descargarImagenDirecta($urlImagen) {
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $urlImagen);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-    
-    $data = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($httpCode === 200 && $data !== false) {
-        return $data;
-    }
-    return false;
-}
-
-function obtenerMapaCategoriasTmdb($apiKey, $bearerToken) {
-    $params = ['language' => 'es-MX'];
-    if (!empty($apiKey)) {
-        $params['api_key'] = trim($apiKey);
-    }
-    $urlGenres = "https://api.themoviedb.org/3/genre/movie/list?" . http_build_query($params);
-    $headers = !empty($bearerToken) ? ['Authorization: Bearer ' . trim($bearerToken), 'Accept: application/json'] : [];
-    $json = ejecutarCurl($urlGenres, $headers);
-    
-    $mapa = [];
-    if ($json) {
-        $data = json_decode($json, true);
-        if (isset($data['genres']) && is_array($data['genres'])) {
-            foreach ($data['genres'] as $genre) {
-                $mapa[$genre['id']] = $genre['name'];
-            }
-        }
-    }
-    return $mapa;
-}
-
-$mapaCategorias = obtenerMapaCategoriasTmdb($tmdb_api_key, $tmdb_bearer_token);
-
-function obtenerActoresTmdb($idPeliculaTmdb, $apiKey, $bearerToken, $limiteActores = 10) {
-    $params = ['language' => 'es-MX'];
-    if (!empty($apiKey)) {
-        $params['api_key'] = trim($apiKey);
-    }
-    $urlCredits = "https://api.themoviedb.org/3/movie/{$idPeliculaTmdb}/credits?" . http_build_query($params);
-    $headers = !empty($bearerToken) ? ['Authorization: Bearer ' . trim($bearerToken), 'Accept: application/json'] : [];
-    $json = ejecutarCurl($urlCredits, $headers);
-
-    if ($json) {
-        $data = json_decode($json, true);
-        if (isset($data['cast']) && is_array($data['cast'])) {
-            $actores = [];
-            foreach (array_slice($data['cast'], 0, $limiteActores) as $castItem) {
-                if (!empty($castItem['name'])) {
-                    $actores[] = $castItem['name'];
-                }
-            }
-            return implode(', ', $actores);
-        }
-    }
-    return 'Sin Actores Registrados';
-}
-
-function buscarInfoPeliculaTmdb($nombreArchivo, $apiKey, $bearerToken, $mapaCategorias) {
-    $titulo = $nombreArchivo;
-    $anioDetectadoNombre = '';
-
-    if (preg_match('/^(.*?)\s*[\(\.\[\_\-]?\s*(19\d{2}|20\d{2})\s*[\)\.\]\_\-]?/i', $nombreArchivo, $coincidencias)) {
-        $titulo = trim($coincidencias[1]);
-        $anioDetectadoNombre = $coincidencias[2];
-    } else {
-        $titulo = preg_replace('/[._-]/', ' ', $nombreArchivo);
-        $titulo = preg_replace('/\b(1080p|720p|4k|2160p|bluray|brrip|web-dl|x264|x265)\b/i', '', $titulo);
-        $titulo = trim($titulo);
-    }
-
-    $params = ['query' => $titulo, 'language' => 'es-MX', 'include_adult' => 'false'];
-    if (!empty($anioDetectadoNombre)) $params['year'] = $anioDetectadoNombre;
-    if (!empty($apiKey)) $params['api_key'] = trim($apiKey);
-
-    $headers = !empty($bearerToken) ? ['Authorization: Bearer ' . trim($bearerToken), 'Accept: application/json'] : [];
-    
-    $urlTmdb = "https://api.themoviedb.org/3/search/movie?" . http_build_query($params);
-    $jsonTmdb = ejecutarCurl($urlTmdb, $headers);
-    $resultadoPelicula = null;
-
-    if ($jsonTmdb) {
-        $data = json_decode($jsonTmdb, true);
-        if (isset($data['results'][0])) $resultadoPelicula = $data['results'][0];
-    }
-
-    if (!$resultadoPelicula && !empty($anioDetectadoNombre)) {
-        unset($params['year']);
-        $urlTmdbSimple = "https://api.themoviedb.org/3/search/movie?" . http_build_query($params);
-        $jsonTmdbSimple = ejecutarCurl($urlTmdbSimple, $headers);
-        if ($jsonTmdbSimple) {
-            $dataSimple = json_decode($jsonTmdbSimple, true);
-            if (isset($dataSimple['results'][0])) $resultadoPelicula = $dataSimple['results'][0];
-        }
-    }
-
-    $urlPortada = '0';
-    $cadenaCategorias = 'Sin Categoría';
-    $resumenPelicula = 'Sin descripción disponible';
-    $cadenaActores = 'Sin Actores Registrados';
-    $anioEstreno = !empty($anioDetectadoNombre) ? $anioDetectadoNombre : 'N/A';
-
-    if ($resultadoPelicula) {
-        if (!empty($resultadoPelicula['poster_path'])) {
-            $urlPortada = "https://image.tmdb.org/t/p/w500" . $resultadoPelicula['poster_path'];
-        }
-        if (isset($resultadoPelicula['genre_ids']) && is_array($resultadoPelicula['genre_ids'])) {
-            $nombresGeneros = [];
-            foreach ($resultadoPelicula['genre_ids'] as $idGenero) {
-                if (isset($mapaCategorias[$idGenero])) {
-                    $nombresGeneros[] = $mapaCategorias[$idGenero];
-                }
-            }
-            if (!empty($nombresGeneros)) $cadenaCategorias = implode(', ', $nombresGeneros);
-        }
-        if (!empty($resultadoPelicula['overview'])) {
-            $resumenPelicula = trim($resultadoPelicula['overview']);
-        }
-        if (isset($resultadoPelicula['id'])) {
-            $cadenaActores = obtenerActoresTmdb($resultadoPelicula['id'], $apiKey, $bearerToken, 10);
-        }
-        $fechaTmdb = $resultadoPelicula['release_date'] ?? $resultadoPelicula['first_air_date'] ?? '';
-        if (!empty($fechaTmdb) && strlen($fechaTmdb) >= 4) {
-            $anioEstreno = substr($fechaTmdb, 0, 4);
-        }
-    }
-
-    return [$urlPortada, $cadenaCategorias, $resumenPelicula, $cadenaActores, $anioEstreno];
-}
-
-function buscarInfoPeliculaOmdb($nombreArchivo, $omdbApiKey) {
-    $titulo = $nombreArchivo;
-    $anioDetectadoNombre = '';
-    if (preg_match('/^(.*?)\s*[\(\.\[\_\-]?\s*(19\d{2}|20\d{2})/i', $nombreArchivo, $coincidencias)) {
-        $titulo = trim($coincidencias[1]);
-        $anioDetectadoNombre = $coincidencias[2];
-    } else {
-        $titulo = preg_replace('/[._-]/', ' ', $nombreArchivo);
-        $titulo = trim(preg_replace('/\b(1080p|720p|4k|2160p|bluray|brrip|web-dl)\b/i', '', $titulo));
-    }
-
-    $urlOmdb = "http://www.omdbapi.com/?t=" . urlencode($titulo) . "&apikey=" . urlencode(trim($omdbApiKey));
-    if(!empty($anioDetectadoNombre)) {
-        $urlOmdb .= "&y=" . urlencode($anioDetectadoNombre);
-    }
-    
-    $jsonOmdb = ejecutarCurl($urlOmdb);
-    
-    $urlPortada = '0';
-    $cadenaCategorias = 'Sin Categoría';
-    $resumenPelicula = 'Sin descripción disponible';
-    $cadenaActores = 'Sin Actores Registrados';
-    $anioEstreno = !empty($anioDetectadoNombre) ? $anioDetectadoNombre : 'N/A';
-
-    if ($jsonOmdb) {
-        $data = json_decode($jsonOmdb, true);
-        if (isset($data['Response']) && $data['Response'] === 'True') {
-            $urlPortada = (!empty($data['Poster']) && $data['Poster'] !== 'N/A') ? $data['Poster'] : '0';
-            $cadenaCategorias = (!empty($data['Genre']) && $data['Genre'] !== 'N/A') ? $data['Genre'] : 'Sin Categoría';
-            $resumenPelicula = (!empty($data['Plot']) && $data['Plot'] !== 'N/A') ? $data['Plot'] : 'Sin descripción disponible';
-            $cadenaActores = (!empty($data['Actors']) && $data['Actors'] !== 'N/A') ? $data['Actors'] : 'Sin Actores Registrados';
-            $anioEstreno = (!empty($data['Year']) && $data['Year'] !== 'N/A') ? substr($data['Year'], 0, 4) : $anioEstreno;
-        }
-    }
-
-    return [$urlPortada, $cadenaCategorias, $resumenPelicula, $cadenaActores, $anioEstreno];
-}
-
-function procesarMedia($nombreArchivo, $dirPortadas, $tmdbApi, $tmdbBearer, $mapaCat, $omdbApi) {
-    // 1. Intentar con TMDb
-    list($urlRemota, $categorias, $descripcion, $actores, $estreno) = buscarInfoPeliculaTmdb($nombreArchivo, $tmdbApi, $tmdbBearer, $mapaCat);
-
-    // 2. Respaldo con OMDb si TMDb no devuelve una portada o descripción útil, y existe la API Key de OMDb
-    if (($urlRemota === '0' || $descripcion === 'Sin descripción disponible') && !empty($omdbApi)) {
-        list($urlOmdb, $catOmdb, $descOmdb, $actOmdb, $estrOmdb) = buscarInfoPeliculaOmdb($nombreArchivo, $omdbApi);
-        
-        if ($urlOmdb !== '0' || $descOmdb !== 'Sin descripción disponible') {
-            $urlRemota = ($urlOmdb !== '0') ? $urlOmdb : $urlRemota;
-            $categorias = ($catOmdb !== 'Sin Categoría') ? $catOmdb : $categorias;
-            $descripcion = ($descOmdb !== 'Sin descripción disponible') ? $descOmdb : $descripcion;
-            $actores = ($actOmdb !== 'Sin Actores Registrados') ? $actOmdb : $actores;
-            $estreno = ($estrOmdb !== 'N/A') ? $estrOmdb : $estreno;
-        }
-    }
-
-    // 3. Descargar la imagen
-    if ($urlRemota !== '0') {
-        $nombreImagenLocal = preg_replace('/[^a-zA-Z0-9_-]/', '_', $nombreArchivo) . '.jpg';
-        $rutaImagenLocal = $dirPortadas . '/' . $nombreImagenLocal;
-
-        $contenidoImagen = descargarImagenDirecta($urlRemota);
-
-        if ($contenidoImagen && strlen($contenidoImagen) > 2000) {
-            file_put_contents($rutaImagenLocal, $contenidoImagen);
-        } else {
-            $urlRemota = '0';
-        }
-    }
-
-    return [$urlRemota, $categorias, $descripcion, $actores, $estreno];
-}
-
-$listaPeliculas = [];
-if (isset($pdo) && $pdo instanceof PDO) {
-    $stmtResultados = $pdo->query("SELECT * FROM peliculas ORDER BY id_peliculas DESC LIMIT 50");
-    $listaPeliculas = $stmtResultados ? $stmtResultados->fetchAll(PDO::FETCH_ASSOC) : [];
-} elseif (isset($conn) && ($conn instanceof mysqli || is_resource($conn))) {
-    $resResultados = $conn->query("SELECT * FROM peliculas ORDER BY id_peliculas DESC LIMIT 50");
-    if ($resResultados) {
-        while ($row = $resResultados->fetch_assoc()) {
-            $listaPeliculas[] = $row;
-        }
-    }
-}
-
-ob_start();
-?>
-<!DOCTYPE html>
-<html lang="es"><!-- InstanceBegin template="/Templates/Optimus_plantilla.dwt.php" codeOutsideHTMLIsLocked="false" -->
-<head>
-<!-- INICIO DE CODIGO PHP QUE TIENE QUE SER FIJO -->
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<?php
-date_default_timezone_set('America/Guayaquil');
-session_start();
-//setlocale(LC_TIME, 'es_ES', 'esp_esp');
-setlocale(LC_ALL, 'es_ES');
-setlocale(LC_TIME, 'es_ES.UTF-8'); //Linux
-/* ===============================
-   CONEXION BD  
-=================================*/
-require('../conectar.php');
-$oltconfiguracion = "no";
-$mikrotikconfiguracion = "no";
-	//--BUSCO EL NOMBRE DE LA EMPRESA Y EL LOGO
-		$sqlem = "SELECT * from `configuracion` order by ruc DESC";
-		$resultem = mysqli_query($con, $sqlem);
-		while($crowem = mysqli_fetch_assoc($resultem))
-        {
-			$_SESSION['empresamail']=$crowem['empresa'];
-			$empresa = $crowem['empresa'];
-			$logo = $crowem['logo'];
-			$colorfondo = $crowem['colorfondo'];
-			$carpeta = $crowem['carpeta'];
-			$tipoempresacontrol = $crowem['tipoempresa'];
-			$ip = $crowem['ip'];
-			$actualizacionanterior = $crowem['actualizacion'];
-			$ivadecimal =(100+$crowem['iva'])/100;
-			//#24a5dd
-		}
-	
-	if(isset($_SESSION['password']))
-	{
-
-		//--BUSCO EL NOMBRE DE LA EMPRESA Y EL LOGO
-		$sqlem = "SELECT * from `configuracion` order by ruc DESC";
-		$resultem = mysqli_query($con, $sqlem);
-		while($crowem = mysqli_fetch_assoc($resultem))
-        {
-			$_SESSION['empresamail']=$crowem['empresa'];
-			$empresa = $crowem['empresa'];
-			$logo = $crowem['logo'];
-			$colorfondo = $crowem['colorfondo'];
-			$carpeta = $crowem['carpeta'];
-			$tipoempresacontrol = $crowem['tipoempresa'];
-			$ip = $crowem['ip'];
-			$oltconfiguracion = $crowem['olt'];
-			$mikrotikconfiguracion = $crowem['mikrotik'];
-			$actualizacionanterior = $crowem['actualizacion'];
-			$ivadecimal =(100+$crowem['iva'])/100;
-			//#24a5dd
-		}
-
-//--BUSCO ACTUALIZACION NUEVA
-		$sqlac = "SELECT * from `actualizacion` order by fecha ASC";
-		$resultac = mysqli_query($conactualizacion, $sqlac);
-		while($crowac = mysqli_fetch_assoc($resultac))
-        {
-			$actualizacionnueva = $crowac['fecha'];
-			
-		}
-	
-	$personal = $_SESSION['password']; 
-	
-	$contrasenapersonal = $_SESSION['password'];
-	$sqlp = "SELECT * from `personal` WHERE `contrasena` LIKE '$contrasenapersonal' order by codigo DESC";
-	$resultp = mysqli_query($con, $sqlp);
-	while($crowp = mysqli_fetch_assoc($resultp))
-    {	
-		$sistema = "software";
-		$menu = $crowp['puesto'];	
-		if ($crowp['puesto'] == "instalador")
-		{
-			$sistema = "tecnico";
-		}
-		$puesto_personal=$crowp['puesto'];
-		$usuarionombre=$crowp['nombres']." ".$crowp['apellidos'];
-		$usuarionombre2=$crowp['nombres'];
-		$foto=$crowp['foto'];
-		$uno=$crowp['uno'];
-		$dos=$crowp['dos'];
-		$tres=$crowp['tres'];
-		$cuatro=$crowp['cuatro'];
-		$cinco 	=$crowp['cinco'];
-		$seis 	=$crowp['seis'];
-		$siete=$crowp['siete'];
-		$ocho=$crowp['ocho'];
-		$nueve 	=$crowp['nueve'];
-		$diez =$crowp['diez'];
-		$once =$crowp['once'];
-		$doce =$crowp['doce'];
-		$trece=$crowp['trece'];
-		$catorce =$crowp['catorce'];
-		$quince=$crowp['quince'];
-		$diezyseis =$crowp['diezyseis'];
-		$diezysiete=$crowp['diezysiete'];
-		$diezyocho =$crowp['diezyocho'];
-		$diezynueve =$crowp['diezynueve'];
-		$veinte =$crowp['veinte'];
-		$veinteyuno=$crowp['veinteyuno'];
-		$veinteydos=$crowp['veinteydos'];
-		$veinteytres=$crowp['veinteytres'];
-		$veinteycuatro=$crowp['veinteycuatro'];
-		$veinteycinco =$crowp['veinteycinco'];
-		$veinteyseis =$crowp['veinteyseis'];
-		$veinteysiete=$crowp['veinteysiete'];
-		$veinteyocho =$crowp['veinteyocho'];
-		$veinteynueve =$crowp['veinteynueve'];
-		$treinta =$crowp['treinta'];
-		$treintayuno =$crowp['treintayuno'];
-		$treintaydos =$crowp['treintaydos'];
-		$treintaytres=$crowp['treintaytres'];
-		$treintaycuatro=$crowp['treintaycuatro'];
-		$treintaycinco=$crowp['treintaycinco'];
-		$treintayseis=$crowp['treintayseis'];
-		$treintaysiete=$crowp['treintaysiete'];
-		$treintayocho =$crowp['treintayocho'];
-		$treintaynueve =$crowp['treintaynueve'];
-		$cuarenta =$crowp['cuarenta'];
-
-		$cuarentayuno=$crowp['cuarentayuno'];
-		$cuarentaydos =$crowp['cuarentaydos'];
-		$cuarentaytres =$crowp['cuarentaytres'];
-		$cuarentaycuatro =$crowp['cuarentaycuatro'];
-		$cuarentaycinco =$crowp['cuarentaycinco'];
-		$cuarentayseis =$crowp['cuarentayseis'];
-		$cuarentaysiete =$crowp['cuarentaysiete'];
-		$cuarentayocho =$crowp['cuarentayocho'];
-		$cuarentaynueve =$crowp['cuarentaynueve'];
-		$cincuenta =$crowp['cincuenta'];
-		$cincuentayuno =$crowp['cincuentayuno'];
-		$cincuentaydos =$crowp['cincuentaydos'];
-		$cincuentaytres =$crowp['cincuentaytres'];
-		$exportar =$crowp['exportar'];
-		$cambiarprecio =$crowp['cambiarprecio'];
-	}
-	// PHP program to get IP address of client
-	$IP = $_SERVER['REMOTE_ADDR'];
-	// PHP code to get the MAC address of Client
-	$MAC = exec('getmac');
-	$nombre = gethostbyaddr($_SERVER['REMOTE_ADDR']);
-  	// Storing 'getmac' value in $MAC
-	$MAC = strtok($MAC, ' ');
-	$fecha = date("Y-m-d (H:i:s)", time());
-	$url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "s") . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
-	//$sql = " INSERT INTO `acceso` ( `usuario`, `fecha`, `url`, `ip`, `mac`, `nombre`) VALUES ( '$personal', '$fecha', '$url', '$IP', '$MAC', '$nombre')"; 
-	//mysqli_query($con, $sql);
-
-	}
-	else
-	{
-		echo "no existe variable de sesion iniciada";
-	}
-	
-	
-	?>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  
-  <title>Global Net</title>
-	<!-- Aquí colocas tu icono -->
-    <link rel="icon" type="image/x-icon" href="../images/ico.png">
-    <link rel="shortcut icon" type="image/x-icon" href="../images/ico.png">
-  
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/styles.css" />
-<!-- InstanceBeginEditable name="head" -->
-<!-- InstanceEndEditable -->
-</head> 
-<body>
-  <div class="app-shell">
-    <aside class="sidebar">
-  <a class="brand" href="../resumen/index.php">
-    <img src="../img/logo.png" width="186" height="69" alt="Nexus ISP"/>
-  </a>
-
-  <nav class="main-nav">
-    <details class="menu-section">
-      <summary class="menu-label">GESTIÓN</summary>
-      <a href="../resumen/index.php"><i data-lucide="home"></i> Resumen</a>
-      <a href="../clientes/index.php"><i data-lucide="users"></i> Clientes</a>
-      <a href="../cuentas/index.php"><i data-lucide="landmark"></i> Cuentas Bancarias</a>
-      <a href="../reportes/index.php"><i data-lucide="bar-chart-3"></i> Reportes</a>
-    </details>
-
-    <details class="menu-section">
-      <summary class="menu-label">OPERACIONES</summary>
-      <a href="../productos/productos.php"><i data-lucide="boxes"></i> Inventario</a>
-      <a href="../personal/productos.php"><i data-lucide="user-round-cog"></i> Personal</a>
-      <a href="../serviciotecnico/index.php"><i data-lucide="wrench"></i> Servicio Técnico</a>
-    </details>
-
-    <details class="menu-section">
-      <summary class="menu-label">INFRAESTRUCTURA</summary>
-      <a href="../mikrotik/listado.php"><i data-lucide="shield-check"></i> MikroTik</a>
-      <a href="https://192.168.8.100/action/login.html" target="new"><i data-lucide="shield-check"></i> OLT</a>
-      <a href="http://10.7.0.254:15178/ViewPower/monitor?319" target="new"><i data-lucide="shield-check"></i> Ups</a>
-      <a href="../truenas/truenas.php"><i data-lucide="hard-drive"></i> NAS</a>
-      <a href="../traccar/traccar.php"><i data-lucide="map-pin"></i> Rastreo</a>
-      <a href="../streaming/index.php"><i data-lucide="play-circle"></i> Streaming</a>
-      <a href="index.php"><i data-lucide="play-circle"></i> Peliculas</a>
-      <a href="../zkteco/index.php"><i data-lucide="fingerprint"></i> ZKTeco</a>
-	  <a href="../red/index.php"><i data-lucide="shield-check"></i> Mapeo Red</a>
-	  <a href="../redvirtual/index.php"><i data-lucide="shield-check"></i> Red Virtual</a>
-    </details>
-
-    <details class="menu-section">
-      <summary class="menu-label">SISTEMA</summary>
-      <a href="../estado/index.php"><i data-lucide="badge-check"></i> Estado Contrato</a>
-      <a href="#"><i data-lucide="calculator"></i> Contabilidad</a>
-      <a href="../configuracion/index.php"><i data-lucide="settings"></i> Configuración</a>
-    </details>
-  </nav>
-</aside>
-
-<style>
-  /* Animación de apertura suave */
-  .menu-section[open] {
-    animation: fadeIn 0.3s ease-out;
-  }
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-  .menu-section summary {
-    list-style: none;
-    cursor: pointer;
-    padding: 12px 20px;
-    font-size: 0.75rem;
-    color: var(--muted);
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    transition: color 0.3s;
-  }
-
-  .menu-section summary:hover { color: var(--cyan); }
-
-  .menu-section summary::after {
-    content: "chevron-down"; /* Si usas lucide, podrías incluso inyectar un icono aquí */
-    content: "▼";
-    font-size: 8px;
-    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .menu-section[open] summary::after { transform: rotate(180deg); color: var(--cyan); }
-
-  /* Estilo de los enlaces con efecto de deslizamiento */
-  .menu-section a {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 20px;
-    margin: 2px 10px;
-    color: var(--text);
-    font-size: 14px;
-    text-decoration: none;
-    border-radius: 6px;
-    transition: all 0.3s ease;
-    border-left: 2px solid transparent;
-  }
-
-  /* Efecto llamativo al pasar el ratón */
-  .menu-section a:hover {
-    background: var(--bg-soft);
-    border-left: 2px solid var(--cyan);
-    padding-left: 25px; /* Efecto de empuje hacia la derecha */
-    color: var(--cyan);
-  }
-
-  .menu-section a i {
-    transition: transform 0.3s;
-  }
-  
-  .menu-section a:hover i {
-    transform: scale(1.2); /* El icono crece un poco */
-  }
-
-/* ==== MENU PREMIUM ==== */
-.sidebar{background:linear-gradient(180deg,#111827,#0b1220);}
-.menu-section{border:1px solid rgba(255,255,255,.05);border-radius:12px;margin:8px;overflow:hidden;transition:.3s}
-.menu-section summary{list-style:none;cursor:pointer;padding:14px 18px;font-weight:700;letter-spacing:.08em}
-.menu-section summary::-webkit-details-marker{display:none}
-.menu-section summary::after{content:"▼";float:right;transition:.3s}
-.menu-section[open] summary::after{transform:rotate(180deg)}
-.menu-section a{display:flex;gap:12px;padding:11px 18px;margin:4px 8px;border-radius:8px;transition:.25s;text-decoration:none}
-.menu-section a:hover{transform:translateX(6px);background:rgba(0,255,255,.08)}
-
-</style>
-
-    <main class="content">
-      
-      <section class="metric-grid"></section>
-      <!-- InstanceBeginEditable name="principal" -->
-		
-		<?php
 // Configuración de errores y tiempo límite de ejecución ilimitado para segundo plano
 ini_set('display_errors', 0);
 error_reporting(E_ALL);
@@ -1019,11 +113,9 @@ if (!function_exists('obtenerIdiomasAudio')) {
             return 'Error (shell_exec deshabilitado)';
         }
 
-        // Agregamos "2>&1" al final para capturar errores del sistema si ffprobe falla
         $comando = 'ffprobe -v error -select_streams a -show_entries stream=tags:language -of json ' . escapeshellarg($rutaArchivo) . ' 2>&1';
         $salida = shell_exec($comando);
 
-        // Validamos si el comando falló porque ffprobe no está instalado o no se encuentra en el PATH
         if (!$salida || stripos($salida, 'command not found') !== false || stripos($salida, 'not recognized') !== false) {
             return 'Error: ffprobe no instalado o inaccesible';
         }
@@ -1031,12 +123,10 @@ if (!function_exists('obtenerIdiomasAudio')) {
         $data = json_decode($salida, true);
         $idiomasDetectados = [];
 
-        // Si falló el JSON, probablemente ffprobe devolvió un error de lectura
         if (json_last_error() !== JSON_ERROR_NONE) {
             return 'Audio (Sin metadatos legibles)';
         }
 
-        // Validamos que haya encontrado streams (pistas)
         if (isset($data['streams']) && is_array($data['streams'])) {
             if (count($data['streams']) === 0) {
                 return 'Sin pistas de audio';
@@ -1046,7 +136,6 @@ if (!function_exists('obtenerIdiomasAudio')) {
                 if (isset($stream['tags']['language']) && !empty(trim($stream['tags']['language']))) {
                     $lang = strtolower(trim($stream['tags']['language']));
                     
-                    // Mapa de idiomas (Soporta formatos ISO 639-2 (3 letras) e ISO 639-1 (2 letras))
                     $mapaIdiomas = [
                         'spa' => 'Español', 'es' => 'Español',
                         'eng' => 'Inglés',  'en' => 'Inglés',
@@ -1060,7 +149,6 @@ if (!function_exists('obtenerIdiomasAudio')) {
 
                     $idiomasDetectados[] = $mapaIdiomas[$lang] ?? strtoupper($lang);
                 } else {
-                    // La pista de audio existe, pero el archivo MKV/MP4 no tiene el idioma etiquetado
                     $idiomasDetectados[] = 'Idioma No Definido';
                 }
             }
@@ -1070,7 +158,6 @@ if (!function_exists('obtenerIdiomasAudio')) {
             return 'Sin audio detectado';
         }
 
-        // Limpiar duplicados por si hay 2 pistas en español (ej: "Español, Español" pasará a ser solo "Español")
         return implode(', ', array_unique($idiomasDetectados));
     }
 }
@@ -1345,12 +432,12 @@ ob_start();
 <body>
     <div class="toast-burbuja" id="burbuja-notificacion">
         <div class="spinner"></div>
-        <span>Indexación iniciada (TMDb/OMDb y Análisis de Audio)...</span>
+        <span>Indexación iniciada (Máximo 50 nuevos registros)...</span>
     </div>
     <div class="container">
         <h1>Escaneo de Películas y Análisis de Audio</h1>
         <p class="success">El escaneo ha sido iniciado correctamente.</p>
-        <p>El sistema obtendrá datos de TMDb/OMDb y usará <strong>ffprobe</strong> para extraer los idiomas del audio.</p>
+        <p>El sistema obtendrá datos de TMDb/OMDb, analizará el audio y procesará un <strong>lote máximo de 50 archivos nuevos</strong>.</p>
     </div>
     <h2>Últimos Registros en la Base de Datos</h2>
     <table>
@@ -1445,8 +532,7 @@ if (session_id()) session_write_close();
 if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
 
 // =========================================================================
-// CONTINUACIÓN DEL PROCESO EN SEGUNDO PLANO
-
+// CONTINUACIÓN DEL PROCESO EN SEGUNDO PLANO (Con límite de 50 registros)
 // =========================================================================
 
 $iterator = new RecursiveIteratorIterator(
@@ -1455,6 +541,8 @@ $iterator = new RecursiveIteratorIterator(
 );
 
 $rutaExcluida = rtrim(str_replace('\\', '/', $dir_base), '/') . '/' . $carpeta_excluida . '/';
+$contador_procesados = 0; // Contador de elementos procesados en esta ejecución
+$limite_lote = 50;       // Restricción máxima por lote
 
 if (isset($pdo) && $pdo instanceof PDO) {
     $sql = "INSERT INTO peliculas (id_peliculas, id_categoria, nombre, descripcion, actores, estreno, fecha, pelicula_url, portada_url, audio) 
@@ -1462,6 +550,10 @@ if (isset($pdo) && $pdo instanceof PDO) {
     $stmt = $pdo->prepare($sql);
 
     foreach ($iterator as $item) {
+        if ($contador_procesados >= $limite_lote) {
+            break; // Detener el bucle al alcanzar los 50 registros
+        }
+
         if ($item->isFile()) {
             $ruta_completa = str_replace('\\', '/', $item->getPathname());
 
@@ -1493,6 +585,8 @@ if (isset($pdo) && $pdo instanceof PDO) {
                     ':portada_url'  => $portada_url,
                     ':audio'        => $audio_detectado
                 ]);
+
+                $contador_procesados++; // Incrementar contador por cada archivo nuevo indexado
             }
         }
     }
@@ -1502,6 +596,10 @@ if (isset($pdo) && $pdo instanceof PDO) {
     $stmt = $conn->prepare($sql);
 
     foreach ($iterator as $item) {
+        if ($contador_procesados >= $limite_lote) {
+            break; // Detener el bucle al alcanzar los 50 registros
+        }
+
         if ($item->isFile()) {
             $ruta_completa = str_replace('\\', '/', $item->getPathname());
 
@@ -1526,6 +624,8 @@ if (isset($pdo) && $pdo instanceof PDO) {
 
                 $stmt->bind_param('sssssssss', $categoria, $nombre, $descripcion, $actores, $estreno, $fecha, $ruta_completa, $portada_url, $audio_detectado);
                 $stmt->execute();
+
+                $contador_procesados++; // Incrementar contador por cada archivo nuevo indexado
             }
         }
     }
@@ -1533,27 +633,3 @@ if (isset($pdo) && $pdo instanceof PDO) {
 }
 exit;
 ?>
-		<!-- InstanceEndEditable --></main>
-  </div>
-
-  <!--<script src="https://unpkg.com/lucide@latest"></script>-->
-  <script src="../js/lucide%40latest.js"></script>
-  <!--<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>-->
-  <script src="../js/chart.js"></script>
-  <script src="../js/app.js"></script>
-
-<script>
-document.querySelectorAll('.menu-section a').forEach(a=>{
- if(a.href===location.href){
-   a.style.background='rgba(0,255,255,.12)';
-   a.style.color='#00e5ff';
-   let d=a.closest('details'); if(d)d.open=true;
- }
-});
-document.querySelectorAll('.menu-section').forEach(function(menu){
-    menu.open = false;
-});
-</script>
-
-</body>
-<!-- InstanceEnd --></html>

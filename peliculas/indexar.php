@@ -1,6 +1,8 @@
 <?php
-// Configuración de errores y tiempo límite de ejecución ilimitado para segundo plano
+// Configuración de registros de errores para depuración en segundo plano
 ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/errores_escaneo.log'); // Si algo falla, el error se escribirá en este archivo
 error_reporting(E_ALL);
 set_time_limit(0); 
 ignore_user_abort(true);
@@ -19,6 +21,7 @@ if (!file_exists($dir_portadas)) {
 }
 
 if (!is_dir($dir_base)) {
+    error_log("Error: La ruta base '$dir_base' no existe o no se tienen permisos.");
     die("Error: La ruta '$dir_base' no existe o el servidor web no tiene permisos de lectura.");
 }
 
@@ -58,11 +61,12 @@ if (isset($pdo) && $pdo instanceof PDO) {
 }
 
 if (empty($tmdb_api_key) && empty($tmdb_bearer_token)) {
+    error_log("Error: No se encontraron las credenciales de TMDb en la base de datos.");
     die("Error: No se encontraron las credenciales de TMDb en la tabla 'tmdb'.");
 }
 
 // =========================================================================
-// FUNCIONES (Protegidas contra re-declaración)
+// FUNCIONES DE APOYO
 // =========================================================================
 
 if (!function_exists('ejecutarCurl')) {
@@ -110,26 +114,26 @@ if (!function_exists('descargarImagenDirecta')) {
 if (!function_exists('obtenerIdiomasAudio')) {
     function obtenerIdiomasAudio($rutaArchivo) {
         if (!function_exists('shell_exec')) {
-            return 'Error (shell_exec deshabilitado)';
+            return 'Sin audio detectado';
         }
 
         $comando = 'ffprobe -v error -select_streams a -show_entries stream=tags:language -of json ' . escapeshellarg($rutaArchivo) . ' 2>&1';
-        $salida = shell_exec($comando);
+        $salida = @shell_exec($comando);
 
         if (!$salida || stripos($salida, 'command not found') !== false || stripos($salida, 'not recognized') !== false) {
-            return 'Error: ffprobe no instalado o inaccesible';
+            return 'Audio N/A';
         }
 
         $data = json_decode($salida, true);
         $idiomasDetectados = [];
 
         if (json_last_error() !== JSON_ERROR_NONE) {
-            return 'Audio (Sin metadatos legibles)';
+            return 'Audio N/A';
         }
 
         if (isset($data['streams']) && is_array($data['streams'])) {
             if (count($data['streams']) === 0) {
-                return 'Sin pistas de audio';
+                return 'Sin audio';
             }
 
             foreach ($data['streams'] as $stream) {
@@ -149,13 +153,13 @@ if (!function_exists('obtenerIdiomasAudio')) {
 
                     $idiomasDetectados[] = $mapaIdiomas[$lang] ?? strtoupper($lang);
                 } else {
-                    $idiomasDetectados[] = 'Idioma No Definido';
+                    $idiomasDetectados[] = 'Sin definir';
                 }
             }
         }
 
         if (empty($idiomasDetectados)) {
-            return 'Sin audio detectado';
+            return 'Sin audio';
         }
 
         return implode(', ', array_unique($idiomasDetectados));
@@ -257,6 +261,8 @@ if (!function_exists('buscarInfoPeliculaTmdb')) {
         $resumenPelicula = 'Sin descripción disponible';
         $cadenaActores = 'Sin Actores Registrados';
         $anioEstreno = !empty($anioDetectadoNombre) ? $anioDetectadoNombre : 'N/A';
+        $audienciaTmdb = 'N/A';
+        $imdbId = '';
 
         if ($resultadoPelicula) {
             if (!empty($resultadoPelicula['poster_path'])) {
@@ -274,43 +280,69 @@ if (!function_exists('buscarInfoPeliculaTmdb')) {
             if (!empty($resultadoPelicula['overview'])) {
                 $resumenPelicula = trim($resultadoPelicula['overview']);
             }
+            
+            // AUDIENCIA DESDE TMDB (vote_average convertido a porcentaje)
+            if (isset($resultadoPelicula['vote_average']) && $resultadoPelicula['vote_average'] > 0) {
+                $audienciaTmdb = round($resultadoPelicula['vote_average'] * 10) . '%';
+            }
+
             if (isset($resultadoPelicula['id'])) {
                 $cadenaActores = obtenerActoresTmdb($resultadoPelicula['id'], $apiKey, $bearerToken, 10);
+                
+                // Buscar IMDb ID en TMDb para vincular Rotten Tomatoes si es posible
+                $urlExternal = "https://api.themoviedb.org/3/movie/{$resultadoPelicula['id']}/external_ids?" . http_build_query($params);
+                $jsonExternal = ejecutarCurl($urlExternal, $headers);
+                if ($jsonExternal) {
+                    $extData = json_decode($jsonExternal, true);
+                    if (!empty($extData['imdb_id'])) {
+                        $imdbId = $extData['imdb_id'];
+                    }
+                }
             }
+
             $fechaTmdb = $resultadoPelicula['release_date'] ?? $resultadoPelicula['first_air_date'] ?? '';
             if (!empty($fechaTmdb) && strlen($fechaTmdb) >= 4) {
                 $anioEstreno = substr($fechaTmdb, 0, 4);
             }
         }
 
-        return [$urlPortada, $cadenaCategorias, $resumenPelicula, $cadenaActores, $anioEstreno];
+        return [$urlPortada, $cadenaCategorias, $resumenPelicula, $cadenaActores, $anioEstreno, $audienciaTmdb, $imdbId];
     }
 }
 
 if (!function_exists('buscarInfoPeliculaOmdb')) {
-    function buscarInfoPeliculaOmdb($nombreArchivo, $omdbApiKey) {
-        $titulo = $nombreArchivo;
-        $anioDetectadoNombre = '';
-        if (preg_match('/^(.*?)\s*[\(\.\[\_\-]?\s*(19\d{2}|20\d{2})/i', $nombreArchivo, $coincidencias)) {
-            $titulo = trim($coincidencias[1]);
-            $anioDetectadoNombre = $coincidencias[2];
-        } else {
-            $titulo = preg_replace('/[._-]/', ' ', $nombreArchivo);
-            $titulo = trim(preg_replace('/\b(1080p|720p|4k|2160p|bluray|brrip|web-dl)\b/i', '', $titulo));
-        }
-
-        $urlOmdb = "http://www.omdbapi.com/?t=" . urlencode($titulo) . "&apikey=" . urlencode(trim($omdbApiKey));
-        if(!empty($anioDetectadoNombre)) {
-            $urlOmdb .= "&y=" . urlencode($anioDetectadoNombre);
-        }
-        
-        $jsonOmdb = ejecutarCurl($urlOmdb);
-        
+    function buscarInfoPeliculaOmdb($nombreArchivo, $omdbApiKey, $imdbId = '') {
+        $rottenTomatoes = 'N/A';
+        $audiencia = 'N/A';
         $urlPortada = '0';
         $cadenaCategorias = 'Sin Categoría';
         $resumenPelicula = 'Sin descripción disponible';
         $cadenaActores = 'Sin Actores Registrados';
-        $anioEstreno = !empty($anioDetectadoNombre) ? $anioDetectadoNombre : 'N/A';
+        $anioEstreno = 'N/A';
+
+        if (empty($omdbApiKey)) {
+            return [$urlPortada, $cadenaCategorias, $resumenPelicula, $cadenaActores, $anioEstreno, $rottenTomatoes, $audiencia];
+        }
+
+        if (!empty($imdbId)) {
+            $urlOmdb = "http://www.omdbapi.com/?i=" . urlencode($imdbId) . "&apikey=" . urlencode(trim($omdbApiKey));
+        } else {
+            $titulo = $nombreArchivo;
+            $anioDetectadoNombre = '';
+            if (preg_match('/^(.*?)\s*[\(\.\[\_\-]?\s*(19\d{2}|20\d{2})/i', $nombreArchivo, $coincidencias)) {
+                $titulo = trim($coincidencias[1]);
+                $anioDetectadoNombre = $coincidencias[2];
+            } else {
+                $titulo = preg_replace('/[._-]/', ' ', $nombreArchivo);
+                $titulo = trim(preg_replace('/\b(1080p|720p|4k|2160p|bluray|brrip|web-dl)\b/i', '', $titulo));
+            }
+            $urlOmdb = "http://www.omdbapi.com/?t=" . urlencode($titulo) . "&apikey=" . urlencode(trim($omdbApiKey));
+            if (!empty($anioDetectadoNombre)) {
+                $urlOmdb .= "&y=" . urlencode($anioDetectadoNombre);
+            }
+        }
+
+        $jsonOmdb = ejecutarCurl($urlOmdb);
 
         if ($jsonOmdb) {
             $data = json_decode($jsonOmdb, true);
@@ -319,28 +351,49 @@ if (!function_exists('buscarInfoPeliculaOmdb')) {
                 $cadenaCategorias = (!empty($data['Genre']) && $data['Genre'] !== 'N/A') ? $data['Genre'] : 'Sin Categoría';
                 $resumenPelicula = (!empty($data['Plot']) && $data['Plot'] !== 'N/A') ? $data['Plot'] : 'Sin descripción disponible';
                 $cadenaActores = (!empty($data['Actors']) && $data['Actors'] !== 'N/A') ? $data['Actors'] : 'Sin Actores Registrados';
-                $anioEstreno = (!empty($data['Year']) && $data['Year'] !== 'N/A') ? substr($data['Year'], 0, 4) : $anioEstreno;
+                $anioEstreno = (!empty($data['Year']) && $data['Year'] !== 'N/A') ? substr($data['Year'], 0, 4) : 'N/A';
+
+                if (isset($data['Ratings']) && is_array($data['Ratings'])) {
+                    foreach ($data['Ratings'] as $rating) {
+                        if ($rating['Source'] === 'Rotten Tomatoes') {
+                            $rottenTomatoes = $rating['Value'];
+                        }
+                    }
+                }
+                if (!empty($data['imdbRating']) && $data['imdbRating'] !== 'N/A') {
+                    $audiencia = $data['imdbRating'] . ' / 10';
+                }
             }
         }
 
-        return [$urlPortada, $cadenaCategorias, $resumenPelicula, $cadenaActores, $anioEstreno];
+        return [$urlPortada, $cadenaCategorias, $resumenPelicula, $cadenaActores, $anioEstreno, $rottenTomatoes, $audiencia];
     }
 }
 
 if (!function_exists('procesarMedia')) {
     function procesarMedia($nombreArchivo, $dirPortadas, $tmdbApi, $tmdbBearer, $mapaCat, $omdbApi) {
-        list($urlRemota, $categorias, $descripcion, $actores, $estreno) = buscarInfoPeliculaTmdb($nombreArchivo, $tmdbApi, $tmdbBearer, $mapaCat);
+        list($urlRemota, $categorias, $descripcion, $actores, $estreno, $audienciaTmdb, $imdbId) = buscarInfoPeliculaTmdb($nombreArchivo, $tmdbApi, $tmdbBearer, $mapaCat);
+        
+        // --- SOLUCIÓN: Utilizar la calificación de TMDB convertida como fallback para Rotten Tomatoes ---
+        $rottenTomatoes = ($audienciaTmdb !== 'N/A') ? $audienciaTmdb : 'N/A';
+        $audiencia = ($audienciaTmdb !== 'N/A') ? $audienciaTmdb : 'N/A';
 
-        if (($urlRemota === '0' || $descripcion === 'Sin descripción disponible') && !empty($omdbApi)) {
-            list($urlOmdb, $catOmdb, $descOmdb, $actOmdb, $estrOmdb) = buscarInfoPeliculaOmdb($nombreArchivo, $omdbApi);
+        // Obtener Rotten Tomatoes desde OMDb usando IMDb ID o título
+        if (!empty($omdbApi)) {
+            list($urlOmdb, $catOmdb, $descOmdb, $actOmdb, $estrOmdb, $rtOmdb, $audOmdb) = buscarInfoPeliculaOmdb($nombreArchivo, $omdbApi, $imdbId);
             
-            if ($urlOmdb !== '0' || $descOmdb !== 'Sin descripción disponible') {
-                $urlRemota = ($urlOmdb !== '0') ? $urlOmdb : $urlRemota;
-                $categorias = ($catOmdb !== 'Sin Categoría') ? $catOmdb : $categorias;
-                $descripcion = ($descOmdb !== 'Sin descripción disponible') ? $descOmdb : $descripcion;
-                $actores = ($actOmdb !== 'Sin Actores Registrados') ? $actOmdb : $actores;
-                $estreno = ($estrOmdb !== 'N/A') ? $estrOmdb : $estreno;
+            // Si OMDb devuelve un valor de Rotten Tomatoes válido, sobreescribimos el equivalente de TMDb
+            if ($rtOmdb !== 'N/A') {
+                $rottenTomatoes = $rtOmdb;
             }
+
+            // Respaldos si TMDb no devolvió suficiente información
+            if ($urlRemota === '0' && $urlOmdb !== '0') $urlRemota = $urlOmdb;
+            if ($categorias === 'Sin Categoría' && $catOmdb !== 'Sin Categoría') $categorias = $catOmdb;
+            if ($descripcion === 'Sin descripción disponible' && $descOmdb !== 'Sin descripción disponible') $descripcion = $descOmdb;
+            if ($actores === 'Sin Actores Registrados' && $actOmdb !== 'Sin Actores Registrados') $actores = $actOmdb;
+            if ($estreno === 'N/A' && $estrOmdb !== 'N/A') $estreno = $estrOmdb;
+            if ($audiencia === 'N/A' && $audOmdb !== 'N/A') $audiencia = $audOmdb;
         }
 
         if ($urlRemota !== '0') {
@@ -356,7 +409,7 @@ if (!function_exists('procesarMedia')) {
             }
         }
 
-        return [$urlRemota, $categorias, $descripcion, $actores, $estreno];
+        return [$urlRemota, $categorias, $descripcion, $actores, $estreno, $rottenTomatoes, $audiencia];
     }
 }
 
@@ -408,21 +461,25 @@ ob_start();
         th { background-color: #34495e; color: white; }
         tr:nth-child(even) { background-color: #f9f9f9; }
         
-        .col-id { width: 40px; }
-        .col-portada { width: 100px; }
-        .col-nombre { width: 12%; }
-        .col-cat { width: 10%; }
-        .col-desc { width: 22%; }
-        .col-actores { width: 12%; }
-        .col-estreno { width: 75px; text-align: center; }
-        .col-audio { width: 85px; }
-        .col-fecha { width: 90px; }
-        .col-ruta { width: 10%; }
+        .col-id { width: 35px; }
+        .col-portada { width: 90px; }
+        .col-nombre { width: 11%; }
+        .col-cat { width: 9%; }
+        .col-desc { width: 18%; }
+        .col-actores { width: 11%; }
+        .col-estreno { width: 65px; text-align: center; }
+        .col-rt { width: 70px; text-align: center; }
+        .col-aud { width: 70px; text-align: center; }
+        .col-audio { width: 75px; }
+        .col-fecha { width: 85px; }
+        .col-ruta { width: 9%; }
 
         .img-poster { width: 90px; height: 135px; object-fit: cover; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
         .no-img { width: 90px; height: 135px; background: #e0e0e0; display: flex; align-items: center; justify-content: center; color: #777; font-size: 12px; border-radius: 6px; text-align: center; }
         .badge-cat { display: inline-block; background: #e1f5fe; color: #0288d1; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
         .badge-estreno { display: inline-block; background: #fff3e0; color: #e65100; padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: bold; border: 1px solid #ffe0b2; }
+        .badge-rt { display: inline-block; background: #ffebee; color: #c62828; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; border: 1px solid #ffcdd2; }
+        .badge-aud { display: inline-block; background: #ede7f6; color: #512da8; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; border: 1px solid #d1c4e9; }
         .badge-audio { display: inline-block; background: #e8f5e9; color: #2e7d32; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; border: 1px solid #c8e6c9; margin-bottom: 3px;}
         .desc-text, .actores-text { font-size: 13px; color: #555; line-height: 1.5; white-space: normal; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; }
         .actores-text { color: #2c3e50; font-weight: 500; }
@@ -432,12 +489,12 @@ ob_start();
 <body>
     <div class="toast-burbuja" id="burbuja-notificacion">
         <div class="spinner"></div>
-        <span>Indexación iniciada (Máximo 50 nuevos registros)...</span>
+        <span>Escaneo en proceso (Máximo 50 nuevos registros)...</span>
     </div>
     <div class="container">
         <h1>Escaneo de Películas y Análisis de Audio</h1>
         <p class="success">El escaneo ha sido iniciado correctamente.</p>
-        <p>El sistema obtendrá datos de TMDb/OMDb, analizará el audio y procesará un <strong>lote máximo de 50 archivos nuevos</strong>.</p>
+        <p>El sistema obtendrá datos de TMDb/OMDb, analizará el audio y procesará un <strong>lote máximo de 50 archivos nuevos</strong> en segundo plano.</p>
     </div>
     <h2>Últimos Registros en la Base de Datos</h2>
     <table>
@@ -450,6 +507,8 @@ ob_start();
                 <th class="col-desc">Descripción</th>
                 <th class="col-actores">Actores</th>
                 <th class="col-estreno">Estreno</th>
+                <th class="col-rt">Rotten T.</th>
+                <th class="col-aud">Audiencia</th>
                 <th class="col-audio">Audio</th>
                 <th class="col-fecha">Fecha</th>
                 <th class="col-ruta">Ruta Película</th>
@@ -487,6 +546,12 @@ ob_start();
                         <td style="text-align: center;">
                             <span class="badge-estreno"><?php echo htmlspecialchars(!empty($pelicula['estreno']) ? $pelicula['estreno'] : 'N/A'); ?></span>
                         </td>
+                        <td style="text-align: center;">
+                            <span class="badge-rt"><?php echo htmlspecialchars(!empty($pelicula['rotten_tomatoes']) ? $pelicula['rotten_tomatoes'] : 'N/A'); ?></span>
+                        </td>
+                        <td style="text-align: center;">
+                            <span class="badge-aud"><?php echo htmlspecialchars(!empty($pelicula['audiencia']) ? $pelicula['audiencia'] : 'N/A'); ?></span>
+                        </td>
                         <td>
                             <?php 
                             $idiomas_db = !empty($pelicula['audio']) ? explode(',', $pelicula['audio']) : ['N/A'];
@@ -501,7 +566,7 @@ ob_start();
                 <?php endforeach; ?>
             <?php else: ?>
                 <tr>
-                    <td colspan="10" style="text-align:center;">No se encontraron registros previos.</td>
+                    <td colspan="12" style="text-align:center;">No se encontraron registros previos.</td>
                 </tr>
             <?php endif; ?>
         </tbody>
@@ -520,7 +585,7 @@ ob_start();
 </body>
 </html>
 <?php
-// Enviar respuesta inmediata
+// Enviar respuesta rápida al navegador para permitir que el escaneo continúe en segundo plano
 $size = ob_get_length();
 header("Content-Length: $size");
 header('Connection: close');
@@ -535,24 +600,27 @@ if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
 // CONTINUACIÓN DEL PROCESO EN SEGUNDO PLANO (Con límite de 50 registros)
 // =========================================================================
 
-$iterator = new RecursiveIteratorIterator(
-    new RecursiveDirectoryIterator($dir_base, RecursiveDirectoryIterator::SKIP_DOTS),
-    RecursiveIteratorIterator::SELF_FIRST
-);
+try {
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($dir_base, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+} catch (Exception $e) {
+    error_log("Error al leer directorio base: " . $e->getMessage());
+    exit;
+}
 
 $rutaExcluida = rtrim(str_replace('\\', '/', $dir_base), '/') . '/' . $carpeta_excluida . '/';
-$contador_procesados = 0; // Contador de elementos procesados en esta ejecución
-$limite_lote = 50;       // Restricción máxima por lote
+$contador_procesados = 0; 
+$limite_lote = 50;        
 
 if (isset($pdo) && $pdo instanceof PDO) {
-    $sql = "INSERT INTO peliculas (id_peliculas, id_categoria, nombre, descripcion, actores, estreno, fecha, pelicula_url, portada_url, audio) 
-            VALUES (NULL, :id_categoria, :nombre, :descripcion, :actores, :estreno, :fecha, :pelicula_url, :portada_url, :audio)";
+    $sql = "INSERT INTO peliculas (id_categoria, nombre, descripcion, actores, estreno, rotten_tomatoes, audiencia, fecha, pelicula_url, portada_url, audio) 
+            VALUES (:id_categoria, :nombre, :descripcion, :actores, :estreno, :rotten_tomatoes, :audiencia, :fecha, :pelicula_url, :portada_url, :audio)";
     $stmt = $pdo->prepare($sql);
 
     foreach ($iterator as $item) {
-        if ($contador_procesados >= $limite_lote) {
-            break; // Detener el bucle al alcanzar los 50 registros
-        }
+        if ($contador_procesados >= $limite_lote) break; 
 
         if ($item->isFile()) {
             $ruta_completa = str_replace('\\', '/', $item->getPathname());
@@ -571,34 +639,42 @@ if (isset($pdo) && $pdo instanceof PDO) {
                 $chk->execute([':url' => $ruta_completa]);
                 if ($chk->fetch()) continue;
 
-                list($portada_url, $categoria, $descripcion, $actores, $estreno) = procesarMedia($nombre, $dir_portadas, $tmdb_api_key, $tmdb_bearer_token, $mapaCategorias, $omdb_api_key);
+                list($portada_url, $categoria, $descripcion, $actores, $estreno, $rotten_tomatoes, $audiencia) = procesarMedia($nombre, $dir_portadas, $tmdb_api_key, $tmdb_bearer_token, $mapaCategorias, $omdb_api_key);
                 $audio_detectado = obtenerIdiomasAudio($ruta_completa);
 
-                $stmt->execute([
-                    ':id_categoria' => $categoria,
-                    ':nombre'       => $nombre,
-                    ':descripcion'  => $descripcion,
-                    ':actores'      => $actores,
-                    ':estreno'      => $estreno,
-                    ':fecha'        => $fecha,
-                    ':pelicula_url' => $ruta_completa,
-                    ':portada_url'  => $portada_url,
-                    ':audio'        => $audio_detectado
-                ]);
-
-                $contador_procesados++; // Incrementar contador por cada archivo nuevo indexado
+                try {
+                    $stmt->execute([
+                        ':id_categoria'    => $categoria,
+                        ':nombre'          => $nombre,
+                        ':descripcion'     => $descripcion,
+                        ':actores'         => $actores,
+                        ':estreno'         => $estreno,
+                        ':rotten_tomatoes' => $rotten_tomatoes,
+                        ':audiencia'       => $audiencia,
+                        ':fecha'           => $fecha,
+                        ':pelicula_url'    => $ruta_completa,
+                        ':portada_url'     => $portada_url,
+                        ':audio'           => $audio_detectado
+                    ]);
+                    $contador_procesados++; 
+                } catch (PDOException $e) {
+                    error_log("Error insertando en PDO: " . $e->getMessage());
+                }
             }
         }
     }
 } elseif (isset($conn) && ($conn instanceof mysqli || is_resource($conn))) {
-    $sql = "INSERT INTO peliculas (id_peliculas, id_categoria, nombre, descripcion, actores, estreno, fecha, pelicula_url, portada_url, audio) 
-            VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $sql = "INSERT INTO peliculas (id_categoria, nombre, descripcion, actores, estreno, rotten_tomatoes, audiencia, fecha, pelicula_url, portada_url, audio) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     $stmt = $conn->prepare($sql);
 
+    if (!$stmt) {
+        error_log("Error preparando MySQLi stmt: " . $conn->error);
+        exit;
+    }
+
     foreach ($iterator as $item) {
-        if ($contador_procesados >= $limite_lote) {
-            break; // Detener el bucle al alcanzar los 50 registros
-        }
+        if ($contador_procesados >= $limite_lote) break; 
 
         if ($item->isFile()) {
             $ruta_completa = str_replace('\\', '/', $item->getPathname());
@@ -619,17 +695,22 @@ if (isset($pdo) && $pdo instanceof PDO) {
                 $res = $chk->get_result();
                 if ($res && $res->num_rows > 0) continue;
 
-                list($portada_url, $categoria, $descripcion, $actores, $estreno) = procesarMedia($nombre, $dir_portadas, $tmdb_api_key, $tmdb_bearer_token, $mapaCategorias, $omdb_api_key);
+                list($portada_url, $categoria, $descripcion, $actores, $estreno, $rotten_tomatoes, $audiencia) = procesarMedia($nombre, $dir_portadas, $tmdb_api_key, $tmdb_bearer_token, $mapaCategorias, $omdb_api_key);
                 $audio_detectado = obtenerIdiomasAudio($ruta_completa);
 
-                $stmt->bind_param('sssssssss', $categoria, $nombre, $descripcion, $actores, $estreno, $fecha, $ruta_completa, $portada_url, $audio_detectado);
-                $stmt->execute();
-
-                $contador_procesados++; // Incrementar contador por cada archivo nuevo indexado
+                // Exactamente 11 tipos de datos ('sssssssssss') para 11 variables
+                $stmt->bind_param('sssssssssss', $categoria, $nombre, $descripcion, $actores, $estreno, $rotten_tomatoes, $audiencia, $fecha, $ruta_completa, $portada_url, $audio_detectado);
+                
+                if (!$stmt->execute()) {
+                    error_log("Error insertando registro MySQLi: " . $stmt->error);
+                } else {
+                    $contador_procesados++; 
+                }
             }
         }
     }
     $stmt->close();
 }
+
 exit;
 ?>

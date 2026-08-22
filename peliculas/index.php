@@ -51,153 +51,176 @@ if ($resultado_estrenos) {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Metadatos cruciales para WebView Android -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#ffffff">
     <title>Catálogo de Películas</title>
     <style>
+        /* RESET BÁSICO Y OPTIMIZACIÓN WEBVIEW */
         * {
             box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent; /* Quita el cuadro azul al tocar en Android */
         }
 
         body {
-            font-family: Arial, sans-serif;
-            width: 100%;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             margin: 0;
-            padding: 20px;
-            background-color: #f9f9f9;
+            padding: 15px 10px;
+            background-color: #f4f6f8;
+            color: #333;
+            overflow-x: hidden;
         }
 
+        /* ---------------------------------------------------
+           PANEL SUPERIOR (Buscador y Filtros)
+           --------------------------------------------------- */
         .panel-control {
-            width: 100%;
             background: #ffffff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
             margin-bottom: 20px;
         }
 
-        .buscador-box {
-            margin-bottom: 15px;
-            width: 100%;
-        }
+        .buscador-box { margin-bottom: 15px; }
 
         .buscador-box input {
             width: 100%;
             padding: 12px 15px;
-            font-size: 16px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
+            font-size: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 25px; /* Aspecto más moderno */
+            background-color: #f9f9f9;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        
+        .buscador-box input:focus {
+            border-color: #007bff;
+            background-color: #ffffff;
         }
 
+        /* Carrusel horizontal de botones para móvil */
         .contenedor-botones {
             display: flex;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
             gap: 8px;
-            width: 100%;
+            overflow-x: auto;
+            padding-bottom: 5px;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none; /* Oculta scrollbar en Firefox */
+        }
+        .contenedor-botones::-webkit-scrollbar {
+            display: none; /* Oculta scrollbar en Chrome/Safari/Webview */
         }
 
         .btn-filtro {
+            flex: 0 0 auto; /* Evita que los botones se encojan */
             padding: 8px 16px;
             cursor: pointer;
-            border: 1px solid #007bff;
+            border: 1px solid #dcdcdc;
             background: #ffffff;
-            color: #007bff;
+            color: #555;
             border-radius: 20px;
-            font-size: 14px;
+            font-size: 13px;
+            font-weight: 600;
             transition: all 0.2s ease;
-        }
-
-        .btn-filtro:hover {
-            background: #e6f0ff;
+            white-space: nowrap;
         }
 
         .btn-filtro.activo {
             background: #007bff;
             color: #ffffff;
+            border-color: #007bff;
         }
 
+        /* ---------------------------------------------------
+           CARRUSEL DE ESTRENOS (Horizontal)
+           --------------------------------------------------- */
         .seccion-estrenos {
             margin-bottom: 25px;
-            background: #ffffff;
-            padding: 15px 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
 
         .seccion-estrenos h2 {
-            margin-top: 0;
-            margin-bottom: 15px;
+            margin: 0 0 12px 5px;
             font-size: 18px;
-            color: #333;
-            border-left: 4px solid #007bff;
-            padding-left: 10px;
+            font-weight: bold;
+            color: #222;
         }
 
         .carrusel-estrenos {
             display: flex;
-            gap: 15px;
+            gap: 12px;
             overflow-x: auto;
             scroll-behavior: smooth;
             -webkit-overflow-scrolling: touch;
             padding-bottom: 10px;
+            padding-left: 5px; /* Margen estético */
         }
 
-        .carrusel-estrenos::-webkit-scrollbar {
-            height: 6px;
-        }
-        .carrusel-estrenos::-webkit-scrollbar-thumb {
-            background: #ccc;
-            border-radius: 4px;
-        }
-
+        .carrusel-estrenos::-webkit-scrollbar { display: none; }
+        
+        /* Tarjetas más angostas en el carrusel para que se vea que hay más */
         .carrusel-estrenos .pelicula-card {
-            flex: 0 0 200px;
-            min-width: 200px;
+            flex: 0 0 130px; 
+            min-width: 130px;
         }
 
+        /* ---------------------------------------------------
+           GRILLA PRINCIPAL (2 Columnas en móvil)
+           --------------------------------------------------- */
         .grid-peliculas {
-            width: 100%;
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-            gap: 20px;
+            /* 2 columnas fraccionarias para aprovechar el ancho del celular */
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            padding: 0 5px;
         }
 
+        @media (min-width: 600px) {
+            .grid-peliculas {
+                grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            }
+        }
+
+        /* ---------------------------------------------------
+           DISEÑO DE LA TARJETA DE PELÍCULA (Compacto)
+           --------------------------------------------------- */
         .pelicula-card {
             background: #ffffff;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
+            border-radius: 10px;
             overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
             display: flex;
             flex-direction: column;
-            width: 100%;
+            text-decoration: none;
         }
 
         .portada-link {
             display: block;
             position: relative;
             width: 100%;
-            text-decoration: none;
         }
 
         .pelicula-portada {
             width: 100%;
-            aspect-ratio: 2 / 3;
+            aspect-ratio: 2 / 3; /* Mantiene proporción de póster perfecta */
             object-fit: cover;
-            background-color: #eee;
+            background-color: #2c2c2c;
             display: block;
         }
 
+        /* Overlays adaptados a móvil */
         .logo-empresa-overlay {
             position: absolute;
-            top: 10px;
-            right: 10px;
-            max-width: 120px;
-            max-height: 60px;
+            top: 8px;
+            right: 8px;
+            max-width: 50px; /* Más pequeño para no tapar portadas */
+            max-height: 25px;
             object-fit: contain;
-            background-color: rgba(255, 255, 255, 0.5);
-            padding: 5px 8px;
+            background-color: rgba(255, 255, 255, 0.7);
+            padding: 3px;
             border-radius: 4px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             pointer-events: none;
         }
 
@@ -206,49 +229,48 @@ if ($resultado_estrenos) {
             bottom: 0;
             left: 0;
             width: 100%;
-            background: rgba(0, 0, 0, 0.7);
+            background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
             color: #ffffff;
             font-size: 11px;
-            padding: 5px 8px;
-            text-align: center;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            box-sizing: border-box;
+            padding: 15px 8px 5px 8px;
+            text-align: right;
+            font-weight: bold;
         }
 
+        /* Textos inferiores de la tarjeta */
         .pelicula-info {
-            padding: 15px;
+            padding: 10px 8px;
             display: flex;
             flex-direction: column;
-            flex-grow: 1;
         }
 
         .pelicula-card h3 {
-            margin-top: 0;
-            margin-bottom: 10px;
-            color: #333;
-            font-size: 16px;
+            margin: 0 0 4px 0;
+            color: #222;
+            font-size: 13px;
+            font-weight: 600;
+            /* Truncar texto largo a 1 sola línea */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
-        .badge-categoria {
-            display: inline-block;
-            background: #e9ecef;
-            color: #495057;
-            padding: 3px 8px;
-            font-size: 12px;
-            border-radius: 4px;
-            margin-right: 4px;
-            margin-top: 4px;
+        .categorias-texto {
+            font-size: 11px;
+            color: #777;
+            /* Truncar texto largo a 1 sola línea */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .sin-resultados {
             display: none;
             grid-column: 1 / -1;
             text-align: center;
-            padding: 40px;
-            color: #666;
-            font-size: 18px;
+            padding: 40px 20px;
+            color: #777;
+            font-size: 16px;
         }
     </style>
 </head>
@@ -260,12 +282,12 @@ if ($resultado_estrenos) {
             <input 
                 type="text" 
                 id="inputBuscador" 
-                placeholder="Buscar película por nombre..." 
+                placeholder="🔍 Buscar película..." 
                 onkeyup="filtrarCatalogo()"
             >
         </div>
 
-        <!-- BOTONES DE CATEGORÍA -->
+        <!-- BOTONES DE CATEGORÍA (Carrusel deslizable) -->
         <div class="contenedor-botones">
             <button 
                 class="btn-filtro activo" 
@@ -281,7 +303,7 @@ if ($resultado_estrenos) {
                     data-categoria="<?php echo htmlspecialchars($categoria); ?>" 
                     onclick="seleccionarCategoria('<?php echo htmlspecialchars($categoria); ?>', this)"
                 >
-                    <?php echo ucfirst(htmlspecialchars($categoria)) . " ($cantidad)"; ?>
+                    <?php echo ucfirst(htmlspecialchars($categoria)); ?>
                 </button>
             <?php endforeach; ?>
         </div>
@@ -290,7 +312,7 @@ if ($resultado_estrenos) {
     <!-- SECCIÓN ÚLTIMOS ESTRENOS -->
     <?php if (!empty($ultimos_estrenos)): ?>
         <div class="seccion-estrenos">
-            <h2>Últimos Estrenos</h2>
+            <h2>🔥 Últimos Estrenos</h2>
             <div class="carrusel-estrenos">
                 <?php foreach ($ultimos_estrenos as $peli_estreno): ?>
                     <?php 
@@ -298,24 +320,21 @@ if ($resultado_estrenos) {
                         $cats_estreno = array_map('trim', explode(',', $peli_estreno['id_categoria']));
                         $nombre_estreno = $peli_estreno['nombre'] ?? 'Sin nombre';
                         $portada_estreno = !empty($peli_estreno['portada_url']) ? $peli_estreno['portada_url'] : 'https://via.placeholder.com/300x450?text=Sin+Portada';
-                        $audio_estreno = !empty($peli_estreno['audio']) ? $peli_estreno['audio'] : 'No especificado';
+                        $audio_estreno = !empty($peli_estreno['audio']) ? $peli_estreno['audio'] : 'LAT';
                     ?>
-                    <div class="pelicula-card">
-                        <a href="ver.php?id=<?php echo $id_estreno; ?>" class="portada-link">
-                            <img src="<?php echo htmlspecialchars($portada_estreno); ?>" alt="Portada de <?php echo htmlspecialchars($nombre_estreno); ?>" class="pelicula-portada">
-                            <img src="../images/empresa/logo.png" alt="Logo Empresa" class="logo-empresa-overlay">
+                    <a href="ver.php?id=<?php echo $id_estreno; ?>" class="pelicula-card">
+                        <div class="portada-link">
+                            <img src="<?php echo htmlspecialchars($portada_estreno); ?>" alt="Portada" class="pelicula-portada">
+                            <img src="../images/empresa/logo.png" alt="Logo" class="logo-empresa-overlay" onerror="this.style.display='none'">
                             <div class="audio-overlay">🔊 <?php echo htmlspecialchars($audio_estreno); ?></div>
-                        </a>
+                        </div>
                         <div class="pelicula-info">
                             <h3><?php echo htmlspecialchars($nombre_estreno); ?></h3>
-                            <div>
-                                <strong>Categorías:</strong><br>
-                                <?php foreach ($cats_estreno as $c_estreno): ?>
-                                    <span class="badge-categoria"><?php echo htmlspecialchars(ucfirst($c_estreno)); ?></span>
-                                <?php endforeach; ?>
+                            <div class="categorias-texto">
+                                <?php echo htmlspecialchars(implode(', ', $cats_estreno)); ?>
                             </div>
                         </div>
-                    </div>
+                    </a>
                 <?php endforeach; ?>
             </div>
         </div>
@@ -331,33 +350,30 @@ if ($resultado_estrenos) {
                 
                 $nombre = $peli['nombre'] ?? 'Sin nombre';
                 $portada = !empty($peli['portada_url']) ? $peli['portada_url'] : 'https://via.placeholder.com/300x450?text=Sin+Portada';
-                $audio = !empty($peli['audio']) ? $peli['audio'] : 'No especificado';
+                $audio = !empty($peli['audio']) ? $peli['audio'] : 'LAT';
             ?>
-            <div 
-                class="pelicula-card" 
-                data-titulo="<?php echo htmlspecialchars(mb_strtolower($nombre, 'UTF-8')); ?>" 
-                data-categorias="<?php echo htmlspecialchars($cats_atributo); ?>"
-            >
-                <a href="ver.php?id=<?php echo $id_peli; ?>" class="portada-link">
-                    <img src="<?php echo htmlspecialchars($portada); ?>" alt="Portada de <?php echo htmlspecialchars($nombre); ?>" class="pelicula-portada">
-                    <img src="../images/empresa/logo.png" alt="Logo Empresa" class="logo-empresa-overlay">
+            <a href="ver.php?id=<?php echo $id_peli; ?>" 
+               class="pelicula-card" 
+               data-titulo="<?php echo htmlspecialchars(mb_strtolower($nombre, 'UTF-8')); ?>" 
+               data-categorias="<?php echo htmlspecialchars($cats_atributo); ?>">
+               
+                <div class="portada-link">
+                    <img src="<?php echo htmlspecialchars($portada); ?>" alt="Portada" loading="lazy" class="pelicula-portada">
+                    <img src="../images/empresa/logo.png" alt="Logo" class="logo-empresa-overlay" onerror="this.style.display='none'">
                     <div class="audio-overlay">🔊 <?php echo htmlspecialchars($audio); ?></div>
-                </a>
+                </div>
 
                 <div class="pelicula-info">
                     <h3><?php echo htmlspecialchars($nombre); ?></h3>
-                    <div>
-                        <strong>Categorías:</strong><br>
-                        <?php foreach ($cats_array as $c): ?>
-                            <span class="badge-categoria"><?php echo htmlspecialchars(ucfirst($c)); ?></span>
-                        <?php endforeach; ?>
+                    <div class="categorias-texto">
+                        <?php echo htmlspecialchars(implode(', ', $cats_array)); ?>
                     </div>
                 </div>
-            </div>
+            </a>
         <?php endforeach; ?>
 
         <div id="sinResultados" class="sin-resultados">
-            No se encontraron películas que coincidan con la búsqueda.
+            No encontramos películas con ese nombre o categoría. 🍿
         </div>
     </div>
 
@@ -371,6 +387,9 @@ if ($resultado_estrenos) {
 
             categoriaSeleccionada = categoria;
             filtrarCatalogo();
+            
+            // Centra el botón seleccionado en el scroll horizontal
+            elementoBoton.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
         }
 
         function filtrarCatalogo() {

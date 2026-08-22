@@ -31,18 +31,20 @@ $portada = !empty($pelicula['portada_url']) ? $pelicula['portada_url'] : 'https:
 $anio = !empty($pelicula['fecha']) ? date('Y', strtotime($pelicula['fecha'])) : 'N/A';
 $cats_array = !empty($pelicula['id_categoria']) ? array_map('trim', explode(',', $pelicula['id_categoria'])) : [];
 
-// PROCESAR AUDIOS (Separar por comas para el Select)
+// PROCESAR AUDIOS Y URLs MULTIPLES
 $audio_str = !empty($pelicula['audio']) ? $pelicula['audio'] : 'LAT';
 $audio_array = array_map('trim', explode(',', $audio_str));
 
-$rotten_critica = $pelicula['rotten_tomates'] ?? '0';
-$rotten_audiencia = $pelicula['rotten_audiencia'] ?? '0';
-
 $link_video = trim($pelicula['pelicula_url'] ?? '');
-if (strpos($link_video, '/var/www/') === 0) {
+if (strpos($link_video, '/var/www/') !== false) {
     $link_video = str_replace('/var/www', '', $link_video);
     $link_video = str_replace(' ', '%20', $link_video);
 }
+// Separamos las URLs por comas por si hay múltiples enlaces para múltiples audios
+$url_array = array_map('trim', explode(',', $link_video));
+
+$rotten_critica = $pelicula['rotten_tomates'] ?? '0';
+$rotten_audiencia = $pelicula['rotten_audiencia'] ?? '0';
 ?>
 
 <!DOCTYPE html>
@@ -57,109 +59,16 @@ if (strpos($link_video, '/var/www/') === 0) {
         .container { max-width: 1000px; margin: 0 auto; }
         .btn-volver { display: inline-block; margin-bottom: 15px; padding: 10px 20px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold; }
         
-        /* REPRODUCTOR BASE */
-        .reproductor-container { 
-            position: relative; 
-            padding-bottom: 56.25%; 
-            height: 0; 
-            overflow: hidden; 
-            background: #000; 
-            border-radius: 8px; 
-            margin-bottom: 25px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5); 
-            transition: all 0.3s ease;
-        }
+        .reproductor-container { position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; background: #000; border-radius: 8px; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); transition: all 0.3s ease; }
+        .app-fullscreen-normal { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; padding-bottom: 0 !important; z-index: 99999 !important; border-radius: 0 !important; background: #000 !important; transform: none !important; }
+        .app-fullscreen-rotated { position: fixed !important; top: 50% !important; left: 50% !important; width: 100vh !important; height: 100vw !important; padding-bottom: 0 !important; z-index: 99999 !important; border-radius: 0 !important; background: #000 !important; transform: translate(-50%, -50%) rotate(90deg) !important; }
+        .reproductor-container video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; object-fit: contain; }
+        .poster-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: center; display: flex; flex-direction: column; justify-content: center; align-items: center; background-color: rgba(0, 0, 0, 0.7); background-blend-mode: darken; z-index: 2; }
 
-        /* 1. PANTALLA COMPLETA NORMAL */
-        .app-fullscreen-normal {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            padding-bottom: 0 !important;
-            z-index: 99999 !important;
-            border-radius: 0 !important;
-            background: #000 !important;
-            transform: none !important;
-        }
-
-        /* 2. PANTALLA COMPLETA ROTADA */
-        .app-fullscreen-rotated {
-            position: fixed !important;
-            top: 50% !important;
-            left: 50% !important;
-            width: 100vh !important;
-            height: 100vw !important;
-            padding-bottom: 0 !important;
-            z-index: 99999 !important;
-            border-radius: 0 !important;
-            background: #000 !important;
-            transform: translate(-50%, -50%) rotate(90deg) !important;
-        }
-
-        .reproductor-container video { 
-            position: absolute; 
-            top: 0; 
-            left: 0; 
-            width: 100%; 
-            height: 100%; 
-            border: 0; 
-            object-fit: contain; 
-        }
-
-        .poster-overlay { 
-            position: absolute; 
-            top: 0; 
-            left: 0; 
-            width: 100%; 
-            height: 100%; 
-            background-size: cover; 
-            background-position: center; 
-            display: flex; 
-            flex-direction: column; 
-            justify-content: center; 
-            align-items: center; 
-            background-color: rgba(0, 0, 0, 0.7); 
-            background-blend-mode: darken; 
-            z-index: 2; 
-        }
-
-        /* NUEVOS ESTILOS PARA LA SELECCIÓN DE AUDIO */
-        .controles-pre-play {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 15px;
-            z-index: 3;
-        }
-
-        .select-audio {
-            padding: 10px 15px;
-            font-size: 16px;
-            border-radius: 5px;
-            border: 2px solid #333;
-            background: rgba(20, 20, 20, 0.9);
-            color: #fff;
-            font-weight: bold;
-            outline: none;
-            cursor: pointer;
-            text-align: center;
-        }
-
-        .btn-reproducir { 
-            background-color: #e50914; 
-            color: white; 
-            border: none; 
-            padding: 15px 30px; 
-            font-size: 18px; 
-            font-weight: bold; 
-            border-radius: 5px; 
-            cursor: pointer; 
-            -webkit-tap-highlight-color: transparent; 
-        }
+        .controles-pre-play { display: flex; flex-direction: column; align-items: center; gap: 15px; z-index: 3; }
+        .select-audio { padding: 10px 15px; font-size: 16px; border-radius: 5px; border: 2px solid #333; background: rgba(20, 20, 20, 0.9); color: #fff; font-weight: bold; outline: none; cursor: pointer; text-align: center; }
+        .btn-reproducir { background-color: #e50914; color: white; border: none; padding: 15px 30px; font-size: 18px; font-weight: bold; border-radius: 5px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
         
-        /* INFO PELÍCULA */
         .pelicula-detalle { display: flex; gap: 25px; background: #1f1f1f; padding: 20px; border-radius: 8px; }
         .portada-col { flex: 0 0 180px; }
         .portada-img { width: 100%; border-radius: 6px; aspect-ratio: 2 / 3; object-fit: cover; }
@@ -190,11 +99,14 @@ if (strpos($link_video, '/var/www/') === 0) {
         <div class="reproductor-container" id="videoContainer">
             <div id="posterOverlay" class="poster-overlay" style="background-image: url('<?php echo htmlspecialchars($portada); ?>');">
                 
-                <!-- SECCIÓN DE SELECCIÓN DE AUDIO Y PLAY -->
                 <div class="controles-pre-play">
+                    <!-- AHORA EL SELECT GUARDA LA URL DIRECTAMENTE COMO 'VALUE' -->
                     <select id="audioSelector" class="select-audio">
-                        <?php foreach ($audio_array as $index => $idioma): ?>
-                            <option value="<?php echo $index; ?>">🔊 Audio: <?php echo htmlspecialchars(ucfirst($idioma)); ?></option>
+                        <?php foreach ($audio_array as $index => $idioma): 
+                            // Si no hay enlace para este audio, usa el primero por defecto
+                            $url_correspondiente = isset($url_array[$index]) ? $url_array[$index] : $url_array[0];
+                        ?>
+                            <option value="<?php echo htmlspecialchars($url_correspondiente); ?>">🔊 Audio: <?php echo htmlspecialchars(ucfirst($idioma)); ?></option>
                         <?php endforeach; ?>
                     </select>
                     <button class="btn-reproducir" onclick="iniciarReproduccion()">▶ Reproducir Película</button>
@@ -246,7 +158,6 @@ if (strpos($link_video, '/var/www/') === 0) {
     </div>
 
     <script>
-        const urlPelicula = "<?php echo htmlspecialchars($link_video); ?>";
         const urlIntro = "../descripcion/intro.mp4";
         const video = document.getElementById('videoPlayer');
         let isFakeFullscreen = false;
@@ -264,25 +175,12 @@ if (strpos($link_video, '/var/www/') === 0) {
             }
         }
 
-        // Esta función se encarga de cambiar la pista de audio internamente en el Video
-        function aplicarPistaDeAudio() {
-            const selector = document.getElementById('audioSelector');
-            const trackIndex = parseInt(selector.value); // Obtiene 0, 1, 2, etc.
-
-            // Verifica si el navegador soporta la API experimental de múltiples audios
-            if (video.audioTracks && video.audioTracks.length > 0) {
-                for (let i = 0; i < video.audioTracks.length; i++) {
-                    // Solo habilita la pista que coincida con el índice seleccionado
-                    video.audioTracks[i].enabled = (i === trackIndex);
-                }
-                console.log("Audio cambiado exitosamente a la pista:", trackIndex);
-            } else {
-                console.warn("El navegador/WebView actual no expone la API audioTracks para elegir idiomas nativamente.");
-            }
-        }
-
         function iniciarReproduccion() {
             const container = document.getElementById('videoContainer');
+            
+            // OBTENER LA URL DEL ARCHIVO DE VIDEO ESPECÍFICO DEL IDIOMA SELECCIONADO
+            const selector = document.getElementById('audioSelector');
+            const urlPeliculaFinal = selector.value;
             
             document.getElementById('posterOverlay').style.display = 'none';
             
@@ -295,26 +193,17 @@ if (strpos($link_video, '/var/www/') === 0) {
                 container.requestFullscreen().catch(() => {});
             }
 
-            // Escuchamos el momento exacto en el que el video carga su información (duración, audios, etc)
-            video.onloadedmetadata = () => {
-                // Solo cambiamos el audio si está cargando la película real y no el intro
-                if (video.src.includes(urlPelicula)) {
-                    aplicarPistaDeAudio();
-                }
-            };
-
             // 1. Iniciar video con intro
             video.src = urlIntro;
             video.play().catch(e => console.log("Error intro:", e));
             
-            // 2. Al terminar el intro, pasamos a la película
+            // 2. Al terminar el intro, pasamos a la película con el idioma seleccionado
             video.onended = () => {
-                video.src = urlPelicula;
+                video.src = urlPeliculaFinal;
                 video.play().catch(e => console.log("Error película:", e));
             };
         }
 
-        // Detectar si sale de pantalla completa nativa para resetear todo
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement) {
                 isFakeFullscreen = false;

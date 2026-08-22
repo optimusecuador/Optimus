@@ -113,14 +113,11 @@ if (!function_exists('descargarImagenDirecta')) {
 
 if (!function_exists('obtenerIdiomasAudio')) {
     function obtenerIdiomasAudio($rutaArchivo) {
-        // Verifica si hay funciones habilitadas para ejecutar comandos
         if (!function_exists('shell_exec') && !function_exists('exec')) {
-            return 'Funciones exec deshabilitadas';
+            return ['Funciones exec deshabilitadas', ''];
         }
 
-        // Comando ffprobe robusto para obtener información en JSON
         $comando = 'ffprobe -v quiet -print_format json -show_streams -select_streams a ' . escapeshellarg($rutaArchivo);
-        
         $salida = '';
         if (function_exists('shell_exec')) {
             $salida = @shell_exec($comando);
@@ -132,50 +129,53 @@ if (!function_exists('obtenerIdiomasAudio')) {
         }
 
         if (!$salida || stripos($salida, 'command not found') !== false || stripos($salida, 'not recognized') !== false) {
-            return 'Audio N/A (Sin ffprobe)';
+            return ['Audio N/A (Sin ffprobe)', ''];
         }
 
         $data = json_decode($salida, true);
         $idiomasDetectados = [];
+        $urlsAudioDetectadas = [];
 
         if (json_last_error() !== JSON_ERROR_NONE || !isset($data['streams'])) {
-            return 'Audio N/A';
+            return ['Audio N/A', ''];
         }
 
         if (count($data['streams']) === 0) {
-            return 'Sin audio';
+            return ['Sin audio', ''];
         }
 
-        foreach ($data['streams'] as $stream) {
-            $lang = 'und'; // Default: undefined
-            
-            // Buscar etiquetas, ignorando si están en mayúsculas o minúsculas
+        $mapaIdiomas = [
+            'spa' => 'Español', 'es' => 'Español',
+            'eng' => 'Inglés',  'en' => 'Inglés',
+            'fre' => 'Francés', 'fr' => 'Francés',
+            'ita' => 'Italiano','it' => 'Italiano',
+            'jpn' => 'Japonés', 'ja' => 'Japonés',
+            'por' => 'Portugués','pt' => 'Portugués',
+            'ger' => 'Alemán',  'de' => 'Alemán',
+            'und' => 'Desconocido'
+        ];
+
+        foreach ($data['streams'] as $index => $stream) {
+            $lang = 'und';
             if (isset($stream['tags']) && is_array($stream['tags'])) {
                 $tagsLower = array_change_key_case($stream['tags'], CASE_LOWER);
                 if (!empty($tagsLower['language'])) {
                     $lang = strtolower(trim($tagsLower['language']));
                 }
             }
-            
-            $mapaIdiomas = [
-                'spa' => 'Español', 'es' => 'Español',
-                'eng' => 'Inglés',  'en' => 'Inglés',
-                'fre' => 'Francés', 'fr' => 'Francés',
-                'ita' => 'Italiano','it' => 'Italiano',
-                'jpn' => 'Japonés', 'ja' => 'Japonés',
-                'por' => 'Portugués','pt' => 'Portugués',
-                'ger' => 'Alemán',  'de' => 'Alemán',
-                'und' => 'Desconocido'
-            ];
 
-            $idiomasDetectados[] = $mapaIdiomas[$lang] ?? strtoupper($lang);
+            $nombreIdioma = $mapaIdiomas[$lang] ?? strtoupper($lang);
+            $idiomasDetectados[] = $nombreIdioma;
+
+            // Generamos una URL dinámica que apunta a un script procesador con el archivo y la pista exacta
+            $urlAudioStream = 'stream_audio.php?file=' . urlencode($rutaArchivo) . '&track=' . $index;
+            $urlsAudioDetectadas[] = $nombreIdioma . ':' . $urlAudioStream;
         }
 
-        if (empty($idiomasDetectados)) {
-            return 'Sin audio';
-        }
-
-        return implode(', ', array_unique($idiomasDetectados));
+        return [
+            implode(', ', array_unique($idiomasDetectados)),
+            implode('|', $urlsAudioDetectadas)
+        ];
     }
 }
 
@@ -560,13 +560,20 @@ ob_start();
                             <span class="badge-aud"><?php echo htmlspecialchars(!empty($pelicula['audiencia']) ? $pelicula['audiencia'] : 'N/A'); ?></span>
                         </td>
                         <td>
-                            <?php 
-                            $idiomas_db = !empty($pelicula['audio']) ? explode(',', $pelicula['audio']) : ['N/A'];
-                            foreach($idiomas_db as $idioma_db) {
-                                echo '<span class="badge-audio">' . htmlspecialchars(trim($idioma_db)) . '</span><br>';
-                            }
-                            ?>
-                        </td>
+    <?php 
+    $tracks_db = !empty($pelicula['pelicula_audio']) ? explode('|', $pelicula['pelicula_audio']) : [];
+    if (!empty($tracks_db) && $tracks_db[0] !== '') {
+        foreach($tracks_db as $track_info) {
+            $partes = explode(':', $track_info, 2);
+            $nombre_idioma = $partes[0] ?? 'Idioma';
+            $url_stream = $partes[1] ?? '#';
+            echo '<a href="' . htmlspecialchars($url_stream) . '" target="_blank" class="badge-audio" style="text-decoration:none; display:block; margin-bottom:4px; text-align:center;">▶ ' . htmlspecialchars(trim($nombre_idioma)) . '</a>';
+        }
+    } else {
+        echo '<span class="badge-audio">N/A</span>';
+    }
+    ?>
+</td>
                         <td><?php echo htmlspecialchars($pelicula['fecha']); ?></td>
                         <td><div class="ruta-text"><?php echo htmlspecialchars($pelicula['pelicula_url']); ?></div></td>
                     </tr>
@@ -622,8 +629,8 @@ $contador_procesados = 0;
 $limite_lote = 50;        
 
 if (isset($pdo) && $pdo instanceof PDO) {
-    $sql = "INSERT INTO peliculas (id_categoria, nombre, descripcion, actores, estreno, rotten_tomatoes, audiencia, fecha, pelicula_url, portada_url, audio) 
-            VALUES (:id_categoria, :nombre, :descripcion, :actores, :estreno, :rotten_tomatoes, :audiencia, :fecha, :pelicula_url, :portada_url, :audio)";
+    $sql = "INSERT INTO peliculas (id_categoria, nombre, descripcion, actores, estreno, rotten_tomatoes, audiencia, fecha, pelicula_url, portada_url, audio, pelicula_audio) 
+            VALUES (:id_categoria, :nombre, :descripcion, :actores, :estreno, :rotten_tomatoes, :audiencia, :fecha, :pelicula_url, :portada_url, :audio, :pelicula_audio)";
     $stmt = $pdo->prepare($sql);
 
     foreach ($iterator as $item) {
@@ -647,7 +654,7 @@ if (isset($pdo) && $pdo instanceof PDO) {
                 if ($chk->fetch()) continue;
 
                 list($portada_url, $categoria, $descripcion, $actores, $estreno, $rotten_tomatoes, $audiencia) = procesarMedia($nombre, $dir_portadas, $tmdb_api_key, $tmdb_bearer_token, $mapaCategorias, $omdb_api_key);
-                $audio_detectado = obtenerIdiomasAudio($ruta_completa);
+                list($audio_detectado, $pelicula_audio_detectada) = obtenerIdiomasAudio($ruta_completa);
 
                 try {
                     $stmt->execute([
@@ -661,7 +668,8 @@ if (isset($pdo) && $pdo instanceof PDO) {
                         ':fecha'           => $fecha,
                         ':pelicula_url'    => $ruta_completa,
                         ':portada_url'     => $portada_url,
-                        ':audio'           => $audio_detectado
+                        ':audio'           => $audio_detectado,
+                        ':pelicula_audio'  => $pelicula_audio_detectada
                     ]);
                     $contador_procesados++; 
                 } catch (PDOException $e) {
@@ -671,8 +679,8 @@ if (isset($pdo) && $pdo instanceof PDO) {
         }
     }
 } elseif (isset($conn) && ($conn instanceof mysqli || is_resource($conn))) {
-    $sql = "INSERT INTO peliculas (id_categoria, nombre, descripcion, actores, estreno, rotten_tomatoes, audiencia, fecha, pelicula_url, portada_url, audio) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $sql = "INSERT INTO peliculas (id_categoria, nombre, descripcion, actores, estreno, rotten_tomatoes, audiencia, fecha, pelicula_url, portada_url, audio, pelicula_audio) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     $stmt = $conn->prepare($sql);
 
     if (!$stmt) {
@@ -703,9 +711,9 @@ if (isset($pdo) && $pdo instanceof PDO) {
                 if ($res && $res->num_rows > 0) continue;
 
                 list($portada_url, $categoria, $descripcion, $actores, $estreno, $rotten_tomatoes, $audiencia) = procesarMedia($nombre, $dir_portadas, $tmdb_api_key, $tmdb_bearer_token, $mapaCategorias, $omdb_api_key);
-                $audio_detectado = obtenerIdiomasAudio($ruta_completa);
+                list($audio_detectado, $pelicula_audio_detectada) = obtenerIdiomasAudio($ruta_completa);
 
-                $stmt->bind_param('sssssssssss', $categoria, $nombre, $descripcion, $actores, $estreno, $rotten_tomatoes, $audiencia, $fecha, $ruta_completa, $portada_url, $audio_detectado);
+                $stmt->bind_param('ssssssssssss', $categoria, $nombre, $descripcion, $actores, $estreno, $rotten_tomatoes, $audiencia, $fecha, $ruta_completa, $portada_url, $audio_detectado, $pelicula_audio_detectada);
                 
                 if (!$stmt->execute()) {
                     error_log("Error insertando registro MySQLi: " . $stmt->error);

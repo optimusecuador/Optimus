@@ -28,9 +28,12 @@ if (!$pelicula) {
 $nombre = $pelicula['nombre'] ?? 'Sin título';
 $sinopsis = $pelicula['descripcion'] ?? 'Sin descripción disponible.';
 $portada = !empty($pelicula['portada_url']) ? $pelicula['portada_url'] : 'https://via.placeholder.com/300x450?text=Sin+Portada';
-$audio = !empty($pelicula['audio']) ? $pelicula['audio'] : 'No especificado';
 $anio = !empty($pelicula['fecha']) ? date('Y', strtotime($pelicula['fecha'])) : 'N/A';
 $cats_array = !empty($pelicula['id_categoria']) ? array_map('trim', explode(',', $pelicula['id_categoria'])) : [];
+
+// PROCESAR AUDIOS (Separar por comas para el Select)
+$audio_str = !empty($pelicula['audio']) ? $pelicula['audio'] : 'LAT';
+$audio_array = array_map('trim', explode(',', $audio_str));
 
 $rotten_critica = $pelicula['rotten_tomates'] ?? '0';
 $rotten_audiencia = $pelicula['rotten_audiencia'] ?? '0';
@@ -67,7 +70,7 @@ if (strpos($link_video, '/var/www/') === 0) {
             transition: all 0.3s ease;
         }
 
-        /* 1. PANTALLA COMPLETA NORMAL (Cuando el celular ya está acostado) */
+        /* 1. PANTALLA COMPLETA NORMAL */
         .app-fullscreen-normal {
             position: fixed !important;
             top: 0 !important;
@@ -81,13 +84,13 @@ if (strpos($link_video, '/var/www/') === 0) {
             transform: none !important;
         }
 
-        /* 2. PANTALLA COMPLETA ROTADA (Fuerza horizontal con CSS si el celular está vertical) */
+        /* 2. PANTALLA COMPLETA ROTADA */
         .app-fullscreen-rotated {
             position: fixed !important;
             top: 50% !important;
             left: 50% !important;
-            width: 100vh !important; /* El ancho se vuelve el alto de la pantalla */
-            height: 100vw !important; /* El alto se vuelve el ancho de la pantalla */
+            width: 100vh !important;
+            height: 100vw !important;
             padding-bottom: 0 !important;
             z-index: 99999 !important;
             border-radius: 0 !important;
@@ -120,6 +123,28 @@ if (strpos($link_video, '/var/www/') === 0) {
             background-color: rgba(0, 0, 0, 0.7); 
             background-blend-mode: darken; 
             z-index: 2; 
+        }
+
+        /* NUEVOS ESTILOS PARA LA SELECCIÓN DE AUDIO */
+        .controles-pre-play {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            z-index: 3;
+        }
+
+        .select-audio {
+            padding: 10px 15px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 2px solid #333;
+            background: rgba(20, 20, 20, 0.9);
+            color: #fff;
+            font-weight: bold;
+            outline: none;
+            cursor: pointer;
+            text-align: center;
         }
 
         .btn-reproducir { 
@@ -164,9 +189,19 @@ if (strpos($link_video, '/var/www/') === 0) {
 
         <div class="reproductor-container" id="videoContainer">
             <div id="posterOverlay" class="poster-overlay" style="background-image: url('<?php echo htmlspecialchars($portada); ?>');">
-                <button class="btn-reproducir" onclick="iniciarReproduccion()">▶ Reproducir Película</button>
+                
+                <!-- SECCIÓN DE SELECCIÓN DE AUDIO Y PLAY -->
+                <div class="controles-pre-play">
+                    <select id="audioSelector" class="select-audio">
+                        <?php foreach ($audio_array as $index => $idioma): ?>
+                            <option value="<?php echo $index; ?>">🔊 Audio: <?php echo htmlspecialchars(ucfirst($idioma)); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <button class="btn-reproducir" onclick="iniciarReproduccion()">▶ Reproducir Película</button>
+                </div>
+
             </div>
-            <!-- Botón de salir incluido solo en modo pantalla completa -->
+            
             <video id="videoPlayer" controls playsinline webkit-playsinline preload="none"></video>
         </div>
 
@@ -181,7 +216,7 @@ if (strpos($link_video, '/var/www/') === 0) {
                         <h1><?php echo htmlspecialchars($nombre); ?></h1>
                         <div class="meta-data" style="margin-bottom: 10px;">
                             <span class="meta-item">📅 <?php echo htmlspecialchars($anio); ?></span>
-                            <span class="meta-item">🔊 <?php echo htmlspecialchars($audio); ?></span>
+                            <span class="meta-item">🔊 <?php echo htmlspecialchars($audio_str); ?></span>
                         </div>
                         <div>
                             <?php foreach ($cats_array as $cat): ?>
@@ -213,53 +248,73 @@ if (strpos($link_video, '/var/www/') === 0) {
     <script>
         const urlPelicula = "<?php echo htmlspecialchars($link_video); ?>";
         const urlIntro = "../descripcion/intro.mp4";
+        const video = document.getElementById('videoPlayer');
         let isFakeFullscreen = false;
 
         function ajustarOrientacion() {
             if (!isFakeFullscreen) return;
             const container = document.getElementById('videoContainer');
             
-            // Verificamos si el teléfono está en vertical (alto es mayor que ancho)
             if (window.innerHeight > window.innerWidth) {
-                // Vertical: Forzamos la rotación con CSS a 90 grados
                 container.classList.remove('app-fullscreen-normal');
                 container.classList.add('app-fullscreen-rotated');
             } else {
-                // Horizontal: El usuario lo acostó, lo mostramos normal pero ocupando todo
                 container.classList.remove('app-fullscreen-rotated');
                 container.classList.add('app-fullscreen-normal');
             }
         }
 
+        // Esta función se encarga de cambiar la pista de audio internamente en el Video
+        function aplicarPistaDeAudio() {
+            const selector = document.getElementById('audioSelector');
+            const trackIndex = parseInt(selector.value); // Obtiene 0, 1, 2, etc.
+
+            // Verifica si el navegador soporta la API experimental de múltiples audios
+            if (video.audioTracks && video.audioTracks.length > 0) {
+                for (let i = 0; i < video.audioTracks.length; i++) {
+                    // Solo habilita la pista que coincida con el índice seleccionado
+                    video.audioTracks[i].enabled = (i === trackIndex);
+                }
+                console.log("Audio cambiado exitosamente a la pista:", trackIndex);
+            } else {
+                console.warn("El navegador/WebView actual no expone la API audioTracks para elegir idiomas nativamente.");
+            }
+        }
+
         function iniciarReproduccion() {
-            const video = document.getElementById('videoPlayer');
             const container = document.getElementById('videoContainer');
             
             document.getElementById('posterOverlay').style.display = 'none';
             
-            // Activar la bandera y ajustar el CSS al instante
             isFakeFullscreen = true;
             ajustarOrientacion();
-
-            // Escuchar cambios de rotación del teléfono para ajustar automáticamente
             window.addEventListener('resize', ajustarOrientacion);
             window.addEventListener('orientationchange', ajustarOrientacion);
 
-            // Intentar nativo (aunque en webview falle, no hace daño)
             if (container.requestFullscreen) {
                 container.requestFullscreen().catch(() => {});
             }
 
-            // Iniciar video
+            // Escuchamos el momento exacto en el que el video carga su información (duración, audios, etc)
+            video.onloadedmetadata = () => {
+                // Solo cambiamos el audio si está cargando la película real y no el intro
+                if (video.src.includes(urlPelicula)) {
+                    aplicarPistaDeAudio();
+                }
+            };
+
+            // 1. Iniciar video con intro
             video.src = urlIntro;
             video.play().catch(e => console.log("Error intro:", e));
+            
+            // 2. Al terminar el intro, pasamos a la película
             video.onended = () => {
                 video.src = urlPelicula;
                 video.play().catch(e => console.log("Error película:", e));
             };
         }
 
-        // Detectar si sale de pantalla completa nativa para resetear
+        // Detectar si sale de pantalla completa nativa para resetear todo
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement) {
                 isFakeFullscreen = false;

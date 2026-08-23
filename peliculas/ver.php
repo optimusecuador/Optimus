@@ -147,7 +147,8 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
 
             </div>
             
-            <video id="videoPlayer" controls playsinline webkit-playsinline preload="none"></video>
+            <!-- Cambiamos preload a 'auto' para que los archivos MKV carguen índices y permitan saltos de tiempo fluidos -->
+            <video id="videoPlayer" controls playsinline webkit-playsinline preload="auto"></video>
         </div>
 
         <div class="pelicula-detalle" id="detallePelicula">
@@ -199,8 +200,9 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
         let isFakeFullscreen = false;
         let ultimoTiempoEnviado = 0;
         let wakeLockSentinel = null;
+        let modoContinuarGlobal = false;
+        let saltoRealizado = false;
 
-        // Función para evitar que la pantalla se apague (Wake Lock API)
         async function solicitarWakeLock() {
             if ('wakeLock' in navigator) {
                 try {
@@ -211,7 +213,6 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
             }
         }
 
-        // Re-activar el Wake Lock si el usuario minimiza y regresa a la app
         document.addEventListener('visibilitychange', async () => {
             if (wakeLockSentinel !== null && document.visibilityState === 'visible') {
                 await solicitarWakeLock();
@@ -244,13 +245,15 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
         }
 
         function iniciarReproduccion(continuar) {
+            modoContinuarGlobal = continuar;
+            saltoRealizado = false;
+            
             const container = document.getElementById('videoContainer');
             const selector = document.getElementById('audioSelector');
             const urlPeliculaFinal = selector.value;
             
             document.getElementById('posterOverlay').style.display = 'none';
             
-            // Activar la prevención de apagado de pantalla al hacer clic
             solicitarWakeLock();
 
             isFakeFullscreen = true;
@@ -262,29 +265,56 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
                 container.requestFullscreen().catch(() => {});
             }
 
-            // 1. SIEMPRE reproducir la intro primero
+            // Asignar y precargar la fuente principal de inmediato en segundo plano
+            video.src = urlPeliculaFinal;
+            video.load();
+
+            // 1. Reproducir la intro primero
             video.src = urlIntro;
-            video.play().catch(e => console.log("Error intro:", e));
+            video.play().catch(e => {
+                console.log("Error intro:", e);
+                // Si la intro falla, saltamos directamente a la película
+                activarPeliculaReal(urlPeliculaFinal);
+            });
             
-            // 2. Al terminar la intro, cargamos la película aplicando o ignorando el tiempo guardado
+            // 2. Al terminar la intro, activamos el flujo de la película real
             video.onended = () => {
                 if (reproduciendoPeliculaReal) return; 
-
-                reproduciendoPeliculaReal = true;
-                video.src = urlPeliculaFinal;
-                video.load(); 
-
-                video.onloadedmetadata = () => {
-                    if (continuar && tiempoGuardadoServidor > 5) {
-                        video.currentTime = tiempoGuardadoServidor;
-                    } else {
-                        video.currentTime = 0;
-                    }
-                };
-
-                video.play().catch(e => console.log("Error película:", e));
+                activarPeliculaReal(urlPeliculaFinal);
             };
         }
+
+        function activarPeliculaReal(urlFinal) {
+            reproduciendoPeliculaReal = true;
+            video.src = urlFinal;
+            video.load();
+
+            if (modoContinuarGlobal && tiempoGuardadoServidor > 5) {
+                // Función repetitiva de seguridad para forzar el salto en archivos MKV pesados
+                let intentos = 0;
+                const intentarSalto = setInterval(() => {
+                    intentos++;
+                    if (video.readyState >= 1) { // 1 = HAVE_METADATA o superior
+                        video.currentTime = tiempoGuardadoServidor;
+                        saltoRealizado = true;
+                        clearInterval(intentosSalto);
+                    }
+                    if (intentos > 20) { // Si pasan 2 segundos y no responde, rompemos el bucle
+                        clearInterval(intentosSalto);
+                    }
+                }, 100);
+            }
+
+            video.play().catch(e => console.log("Error película:", e));
+        }
+
+        // Control de respaldo por eventos nativos para asegurar el salto en MKV
+        video.addEventListener('loadedmetadata', () => {
+            if (reproduciendoPeliculaReal && modoContinuarGlobal && tiempoGuardadoServidor > 5 && !saltoRealizado) {
+                video.currentTime = tiempoGuardadoServidor;
+                saltoRealizado = true;
+            }
+        });
 
         video.addEventListener('timeupdate', () => {
             if (reproduciendoPeliculaReal) {

@@ -12,16 +12,12 @@ $peliculas = [];
 $conteo_categorias = [];
 $total_peliculas = 0;
 
-// Estructuras para agrupar colecciones dinámicamente
-$posibles_colecciones = [];
-$conteo_colecciones = [];
-
 if ($resultado) {
     while ($fila = mysqli_fetch_assoc($resultado)) {
         $peliculas[] = $fila;
         $total_peliculas++;
         
-        // 1. Procesar categorías compuestas (ej. "drama, terror")
+        // Procesar categorías compuestas (ej. "drama, terror")
         if (!empty($fila['id_categoria'])) {
             $lista = explode(',', $fila['id_categoria']);
             foreach ($lista as $cat) {
@@ -35,39 +31,8 @@ if ($resultado) {
                 }
             }
         }
-
-        // 2. Extraer nombre base para Agrupar Colecciones (Ej: "Zootopia 2 (2025)" -> "zootopia")
-        $nombre_pelicula = $fila['nombre'] ?? '';
-        if (!empty($nombre_pelicula)) {
-            // Eliminar números, años en paréntesis, puntuaciones y palabras secundarias
-            $nombre_limpio = preg_replace('/\([^)]*\)|[0-9]+|:\s*.*/', '', $nombre_pelicula);
-            $palabras = array_filter(explode(' ', trim($nombre_limpio)), function($w) {
-                return strlen($w) > 2 && !in_array(mb_strtolower($w, 'UTF-8'), ['del', 'las', 'los', 'con', 'para', 'por', 'una', 'uno']);
-            });
-            
-            // Usar la primera palabra relevante como clave de la colección (Ej: Zootopia, Cantinflas, Matrix)
-            if (!empty($palabras)) {
-                $clave_coleccion = mb_strtolower(reset($palabras), 'UTF-8');
-                $nombre_coleccion_mostrar = ucfirst($clave_coleccion);
-                
-                $posibles_colecciones[$clave_coleccion]['nombre'] = $nombre_coleccion_mostrar;
-                if (!isset($posibles_colecciones[$clave_coleccion]['total'])) {
-                    $posibles_colecciones[$clave_coleccion]['total'] = 1;
-                } else {
-                    $posibles_colecciones[$clave_coleccion]['total']++;
-                }
-            }
-        }
     }
     ksort($conteo_categorias);
-
-    // Filtrar solo aquellas colecciones que tengan 2 o más películas
-    foreach ($posibles_colecciones as $clave => $datos) {
-        if ($datos['total'] >= 2) {
-            $conteo_colecciones[$clave] = $datos;
-        }
-    }
-    ksort($conteo_colecciones);
 }
 
 // Consulta 2: Obtener los 20 estrenos más recientes por el campo 'fecha'
@@ -135,15 +100,6 @@ if ($resultado_estrenos) {
             background-color: #ffffff;
         }
 
-        .titulo-seccion-filtro {
-            font-size: 13px;
-            font-weight: 700;
-            color: #666;
-            margin: 10px 0 5px 2px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
         /* Carrusel horizontal de botones para móvil */
         .contenedor-botones {
             display: flex;
@@ -151,7 +107,6 @@ if ($resultado_estrenos) {
             gap: 8px;
             overflow-x: auto;
             padding-bottom: 5px;
-            margin-bottom: 10px;
             -webkit-overflow-scrolling: touch;
             scrollbar-width: none; /* Oculta scrollbar en Firefox */
         }
@@ -177,12 +132,6 @@ if ($resultado_estrenos) {
             background: #007bff;
             color: #ffffff;
             border-color: #007bff;
-        }
-
-        .btn-filtro.coleccion-btn.activo {
-            background: #28a745;
-            color: #ffffff;
-            border-color: #28a745;
         }
 
         /* ---------------------------------------------------
@@ -338,14 +287,12 @@ if ($resultado_estrenos) {
             >
         </div>
 
-        <!-- SECCIÓN 1: CATEGORÍAS -->
-        <div class="titulo-seccion-filtro">Categorías</div>
+        <!-- BOTONES DE CATEGORÍA (Carrusel deslizable) -->
         <div class="contenedor-botones">
             <button 
                 class="btn-filtro activo" 
-                data-tipo="categoria"
-                data-valor="todas" 
-                onclick="seleccionarFiltro('categoria', 'todas', this)"
+                data-categoria="todas" 
+                onclick="seleccionarCategoria('todas', this)"
             >
                 Todas (<?php echo $total_peliculas; ?>)
             </button>
@@ -353,31 +300,13 @@ if ($resultado_estrenos) {
             <?php foreach ($conteo_categorias as $categoria => $cantidad): ?>
                 <button 
                     class="btn-filtro" 
-                    data-tipo="categoria"
-                    data-valor="<?php echo htmlspecialchars($categoria); ?>" 
-                    onclick="seleccionarFiltro('categoria', '<?php echo htmlspecialchars($categoria); ?>', this)"
+                    data-categoria="<?php echo htmlspecialchars($categoria); ?>" 
+                    onclick="seleccionarCategoria('<?php echo htmlspecialchars($categoria); ?>', this)"
                 >
                     <?php echo ucfirst(htmlspecialchars($categoria)) . ' (' . $cantidad . ')'; ?>
                 </button>
             <?php endforeach; ?>
         </div>
-
-        <!-- SECCIÓN 2: COLECCIONES (Sagas / Agrupaciones con +2 Películas) -->
-        <?php if (!empty($conteo_colecciones)): ?>
-            <div class="titulo-seccion-filtro">Colecciones</div>
-            <div class="contenedor-botones">
-                <?php foreach ($conteo_colecciones as $clave_col => $datos_col): ?>
-                    <button 
-                        class="btn-filtro coleccion-btn" 
-                        data-tipo="coleccion"
-                        data-valor="<?php echo htmlspecialchars($clave_col); ?>" 
-                        onclick="seleccionarFiltro('coleccion', '<?php echo htmlspecialchars($clave_col); ?>', this)"
-                    >
-                        🎬 <?php echo htmlspecialchars($datos_col['nombre']) . ' (' . $datos_col['total'] . ')'; ?>
-                    </button>
-                <?php endforeach; ?>
-            </div>
-        <?php endif; ?>
     </div>
 
     <!-- SECCIÓN ÚLTIMOS ESTRENOS -->
@@ -417,7 +346,9 @@ if ($resultado_estrenos) {
             <?php 
                 $id_peli = intval($peli['id_peliculas'] ?? 0);
                 $cats_array = array_map('trim', explode(',', $peli['id_categoria']));
-                $cats_atributo = implode(',', $cats_array);
+                // Limpiamos y convertimos cada categoría a minúscula para que coincida perfectamente con el data-attribute
+                $cats_lower = array_map(function($c) { return mb_strtolower($c, 'UTF-8'); }, $cats_array);
+                $cats_atributo = implode(',', $cats_lower);
                 
                 $nombre = $peli['nombre'] ?? 'Sin nombre';
                 $portada = !empty($peli['portada_url']) ? $peli['portada_url'] : 'https://via.placeholder.com/300x450?text=Sin+Portada';
@@ -444,21 +375,20 @@ if ($resultado_estrenos) {
         <?php endforeach; ?>
 
         <div id="sinResultados" class="sin-resultados">
-            No encontramos películas con ese nombre, categoría o colección. 🍿
+            No encontramos películas con ese nombre o categoría. 🍿
         </div>
     </div>
 
     <!-- SCRIPT DE FILTRADO -->
     <script>
-        let filtroTipoActivo = 'categoria';
-        let filtroValorActivo = 'todas';
+        let categoriaSeleccionada = 'todas';
 
-        function seleccionarFiltro(tipo, valor, elementoBoton) {
+        function seleccionarCategoria(categoria, elementoBoton) {
             document.querySelectorAll('.btn-filtro').forEach(btn => btn.classList.remove('activo'));
             elementoBoton.classList.add('activo');
 
-            filtroTipoActivo = tipo;
-            filtroValorActivo = valor;
+            // Convertimos la categoría seleccionada a minúscula para compararla correctamente
+            categoriaSeleccionada = categoria.toLowerCase().trim();
             filtrarCatalogo();
             
             // Centra el botón seleccionado en el scroll horizontal
@@ -475,16 +405,9 @@ if ($resultado_estrenos) {
                 const categorias = card.getAttribute('data-categorias').split(',');
 
                 const coincideTexto = titulo.includes(textoBusqueda);
-                let coincideFiltro = false;
+                const coincideCategoria = (categoriaSeleccionada === 'todas') || categorias.includes(categoriaSeleccionada);
 
-                if (filtroTipoActivo === 'categoria') {
-                    coincideFiltro = (filtroValorActivo === 'todas') || categorias.includes(filtroValorActivo);
-                } else if (filtroTipoActivo === 'coleccion') {
-                    // Para colecciones, se evalúa si el título incluye la palabra clave de la colección
-                    coincideFiltro = titulo.includes(filtroValorActivo);
-                }
-
-                if (coincideTexto && coincideFiltro) {
+                if (coincideTexto && coincideCategoria) {
                     card.style.display = 'flex';
                     visibles++;
                 } else {

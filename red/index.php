@@ -202,8 +202,8 @@ $mikrotikconfiguracion = "no";
       <a href="http://10.7.0.254:15178/ViewPower/monitor?319" target="new"><i data-lucide="shield-check"></i> Ups</a>
       <a href="../truenas/truenas.php"><i data-lucide="hard-drive"></i> NAS</a>
       <a href="../traccar/traccar.php"><i data-lucide="map-pin"></i> Rastreo</a>
-      <a href="../streaming/index.php"><i data-lucide="play-circle"></i> Streaming</a>
-      <a href="../peliculas/index.php"><i data-lucide="play-circle"></i> Peliculas</a>
+      <a href="../streaming/index.php"><i data-lucide="play-circle"></i> Jellyfin</a>
+      <a href="../peliculas/index.php"><i data-lucide="play-circle"></i> Streamin local</a>
       <a href="../zkteco/index.php"><i data-lucide="fingerprint"></i> ZKTeco</a>
 	  <a href="index.php"><i data-lucide="shield-check"></i> Mapeo Red</a>
 	  <a href="../redvirtual/index.php"><i data-lucide="shield-check"></i> Red Virtual</a>

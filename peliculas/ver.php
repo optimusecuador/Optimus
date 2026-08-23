@@ -31,6 +31,14 @@ $portada = !empty($pelicula['portada_url']) ? $pelicula['portada_url'] : 'https:
 $anio = !empty($pelicula['fecha']) ? date('Y', strtotime($pelicula['fecha'])) : 'N/A';
 $cats_array = !empty($pelicula['id_categoria']) ? array_map('trim', explode(',', $pelicula['id_categoria'])) : [];
 
+// Obtener el tiempo guardado en segundos (campo reproduccion)
+$tiempo_guardado = floatval($pelicula['reproduccion'] ?? 0);
+
+// Formatear el tiempo guardado en minutos y segundos para mostrarlo en el botón (Ej. 01:25)
+$minutos_guardados = floor($tiempo_guardado / 60);
+$segundos_guardados = floor($tiempo_guardado % 60);
+$tiempo_formateado = sprintf('%02d:%02d', $minutos_guardados, $segundos_guardados);
+
 // PROCESAR AUDIOS Y URLs MULTIPLES DESDE pelicula_audio
 $pelicula_audio_str = !empty($pelicula['pelicula_audio']) ? $pelicula['pelicula_audio'] : '';
 $audio_opciones = [];
@@ -43,11 +51,6 @@ if (!empty($pelicula_audio_str)) {
             $nombre_idioma = trim($partes[0]);
             $url_stream = trim($partes[1]);
             
-            // Si la ruta interna incluye /var/www/, la adaptamos para la web si es necesario
-            if (strpos($url_stream, '/var/www/') !== false) {
-                // Opcional: limpiar rutas absolutas si tu entorno web las maneja relativas o mediante el script stream_audio.php
-            }
-            
             $audio_opciones[] = [
                 'idioma' => $nombre_idioma,
                 'url' => $url_stream
@@ -56,7 +59,6 @@ if (!empty($pelicula_audio_str)) {
     }
 }
 
-// Fallback por si la base de datos antigua no tiene pelicula_audio poblado aún
 if (empty($audio_opciones)) {
     $audio_opciones[] = [
         'idioma' => 'Español (Por defecto)',
@@ -65,10 +67,7 @@ if (empty($audio_opciones)) {
 }
 
 $audio_str = implode(', ', array_column($audio_opciones, 'idioma'));
-// Separamos las URLs por comas por si hay múltiples enlaces para múltiples audios
-//$url_array = array_map('trim', explode(',', $link_video));
 
-// Valores actualizados para reflejar los campos rotten_tomatoes y audiencia de la base de datos
 $rotten_critica = $pelicula['rotten_tomatoes'] ?? '0';
 $rotten_audiencia = $pelicula['audiencia'] ?? '0';
 ?>
@@ -93,7 +92,10 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
 
         .controles-pre-play { display: flex; flex-direction: column; align-items: center; gap: 15px; z-index: 3; }
         .select-audio { padding: 10px 15px; font-size: 16px; border-radius: 5px; border: 2px solid #333; background: rgba(20, 20, 20, 0.9); color: #fff; font-weight: bold; outline: none; cursor: pointer; text-align: center; }
-        .btn-reproducir { background-color: #e50914; color: white; border: none; padding: 15px 30px; font-size: 18px; font-weight: bold; border-radius: 5px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+        
+        .grupo-botones { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+        .btn-reproducir { background-color: #e50914; color: white; border: none; padding: 12px 20px; font-size: 16px; font-weight: bold; border-radius: 5px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+        .btn-continuar { background-color: #28a745; color: white; border: none; padding: 12px 20px; font-size: 16px; font-weight: bold; border-radius: 5px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
         
         .pelicula-detalle { display: flex; gap: 25px; background: #1f1f1f; padding: 20px; border-radius: 8px; }
         .portada-col { flex: 0 0 180px; }
@@ -114,6 +116,8 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
             .header-info { flex-direction: column; }
             .rotten-right { flex-direction: row; width: 100%; justify-content: space-between; }
             .score-box { flex: 1; }
+            .grupo-botones { flex-direction: column; width: 100%; }
+            .btn-reproducir, .btn-continuar { width: 100%; }
         }
     </style>
 </head>
@@ -126,13 +130,19 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
             <div id="posterOverlay" class="poster-overlay" style="background-image: url('<?php echo htmlspecialchars($portada); ?>');">
                 
                 <div class="controles-pre-play">
-                    <!-- AHORA EL SELECT GUARDA LA URL DIRECTAMENTE COMO 'VALUE' -->
                     <select id="audioSelector" class="select-audio">
-    <?php foreach ($audio_opciones as $opcion): ?>
-        <option value="<?php echo htmlspecialchars($opcion['url']); ?>">🔊 Audio: <?php echo htmlspecialchars($opcion['idioma']); ?></option>
-    <?php endforeach; ?>
-</select>
-                    <button class="btn-reproducir" onclick="iniciarReproduccion()">▶ Reproducir Película</button>
+                        <?php foreach ($audio_opciones as $opcion): ?>
+                            <option value="<?php echo htmlspecialchars($opcion['url']); ?>">🔊 Audio: <?php echo htmlspecialchars($opcion['idioma']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+
+                    <div class="grupo-botones">
+                        <button class="btn-reproducir" onclick="iniciarReproduccion(false)">▶ Reproducir desde el inicio</button>
+                        
+                        <?php if ($tiempo_guardado > 5): ?>
+                            <button class="btn-continuar" onclick="iniciarReproduccion(true)">⏭ Continuar (<?php echo $tiempo_formateado; ?>)</button>
+                        <?php endif; ?>
+                    </div>
                 </div>
 
             </div>
@@ -181,9 +191,13 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
     </div>
 
     <script>
+        const idPelicula = <?php echo $id_pelicula; ?>;
         const urlIntro = "../descripcion/intro.mp4";
         const video = document.getElementById('videoPlayer');
+        let tiempoGuardadoServidor = <?php echo $tiempo_guardado; ?>;
+        let reproduciendoPeliculaReal = false;
         let isFakeFullscreen = false;
+        let ultimoTiempoEnviado = 0;
 
         function ajustarOrientacion() {
             if (!isFakeFullscreen) return;
@@ -198,10 +212,20 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
             }
         }
 
-        function iniciarReproduccion() {
-            const container = document.getElementById('videoContainer');
+        function guardarProgreso(tiempoActual, forzar = false) {
+            if (!reproduciendoPeliculaReal) return;
+            if (!forzar && Math.abs(tiempoActual - ultimoTiempoEnviado) < 5) return;
             
-            // OBTENER LA URL DEL ARCHIVO DE VIDEO ESPECÍFICO DEL IDIOMA SELECCIONADO
+            ultimoTiempoEnviado = tiempoActual;
+
+            navigator.sendBeacon('guardar_progreso.php', new URLSearchParams({
+                id: idPelicula,
+                tiempo: Math.floor(tiempoActual)
+            }));
+        }
+
+        function iniciarReproduccion(continuar) {
+            const container = document.getElementById('videoContainer');
             const selector = document.getElementById('audioSelector');
             const urlPeliculaFinal = selector.value;
             
@@ -216,16 +240,41 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
                 container.requestFullscreen().catch(() => {});
             }
 
-            // 1. Iniciar video con intro
+            // 1. SIEMPRE reproducir la intro primero
             video.src = urlIntro;
             video.play().catch(e => console.log("Error intro:", e));
             
-            // 2. Al terminar el intro, pasamos a la película con el idioma seleccionado
+            // 2. Al terminar la intro, cargamos la película aplicando o ignorando el tiempo guardado según el botón elegido
             video.onended = () => {
+                if (reproduciendoPeliculaReal) return; 
+
+                reproduciendoPeliculaReal = true;
                 video.src = urlPeliculaFinal;
+                video.load(); // Forzar la recarga del recurso
+
+                video.onloadedmetadata = () => {
+                    if (continuar && tiempoGuardadoServidor > 5) {
+                        video.currentTime = tiempoGuardadoServidor;
+                    } else {
+                        video.currentTime = 0;
+                    }
+                };
+
                 video.play().catch(e => console.log("Error película:", e));
             };
         }
+
+        video.addEventListener('timeupdate', () => {
+            if (reproduciendoPeliculaReal) {
+                guardarProgreso(video.currentTime);
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            if (reproduciendoPeliculaReal) {
+                guardarProgreso(video.currentTime, true);
+            }
+        });
 
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement) {

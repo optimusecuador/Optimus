@@ -171,7 +171,6 @@ if ($resultado_estrenos) {
            --------------------------------------------------- */
         .grid-peliculas {
             display: grid;
-            /* 2 columnas fraccionarias para aprovechar el ancho del celular */
             grid-template-columns: repeat(2, 1fr);
             gap: 12px;
             padding: 0 5px;
@@ -249,7 +248,6 @@ if ($resultado_estrenos) {
             color: #222;
             font-size: 13px;
             font-weight: 600;
-            /* Truncar texto largo a 1 sola línea */
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -258,7 +256,61 @@ if ($resultado_estrenos) {
         .categorias-texto {
             font-size: 11px;
             color: #777;
-            /* Truncar texto largo a 1 sola línea */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* ---------------------------------------------------
+           SECCIÓN DE ACTORES / ARTISTAS EN BÚSQUEDA
+           --------------------------------------------------- */
+        .seccion-actores-resultado {
+            margin-top: 30px;
+            display: none; /* Se activa mediante JS si hay resultados de búsqueda */
+        }
+
+        .seccion-actores-resultado h2 {
+            margin: 0 0 12px 5px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #222;
+        }
+
+        .grid-actores {
+            display: flex;
+            gap: 15px;
+            overflow-x: auto;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 10px;
+            padding-left: 5px;
+        }
+        .grid-actores::-webkit-scrollbar { display: none; }
+
+        .actor-card {
+            background: #ffffff;
+            border-radius: 10px;
+            padding: 10px;
+            text-align: center;
+            flex: 0 0 110px;
+            min-width: 110px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+
+        .actor-img {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin: 0 auto 8px auto;
+            background-color: #ddd;
+            display: block;
+        }
+
+        .actor-nombre {
+            font-size: 12px;
+            font-weight: 600;
+            color: #333;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -282,7 +334,7 @@ if ($resultado_estrenos) {
             <input 
                 type="text" 
                 id="inputBuscador" 
-                placeholder="🔍 Buscar película..." 
+                placeholder="🔍 Buscar película o actor..." 
                 onkeyup="filtrarCatalogo()"
             >
         </div>
@@ -311,7 +363,7 @@ if ($resultado_estrenos) {
 
     <!-- SECCIÓN ÚLTIMOS ESTRENOS -->
     <?php if (!empty($ultimos_estrenos)): ?>
-        <div class="seccion-estrenos">
+        <div class="seccion-estrenos" id="seccionEstrenosContainer">
             <h2>🔥 Últimos Estrenos</h2>
             <div class="carrusel-estrenos">
                 <?php foreach ($ultimos_estrenos as $peli_estreno): ?>
@@ -343,21 +395,25 @@ if ($resultado_estrenos) {
     <!-- CATÁLOGO GENERAL -->
     <div class="grid-peliculas" id="contenedorPeliculas">
         <?php foreach ($peliculas as $peli): ?>
+            <?>
             <?php 
                 $id_peli = intval($peli['id_peliculas'] ?? 0);
                 $cats_array = array_map('trim', explode(',', $peli['id_categoria']));
-                // Limpiamos y convertimos cada categoría a minúscula para que coincida perfectamente con el data-attribute
                 $cats_lower = array_map(function($c) { return mb_strtolower($c, 'UTF-8'); }, $cats_array);
                 $cats_atributo = implode(',', $cats_lower);
                 
                 $nombre = $peli['nombre'] ?? 'Sin nombre';
                 $portada = !empty($peli['portada_url']) ? $peli['portada_url'] : 'https://via.placeholder.com/300x450?text=Sin+Portada';
                 $audio = !empty($peli['audio']) ? $peli['audio'] : 'LAT';
+                
+                // Procesar actores almacenados en el campo correspondiente
+                $actores_raw = $peli['actores'] ?? '';
             ?>
             <a href="ver.php?id=<?php echo $id_peli; ?>" 
                class="pelicula-card" 
                data-titulo="<?php echo htmlspecialchars(mb_strtolower($nombre, 'UTF-8')); ?>" 
-               data-categorias="<?php echo htmlspecialchars($cats_atributo); ?>">
+               data-categorias="<?php echo htmlspecialchars($cats_atributo); ?>"
+               data-actores="<?php echo htmlspecialchars(mb_strtolower($actores_raw, 'UTF-8')); ?>">
                
                 <div class="portada-link">
                     <img src="<?php echo htmlspecialchars($portada); ?>" alt="Portada" loading="lazy" class="pelicula-portada">
@@ -375,11 +431,19 @@ if ($resultado_estrenos) {
         <?php endforeach; ?>
 
         <div id="sinResultados" class="sin-resultados">
-            No encontramos películas con ese nombre o categoría. 🍿
+            No encontramos películas o actores con ese término de búsqueda. 🍿
         </div>
     </div>
 
-    <!-- SCRIPT DE FILTRADO -->
+    <!-- SECCIÓN DE ACTORES ENCONTRADOS (DINÁMICA VÍA JS) -->
+    <div class="seccion-actores-resultado" id="seccionActoresResultado">
+        <h2>⭐ Actores</h2>
+        <div class="grid-actores" id="contenedorActoresResultado">
+            <!-- Se inyectarán dinámicamente aquí los actores coincidentes -->
+        </div>
+    </div>
+
+    <!-- SCRIPT DE FILTRADO Y BÚSQUEDA DE ACTORES -->
     <script>
         let categoriaSeleccionada = 'todas';
 
@@ -387,36 +451,89 @@ if ($resultado_estrenos) {
             document.querySelectorAll('.btn-filtro').forEach(btn => btn.classList.remove('activo'));
             elementoBoton.classList.add('activo');
 
-            // Convertimos la categoría seleccionada a minúscula para compararla correctamente
             categoriaSeleccionada = categoria.toLowerCase().trim();
+            
+            // Limpiar buscador de texto si cambia de categoría para una mejor experiencia visual combinada opcional
             filtrarCatalogo();
             
-            // Centra el botón seleccionado en el scroll horizontal
             elementoBoton.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
         }
 
         function filtrarCatalogo() {
             const textoBusqueda = document.getElementById('inputBuscador').value.toLowerCase().trim();
             const tarjetas = document.querySelectorAll('#contenedorPeliculas .pelicula-card');
-            let visibles = 0;
+            const seccionEstrenos = document.getElementById('seccionEstrenosContainer');
+            let visiblesPeliculas = 0;
+
+            // Control visual de sección de estrenos (se oculta si hay texto de búsqueda activo)
+            if (seccionEstrenos) {
+                seccionEstrenos.style.display = (textoBusqueda !== '') ? 'none' : 'block';
+            }
+
+            // Almacén temporal para evitar actores repetidos en los resultados de búsqueda
+            let actoresEncontradosUnicos = new Map();
 
             tarjetas.forEach(card => {
                 const titulo = card.getAttribute('data-titulo');
                 const categorias = card.getAttribute('data-categorias').split(',');
+                const actoresTexto = card.getAttribute('data-actores'); // ej: "Tom Holland, Zendaya"
 
-                const coincideTexto = titulo.includes(textoBusqueda);
+                // Coincidencia por texto (ahora evalúa tanto título como el campo actores)
+                const coincideTextoTitulo = titulo.includes(textoBusqueda);
+                const coincideTextoActores = actoresTexto.includes(textoBusqueda);
+                const coincideTexto = (textoBusqueda === '') || coincideTextoTitulo || coincideTextoActores;
+
                 const coincideCategoria = (categoriaSeleccionada === 'todas') || categorias.includes(categoriaSeleccionada);
 
                 if (coincideTexto && coincideCategoria) {
                     card.style.display = 'flex';
-                    visibles++;
+                    visiblesPeliculas++;
+
+                    // Si se está buscando activamente y coincide por el campo actor, extraemos los actores
+                    if (textoBusqueda !== '' && coincideTextoActores) {
+                        let listaActoresPeli = actoresTexto.split(',');
+                        listaActoresPeli.forEach(actorCrudo => {
+                            let nombreActor = actorCrudo.trim();
+                            if (nombreActor.toLowerCase().includes(textoBusqueda) && nombreActor !== '') {
+                                // Capitalizar nombre correctamente
+                                let nombreFormateado = nombreActor.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+                                
+                                if (!actoresEncontradosUnicos.has(nombreFormateado)) {
+                                    // Ruta de imagen de actor (ajustable según tu estructura de carpetas, con fallback a imagen genérica)
+                                    let imgActor = `../images/actores/${encodeURIComponent(nombreFormateado)}.jpg`;
+                                    actoresEncontradosUnicos.set(nombreFormateado, imgActor);
+                                }
+                            }
+                        });
+                    }
                 } else {
                     card.style.display = 'none';
                 }
             });
 
+            // Renderizar la sección de actores si hay texto de búsqueda y actores coincidentes
+            const contenedorActores = document.getElementById('contenedorActoresResultado');
+            const seccionActoresDiv = document.getElementById('seccionActoresResultado');
+            contenedorActores.innerHTML = '';
+
+            if (textoBusqueda !== '' && actoresEncontradosUnicos.size > 0) {
+                seccionActoresDiv.style.display = 'block';
+                actoresEncontradosUnicos.forEach((imgUrl, nombre) => {
+                    let tarjetaActorHTML = `
+                        <div class="actor-card">
+                            <img src="${imgUrl}" alt="${nombre}" class="actor-img" onerror="this.src='https://via.placeholder.com/70?text=Actor'">
+                            <div class="actor-nombre" title="${nombre}">${nombre}</div>
+                        </div>
+                    `;
+                    contenedorActores.innerHTML += tarjetaActorHTML;
+                });
+            } else {
+                seccionActoresDiv.style.display = 'none';
+            }
+
+            // Gestionar mensaje de "Sin resultados"
             const sinResultados = document.getElementById('sinResultados');
-            if (visibles === 0 && tarjetas.length > 0) {
+            if (visiblesPeliculas === 0 && tarjetas.length > 0) {
                 sinResultados.style.display = 'block';
             } else {
                 sinResultados.style.display = 'none';

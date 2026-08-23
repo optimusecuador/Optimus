@@ -34,7 +34,7 @@ $cats_array = !empty($pelicula['id_categoria']) ? array_map('trim', explode(',',
 // Obtener el tiempo guardado en segundos (campo reproduccion)
 $tiempo_guardado = floatval($pelicula['reproduccion'] ?? 0);
 
-// Formatear el tiempo guardado en minutos y segundos para mostrarlo en el botón (Ej. 01:25)
+// Formatear el tiempo guardado en minutos y segundos
 $minutos_guardados = floor($tiempo_guardado / 60);
 $segundos_guardados = floor($tiempo_guardado % 60);
 $tiempo_formateado = sprintf('%02d:%02d', $minutos_guardados, $segundos_guardados);
@@ -198,6 +198,25 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
         let reproduciendoPeliculaReal = false;
         let isFakeFullscreen = false;
         let ultimoTiempoEnviado = 0;
+        let wakeLockSentinel = null;
+
+        // Función para evitar que la pantalla se apague (Wake Lock API)
+        async function solicitarWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLockSentinel = await navigator.wakeLock.request('screen');
+                } catch (err) {
+                    console.log("Error al activar Wake Lock:", err);
+                }
+            }
+        }
+
+        // Re-activar el Wake Lock si el usuario minimiza y regresa a la app
+        document.addEventListener('visibilitychange', async () => {
+            if (wakeLockSentinel !== null && document.visibilityState === 'visible') {
+                await solicitarWakeLock();
+            }
+        });
 
         function ajustarOrientacion() {
             if (!isFakeFullscreen) return;
@@ -231,6 +250,9 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
             
             document.getElementById('posterOverlay').style.display = 'none';
             
+            // Activar la prevención de apagado de pantalla al hacer clic
+            solicitarWakeLock();
+
             isFakeFullscreen = true;
             ajustarOrientacion();
             window.addEventListener('resize', ajustarOrientacion);
@@ -244,13 +266,13 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
             video.src = urlIntro;
             video.play().catch(e => console.log("Error intro:", e));
             
-            // 2. Al terminar la intro, cargamos la película aplicando o ignorando el tiempo guardado según el botón elegido
+            // 2. Al terminar la intro, cargamos la película aplicando o ignorando el tiempo guardado
             video.onended = () => {
                 if (reproduciendoPeliculaReal) return; 
 
                 reproduciendoPeliculaReal = true;
                 video.src = urlPeliculaFinal;
-                video.load(); // Forzar la recarga del recurso
+                video.load(); 
 
                 video.onloadedmetadata = () => {
                     if (continuar && tiempoGuardadoServidor > 5) {

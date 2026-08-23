@@ -66,7 +66,7 @@ if (empty($audio_opciones)) {
 
 $audio_str = implode(', ', array_column($audio_opciones, 'idioma'));
 // Separamos las URLs por comas por si hay múltiples enlaces para múltiples audios
-$url_array = array_map('trim', explode(',', $link_video));
+//$url_array = array_map('trim', explode(',', $link_video));
 
 $rotten_critica = $pelicula['rotten_tomates'] ?? '0';
 $rotten_audiencia = $pelicula['rotten_audiencia'] ?? '0';

@@ -31,15 +31,40 @@ $portada = !empty($pelicula['portada_url']) ? $pelicula['portada_url'] : 'https:
 $anio = !empty($pelicula['fecha']) ? date('Y', strtotime($pelicula['fecha'])) : 'N/A';
 $cats_array = !empty($pelicula['id_categoria']) ? array_map('trim', explode(',', $pelicula['id_categoria'])) : [];
 
-// PROCESAR AUDIOS Y URLs MULTIPLES
-$audio_str = !empty($pelicula['audio']) ? $pelicula['audio'] : 'LAT';
-$audio_array = array_map('trim', explode(',', $audio_str));
+// PROCESAR AUDIOS Y URLs MULTIPLES DESDE pelicula_audio
+$pelicula_audio_str = !empty($pelicula['pelicula_audio']) ? $pelicula['pelicula_audio'] : '';
+$audio_opciones = [];
 
-$link_video = trim($pelicula['pelicula_url'] ?? '');
-if (strpos($link_video, '/var/www/') !== false) {
-    $link_video = str_replace('/var/www', '', $link_video);
-    $link_video = str_replace(' ', '%20', $link_video);
+if (!empty($pelicula_audio_str)) {
+    $tracks_db = explode('|', $pelicula_audio_str);
+    foreach ($tracks_db as $track_info) {
+        $partes = explode(':', $track_info, 2);
+        if (count($partes) === 2) {
+            $nombre_idioma = trim($partes[0]);
+            $url_stream = trim($partes[1]);
+            
+            // Si la ruta interna incluye /var/www/, la adaptamos para la web si es necesario
+            if (strpos($url_stream, '/var/www/') !== false) {
+                // Opcional: limpiar rutas absolutas si tu entorno web las maneja relativas o mediante el script stream_audio.php
+            }
+            
+            $audio_opciones[] = [
+                'idioma' => $nombre_idioma,
+                'url' => $url_stream
+            ];
+        }
+    }
 }
+
+// Fallback por si la base de datos antigua no tiene pelicula_audio poblado aún
+if (empty($audio_opciones)) {
+    $audio_opciones[] = [
+        'idioma' => 'Español (Por defecto)',
+        'url' => trim($pelicula['pelicula_url'] ?? '')
+    ];
+}
+
+$audio_str = implode(', ', array_column($audio_opciones, 'idioma'));
 // Separamos las URLs por comas por si hay múltiples enlaces para múltiples audios
 $url_array = array_map('trim', explode(',', $link_video));
 
@@ -102,13 +127,10 @@ $rotten_audiencia = $pelicula['rotten_audiencia'] ?? '0';
                 <div class="controles-pre-play">
                     <!-- AHORA EL SELECT GUARDA LA URL DIRECTAMENTE COMO 'VALUE' -->
                     <select id="audioSelector" class="select-audio">
-                        <?php foreach ($audio_array as $index => $idioma): 
-                            // Si no hay enlace para este audio, usa el primero por defecto
-                            $url_correspondiente = isset($url_array[$index]) ? $url_array[$index] : $url_array[0];
-                        ?>
-                            <option value="<?php echo htmlspecialchars($url_correspondiente); ?>">🔊 Audio: <?php echo htmlspecialchars(ucfirst($idioma)); ?></option>
-                        <?php endforeach; ?>
-                    </select>
+    <?php foreach ($audio_opciones as $opcion): ?>
+        <option value="<?php echo htmlspecialchars($opcion['url']); ?>">🔊 Audio: <?php echo htmlspecialchars($opcion['idioma']); ?></option>
+    <?php endforeach; ?>
+</select>
                     <button class="btn-reproducir" onclick="iniciarReproduccion()">▶ Reproducir Película</button>
                 </div>
 

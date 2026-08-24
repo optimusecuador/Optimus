@@ -147,7 +147,6 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
 
             </div>
             
-            <!-- Cambiamos preload a 'auto' para que los archivos MKV carguen índices y permitan saltos de tiempo fluidos -->
             <video id="videoPlayer" controls playsinline webkit-playsinline preload="auto"></video>
         </div>
 
@@ -201,7 +200,8 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
         let ultimoTiempoEnviado = 0;
         let wakeLockSentinel = null;
         let modoContinuarGlobal = false;
-        let saltoRealizado = false;
+        let urlPeliculaFinalGlobal = "";
+        let saltoAplicado = false;
 
         async function solicitarWakeLock() {
             if ('wakeLock' in navigator) {
@@ -246,11 +246,11 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
 
         function iniciarReproduccion(continuar) {
             modoContinuarGlobal = continuar;
-            saltoRealizado = false;
+            saltoAplicado = false;
             
             const container = document.getElementById('videoContainer');
             const selector = document.getElementById('audioSelector');
-            const urlPeliculaFinal = selector.value;
+            urlPeliculaFinalGlobal = selector.value;
             
             document.getElementById('posterOverlay').style.display = 'none';
             
@@ -265,54 +265,37 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
                 container.requestFullscreen().catch(() => {});
             }
 
-            // Asignar y precargar la fuente principal de inmediato en segundo plano
-            video.src = urlPeliculaFinal;
-            video.load();
-
             // 1. Reproducir la intro primero
             video.src = urlIntro;
             video.play().catch(e => {
                 console.log("Error intro:", e);
-                // Si la intro falla, saltamos directamente a la película
-                activarPeliculaReal(urlPeliculaFinal);
+                iniciarPeliculaDirecto();
             });
             
-            // 2. Al terminar la intro, activamos el flujo de la película real
+            // 2. Al terminar la intro, cargamos la película una sola vez de forma limpia
             video.onended = () => {
                 if (reproduciendoPeliculaReal) return; 
-                activarPeliculaReal(urlPeliculaFinal);
+                iniciarPeliculaDirecto();
             };
         }
 
-        function activarPeliculaReal(urlFinal) {
+        function iniciarPeliculaDirecto() {
             reproduciendoPeliculaReal = true;
-            video.src = urlFinal;
+            saltoAplicado = false;
+            video.src = urlPeliculaFinalGlobal;
             video.load();
-
-            if (modoContinuarGlobal && tiempoGuardadoServidor > 5) {
-                // Función repetitiva de seguridad para forzar el salto en archivos MKV pesados
-                let intentos = 0;
-                const intentarSalto = setInterval(() => {
-                    intentos++;
-                    if (video.readyState >= 1) { // 1 = HAVE_METADATA o superior
-                        video.currentTime = tiempoGuardadoServidor;
-                        saltoRealizado = true;
-                        clearInterval(intentosSalto);
-                    }
-                    if (intentos > 20) { // Si pasan 2 segundos y no responde, rompemos el bucle
-                        clearInterval(intentosSalto);
-                    }
-                }, 100);
-            }
-
             video.play().catch(e => console.log("Error película:", e));
         }
 
-        // Control de respaldo por eventos nativos para asegurar el salto en MKV
+        // Manejo nativo y seguro del salto de tiempo para MKV una vez que el navegador procesa los metadatos
         video.addEventListener('loadedmetadata', () => {
-            if (reproduciendoPeliculaReal && modoContinuarGlobal && tiempoGuardadoServidor > 5 && !saltoRealizado) {
-                video.currentTime = tiempoGuardadoServidor;
-                saltoRealizado = true;
+            if (reproduciendoPeliculaReal && modoContinuarGlobal && tiempoGuardadoServidor > 5 && !saltoAplicado) {
+                saltoAplicado = true;
+                try {
+                    video.currentTime = tiempoGuardadoServidor;
+                } catch (err) {
+                    console.log("Error al aplicar currentTime en MKV:", err);
+                }
             }
         });
 

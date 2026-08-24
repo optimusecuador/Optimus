@@ -284,20 +284,29 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
             saltoAplicado = false;
             video.src = urlPeliculaFinalGlobal;
             video.load();
-            video.play().catch(e => console.log("Error película:", e));
-        }
+            
+            // Si el usuario eligió "Continuar", forzamos un estado previo limpio para evitar rebotes de la barra
+            if (modoContinuarGlobal && tiempoGuardadoServidor > 5) {
+                video.muted = true; // Silenciamos momentáneamente durante el salto oculto
+                
+                const aplicarSaltoFirme = () => {
+                    if (!saltoAplicado) {
+                        saltoAplicado = true;
+                        video.currentTime = tiempoGuardadoServidor;
+                        
+                        // Una vez aplicado el salto y transcurrido medio segundo para que el búfer asiente, restauramos el audio y reproducimos
+                        setTimeout(() => {
+                            video.muted = false;
+                            video.play().catch(err => console.log("Error al reanudar:", err));
+                        }, 500);
+                    }
+                };
 
-        // Manejo nativo y seguro del salto de tiempo para MKV una vez que el navegador procesa los metadatos
-        video.addEventListener('loadedmetadata', () => {
-            if (reproduciendoPeliculaReal && modoContinuarGlobal && tiempoGuardadoServidor > 5 && !saltoAplicado) {
-                saltoAplicado = true;
-                try {
-                    video.currentTime = tiempoGuardadoServidor;
-                } catch (err) {
-                    console.log("Error al aplicar currentTime en MKV:", err);
-                }
+                video.addEventListener('loadedmetadata', aplicarSaltoFirme, { once: true });
+            } else {
+                video.play().catch(e => console.log("Error película:", e));
             }
-        });
+        }
 
         video.addEventListener('timeupdate', () => {
             if (reproduciendoPeliculaReal) {

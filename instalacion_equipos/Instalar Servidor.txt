@@ -11,74 +11,33 @@ apt-get install phpmyadmin
 sudo mysql
 ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY 'Optimus2023';
 exit
-sudo apt-get install php8.1-ssh2
+sudo apt-get install php8.3-ssh2
 sudo apt-get install php-ssh2
 sudo service apache2 restart
 sudo apt install speedtest-cli
 sudo apt install python3-pip
+sudo apt update && sudo apt install -y nfs-common
 chmod -R 777 /var/www/html
 crontab -e
 #montar unidades
 cd
 cd ..
-cd var/www
+cd var/www/html
 mkdir ALMACENAMIENTO
 cd ALMACENAMIENTO
 mkdir PRINCIPAL
-mkdir MULTIMEDIA1
-mkdir MULTIMEDIA2
-mkdir MULTIMEDIA3
-mkdir MULTIMEDIA4
-mkdir MULTIMEDIA5
-mkdir MULTIMEDIA6
-mkdir MULTIMEDIA7
-mkdir MULTIMEDIA8
-mkdir MULTIMEDIA9
-mkdir MULTIMEDIA10
-mkdir MULTIMEDIA11
-mkdir MULTIMEDIA12
-mkdir MULTIMEDIA13
-mkdir MULTIMEDIA14
-mkdir MULTIMEDIA15
-mkdir MULTIMEDIA16
-mkdir MULTIMEDIA17
-mkdir MULTIMEDIA18
-mkdir MULTIMEDIA19
-mkdir MULTIMEDIA20
-mkdir MULTIMEDIA21
-mkdir MULTIMEDIA22
-mkdir MULTIMEDIA23
-mkdir MULTIMEDIA24
-mkdir MULTIMEDIA25
-mount -t cifs //10.8.0.10/PRINCIPAL -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/PRINCIPAL
-mount -t cifs //10.8.0.10/MULTIMEDIA1 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA1
-mount -t cifs //10.8.0.10/MULTIMEDIA2 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA2
-mount -t cifs //10.8.0.10/MULTIMEDIA3 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA3
-mount -t cifs //10.8.0.10/MULTIMEDIA4 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA4
-mount -t cifs //10.8.0.10/MULTIMEDIA5 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA5
-mount -t cifs //10.8.0.10/MULTIMEDIA6 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA6
-mount -t cifs //10.8.0.10/MULTIMEDIA7 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA7
-mount -t cifs //10.8.0.10/MULTIMEDIA8 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA8
-mount -t cifs //10.8.0.10/MULTIMEDIA9 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA9
-mount -t cifs //10.8.0.10/MULTIMEDIA10 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA10
-mount -t cifs //10.8.0.10/MULTIMEDIA11 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA11
-mount -t cifs //10.8.0.10/MULTIMEDIA12 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA12
-mount -t cifs //10.8.0.10/MULTIMEDIA13 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA13
-mount -t cifs //10.8.0.10/MULTIMEDIA14 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA14
-mount -t cifs //10.8.0.10/MULTIMEDIA15 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA15
-mount -t cifs //10.8.0.10/MULTIMEDIA16 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA16
-mount -t cifs //10.8.0.10/MULTIMEDIA17 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA17
-mount -t cifs //10.8.0.10/MULTIMEDIA18 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA18
-mount -t cifs //10.8.0.10/MULTIMEDIA19 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA19
-mount -t cifs //10.8.0.10/MULTIMEDIA20 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA20
-mount -t cifs //10.8.0.10/MULTIMEDIA21 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA21
-mount -t cifs //10.8.0.10/MULTIMEDIA22 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA22
-mount -t cifs //10.8.0.10/MULTIMEDIA23 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA23
-mount -t cifs //10.8.0.10/MULTIMEDIA24 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA24
-mount -t cifs //10.8.0.10/MULTIMEDIA25 -o username=nelo416,password=Optimus2023 /var/www/ALMACENAMIENTO/MULTIMEDIA25
+sudo mount -t nfs -o rw 10.8.0.10:/mnt/PRINCIPAL/PRINCIPAL /var/www/html/ALMACENAMIENTO/PRINCIPAL
+for i in {1..23}; do
+  sudo mkdir -p /var/www/html/ALMACENAMIENTO/MULTIMEDIA$i
+  sudo mount -t nfs -o rw 10.8.0.10:/mnt/MULTIMEDIA$i/MULTIMEDIA$i /var/www/html/ALMACENAMIENTO/MULTIMEDIA$i
+done
 chmod -R 777 /var/www
 pip install mysql-connector-python
 sudo apt install ffmpeg
-sudo ln -s /var/www/ALMACENAMIENTO /var/www/html/ALMACENAMIENTO
-sudo chown -R www-data:www-data /var/www/ALMACENAMIENTO
-sudo chmod -R 755 /var/www/ALMACENAMIENTO
+sudo apt update && sudo apt install -y python3-venv python3-full
+#
+python3 -m venv mi_entorno
+source mi_entorno/bin/activate
+#
+pip install mysql-connector-python
+

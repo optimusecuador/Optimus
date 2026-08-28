@@ -253,7 +253,7 @@ add address=10.9.0.252 mac-address=00:A0:98:7D:82:3B server=DHCP-TRUENAS1 commen
 # DHCP IP FIJA POR MAC PARA TRUENAS1 SISTEMA
 ############################################
 /ip dhcp-server lease
-add address=10.9.0.250 mac-address=00:A0:98:77:A9:86 server=DHCP-TRUENAS1 comment="IP Estatica 10.9.0.250 para TrueNAS1 SISTEMA"
+add address=10.9.0.250 mac-address=00:A0:98:54:48:CD server=DHCP-TRUENAS1 comment="IP Estatica 10.9.0.250 para TrueNAS1 SISTEMA"
 
 
 ############################################
@@ -492,6 +492,114 @@ remove [find name~"VIDEO-"]
 
 add name=VIDEO-DOWN parent=DOWNLOAD packet-mark=VIDEO_PRIORITY priority=2 comment="Prioridad Video/Redes"
 add name=VIDEO-UP parent=UPLOAD packet-mark=VIDEO_PRIORITY priority=2 comment="Prioridad Video/Redes"
+
+###############################################################################
+# BLOQUE DE ESTABILIZACIÓN, FLUIDEZ Y CORRECCIÓN DE ERRORES MIKROTIK
+###############################################################################
+
+# -----------------------------------------------------------------------------
+# 1. CREACIÓN DE INTERFACE LIST (Corrige el bloqueo total/intermitente de internet)
+# -----------------------------------------------------------------------------
+/interface list
+add name=WAN comment="Lista WANs"
+/interface list member
+remove [find list=WAN]
+add interface=WAN1 list=WAN
+add interface=WAN2 list=WAN
+
+# -----------------------------------------------------------------------------
+# 2. OPTIMIZACIÓN TCP MSS (Elimina cargas lentas o paginas que no cargan)
+# -----------------------------------------------------------------------------
+/ip firewall mangle
+remove [find comment="AJUSTE_MSS"]
+add chain=forward protocol=tcp tcp-flags=syn action=change-mss new-mss=clamp-to-pmtu comment="AJUSTE_MSS"
+
+# -----------------------------------------------------------------------------
+# 3. CONEXIÓN RÁPIDA (FASTTRACK) PARA TRÁFICO NORMAL Y REDUCCIÓN DE CPU
+# -----------------------------------------------------------------------------
+/ip firewall filter
+remove [find comment="FASTTRACK_ESTABLE"]
+add chain=forward action=fasttrack-connection connection-state=established,related \
+    packet-mark=!GAMING,VIDEO_PRIORITY comment="FASTTRACK_ESTABLE"
+
+# -----------------------------------------------------------------------------
+# 4. REESTRUCTURACIÓN COMPLETA DE MANGLE (Fast Connection Tracking)
+# -----------------------------------------------------------------------------
+/ip firewall mangle
+remove [find comment="QOS_REDES_VIDEO"]
+remove [find comment="QOS_V2"]
+
+# Marcar conexiones primero (Ahorra un 80% de procesamiento de CPU)
+add chain=forward protocol=udp dst-port=3074,3478-3480,27000-27200,5000-5500 \
+    action=mark-connection new-connection-mark=CONN_GAMING passthrough=yes comment="QOS_V2"
+
+add chain=forward protocol=tcp dst-port=443 tls-host="*youtube.com*" action=mark-connection new-connection-mark=CONN_VIDEO passthrough=yes comment="QOS_V2"
+add chain=forward protocol=tcp dst-port=443 tls-host="*googlevideo.com*" action=mark-connection new-connection-mark=CONN_VIDEO passthrough=yes comment="QOS_V2"
+add chain=forward protocol=tcp dst-port=443 tls-host="*facebook.com*" action=mark-connection new-connection-mark=CONN_VIDEO passthrough=yes comment="QOS_V2"
+add chain=forward protocol=tcp dst-port=443 tls-host="*fbcdn.net*" action=mark-connection new-connection-mark=CONN_VIDEO passthrough=yes comment="QOS_V2"
+add chain=forward protocol=tcp dst-port=443 tls-host="*instagram.com*" action=mark-connection new-connection-mark=CONN_VIDEO passthrough=yes comment="QOS_V2"
+add chain=forward protocol=tcp dst-port=443 tls-host="*tiktok.com*" action=mark-connection new-connection-mark=CONN_VIDEO passthrough=yes comment="QOS_V2"
+add chain=forward protocol=tcp dst-port=443 tls-host="*netflix.com*" action=mark-connection new-connection-mark=CONN_VIDEO passthrough=yes comment="QOS_V2"
+add chain=forward protocol=udp dst-port=443 action=mark-connection new-connection-mark=CONN_VIDEO passthrough=yes comment="QOS_V2"
+
+# Marcar Paquetes según Conexión
+add chain=forward connection-mark=CONN_GAMING action=mark-packet new-packet-mark=GAMING passthrough=no comment="QOS_V2"
+add chain=forward connection-mark=CONN_VIDEO action=mark-packet new-packet-mark=VIDEO_PRIORITY passthrough=no comment="QOS_V2"
+add chain=forward action=mark-packet new-packet-mark=NORMAL passthrough=no comment="QOS_V2"
+
+# -----------------------------------------------------------------------------
+# 5. ARBOLES DE COLAS SINCRO (QUEUE TREE CORRECTO)
+# -----------------------------------------------------------------------------
+/queue tree
+remove [find name="DOWNLOAD"]
+remove [find name="UPLOAD"]
+
+add name=DOWNLOAD parent=global queue=default
+add name=GAMING-DOWN parent=DOWNLOAD packet-mark=GAMING priority=1 queue=default
+add name=VIDEO-DOWN parent=DOWNLOAD packet-mark=VIDEO_PRIORITY priority=2 queue=default
+add name=NORMAL-DOWN parent=DOWNLOAD packet-mark=NORMAL priority=8 queue=default
+
+add name=UPLOAD parent=global queue=default
+add name=GAMING-UP parent=UPLOAD packet-mark=GAMING priority=1 queue=default
+add name=VIDEO-UP parent=UPLOAD packet-mark=VIDEO_PRIORITY priority=2 queue=default
+add name=NORMAL-UP parent=UPLOAD packet-mark=NORMAL priority=8 queue=default
+
+# -----------------------------------------------------------------------------
+# 6. ESTABILIZACIÓN DE NETWATCH Y EVENTOS (Evita spam y caídas de DNS)
+# -----------------------------------------------------------------------------
+/tool netwatch
+set [find comment="Monitor_Pihole_Port"] interval=30s timeout=3s
+set [find comment="Monitor_Equipo_10.10.0.254"] interval=30s timeout=5s
+set [find comment="Monitor_10.9.0.250"] interval=30s timeout=5s
+set [find comment="Monitor_10.9.0.251"] interval=30s timeout=5s
+set [find comment="Monitor_10.8.0.10"] interval=30s timeout=5s
+set [find comment="Monitor_10.7.0.254"] interval=30s timeout=5s
+set [find comment="Monitor_10.9.0.252"] interval=30s timeout=5s
+
+# -----------------------------------------------------------------------------
+# 7. MENSAJE DE CONFIRMACIÓN
+# -----------------------------------------------------------------------------
+:put "===== OPTIMIZACIÓN APLICADA: RED ESTABLE Y NAVEGACIÓN FLUIDA ====="
+###############################################################################
+# OPTIMIZACIÓN Y ESTABILIZACIÓN DE PING (ICMP FAST-PATH)
+###############################################################################
+
+# 1. Regla en Mangle para ignorar el tráfico ICMP (No marcar ni encolar PINGs)
+/ip firewall mangle
+remove [find comment="ESTABILIZAR_PING"]
+add chain=forward protocol=icmp action=accept comment="ESTABILIZAR_PING" place-before=0
+add chain=prerouting protocol=icmp action=accept comment="ESTABILIZAR_PING" place-before=0
+
+# 2. Permitir ICMP directo en Filter sin pasar por inspecciones profundas
+/ip firewall filter
+remove [find comment="PERMITIR_PING_DIRECTO"]
+add chain=forward protocol=icmp action=accept comment="PERMITIR_PING_DIRECTO" place-before=0
+
+# 3. Desactivar prueba de ping Netwatch agresiva a 10s que genera latencia en la IP 10.9.0.250
+/tool netwatch
+set [find comment="Monitor_10.9.0.250"] interval=1m timeout=5s
+
+:put "===== PING OPTIMIZADO Y ESTABILIZADO ====="
 ############################################
 # MENSAJE FINAL
 ############################################

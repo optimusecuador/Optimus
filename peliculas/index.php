@@ -1,519 +1,755 @@
-<?php
-// ==============================================================================
-// 1. CONEXIÓN A LA BASE DE DATOS Y CONSULTAS
-// ==============================================================================
-require('../conectar.php');
-
-// Función auxiliar para formatear el tiempo en segundos a HH:MM:SS o MM:SS
-function formatearTiempo($segundos_totales) {
-    $seg = floatval($segundos_totales);
-    $horas = floor($seg / 3600);
-    $minutos = floor(($seg / 60) % 60);
-    $segundos = floor($seg % 60);
-    
-    if ($horas > 0) {
-        return sprintf('%d:%02d:%02d', $horas, $minutos, $segundos);
-    } else {
-        return sprintf('%02d:%02d', $minutos, $segundos);
-    }
-}
-
-// Consulta 1: Obtener todas las películas para el catálogo principal
-$query = "SELECT * FROM peliculas";
-$resultado = mysqli_query($conexion, $query);
-
-$peliculas = [];
-$conteo_categorias = [];
-$total_peliculas = 0;
-
-if ($resultado) {
-    while ($fila = mysqli_fetch_assoc($resultado)) {
-        $peliculas[] = $fila;
-        $total_peliculas++;
-        
-        // Procesar categorías compuestas (ej. "drama, terror")
-        if (!empty($fila['id_categoria'])) {
-            $lista = explode(',', $fila['id_categoria']);
-            foreach ($lista as $cat) {
-                $cat_limpia = trim($cat);
-                if ($cat_limpia !== '') {
-                    if (!isset($conteo_categorias[$cat_limpia])) {
-                        $conteo_categorias[$cat_limpia] = 1;
-                    } else {
-                        $conteo_categorias[$cat_limpia]++;
-                    }
-                }
-            }
-        }
-    }
-    ksort($conteo_categorias);
-}
-
-// Consulta 2: Obtener los 20 estrenos más recientes por el campo 'fecha'
-$query_estrenos = "SELECT * FROM peliculas ORDER BY fecha DESC LIMIT 20";
-$resultado_estrenos = mysqli_query($conexion, $query_estrenos);
-
-$ultimos_estrenos = [];
-if ($resultado_estrenos) {
-    while ($fila_estreno = mysqli_fetch_assoc($resultado_estrenos)) {
-        $ultimos_estrenos[] = $fila_estreno;
-    }
-}
-
-// Consulta 3: Obtener las películas donde la reproducción sea diferente a 0 (Continuar viendo)
-$query_continuar = "SELECT * FROM peliculas WHERE reproduccion != 0 ORDER BY reproduccion DESC";
-$resultado_continuar = mysqli_query($conexion, $query_continuar);
-
-$continuar_viendo = [];
-if ($resultado_continuar) {
-    while ($fila_cont = mysqli_fetch_assoc($resultado_continuar)) {
-        $continuar_viendo[] = $fila_cont;
-    }
-}
-?>
-
-<!DOCTYPE html>
-<html lang="es">
+<!doctype html>
+<html>
 <head>
-    <meta charset="UTF-8">
-    <!-- Metadatos cruciales para WebView Android -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#ffffff">
-    <title>Catálogo de Películas</title>
-    <style>
-        /* RESET BÁSICO Y OPTIMIZACIÓN WEBVIEW */
-        * {
-            box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent;
-        }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Streaming Móvil y PC</title>
+<link rel="stylesheet" href="../css/styles.css" />
+<style>
+    /* --- RESET Y ESTILOS BASE --- */
+    * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+    }
 
+    body {
+        background-color: #0b0f19;
+        color: #fff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        margin: 0;
+        padding: 10px;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+
+    /* Envoltorio principal para PC */
+    .app-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        width: 100%;
+    }
+
+    /* --- ENCABEZADO Y LOGO --- */
+    .app-header {
+        display: flex;
+        align-items: center;
+        padding: 10px 5px 15px 5px;
+    }
+
+    .app-logo {
+        height: 38px;
+        width: auto;
+        object-fit: contain;
+    }
+
+    /* --- PANELES --- */
+    .panel-dark {
+        background: #111827;
+        border-radius: 12px;
+        padding: 15px;
+        margin-bottom: 15px;
+        border: 1px solid #1f2937;
+    }
+
+    .isp-title {
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 12px;
+        color: #f3f4f6;
+    }
+
+    /* --- CONTENEDORES HORIZONTALES (Swipe / Scroll) --- */
+    .mobile-scroll-container {
+        display: flex;
+        gap: 12px;
+        overflow-x: auto;
+        scroll-behavior: smooth;
+        padding-bottom: 10px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .mobile-scroll-container::-webkit-scrollbar,
+    .categories-bar::-webkit-scrollbar {
+        height: 6px;
+    }
+    .mobile-scroll-container::-webkit-scrollbar-track,
+    .categories-bar::-webkit-scrollbar-track {
+        background: #111827;
+        border-radius: 10px;
+    }
+    .mobile-scroll-container::-webkit-scrollbar-thumb,
+    .categories-bar::-webkit-scrollbar-thumb {
+        background: #374151;
+        border-radius: 10px;
+    }
+
+    /* --- MARCA DE AGUA Y SUPERPOSICIONES SOBRE LA PORTADA --- */
+    .poster-container {
+        position: relative;
+        width: 100%;
+        overflow: hidden;
+    }
+
+    .watermark-badge {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background-color: rgba(255, 255, 255, 0.4);
+        backdrop-filter: blur(2px);
+        border-radius: 6px;
+        padding: 6px 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2;
+        pointer-events: none;
+    }
+
+    .watermark-badge img {
+        height: 28px;
+        width: auto;
+        object-fit: contain;
+    }
+
+    /* Badge para mostrar los idiomas en la parte inferior de la portada */
+    .lang-badge {
+        position: absolute;
+        bottom: 6px;
+        left: 6px;
+        right: 6px;
+        background-color: rgba(0, 0, 0, 0.75);
+        backdrop-filter: blur(2px);
+        border-radius: 4px;
+        padding: 3px 6px;
+        font-size: 9px;
+        font-weight: bold;
+        color: #38bdf8;
+        text-transform: uppercase;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-align: center;
+        z-index: 2;
+        pointer-events: none;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* BARRA DE PROGRESO "CONTINUAR VIENDO" */
+    .progress-bar-bg {
+        width: 100%;
+        height: 5px;
+        background-color: rgba(255, 255, 255, 0.2);
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        z-index: 3;
+    }
+
+    .progress-bar-fill {
+        height: 100%;
+        background-color: #2563eb;
+    }
+
+    /* --- TARJETAS MÓVILES / RECIENTES --- */
+    .movie-card-mobile {
+        flex: 0 0 130px;
+        max-width: 130px;
+        background: #1f2937;
+        border-radius: 8px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .movie-card-mobile:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+    }
+
+    .movie-card-mobile img.poster-img {
+        width: 100%;
+        height: 190px;
+        object-fit: cover;
+        display: block;
+        cursor: pointer;
+    }
+
+    .movie-title-mobile {
+        font-size: 11px;
+        font-weight: bold;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 2px;
+        color: #f9fafb;
+    }
+
+    .movie-meta-mobile {
+        font-size: 10px;
+        color: #9ca3af;
+        margin-bottom: 2px;
+    }
+
+    /* --- GRID ADAPTATIVO PARA BIBLIOTECA COMPLETA --- */
+    .movies-grid-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+        gap: 12px;
+        width: 100%;
+        margin-top: 10px;
+    }
+
+    .movie-card-grid {
+        background: #1f2937;
+        border-radius: 8px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .movie-card-grid:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 18px rgba(0,0,0,0.5);
+    }
+
+    .movie-card-grid img.poster-img {
+        width: 100%;
+        height: 200px;
+        object-fit: cover;
+        display: block;
+        cursor: pointer;
+    }
+
+    /* --- BUSCADOR Y FORMULARIO --- */
+    .search-form {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 15px;
+        max-width: 600px;
+    }
+
+    .clientes-input {
+        flex: 1;
+        background: #1f2937;
+        border: 1px solid #374151;
+        color: white;
+        padding: 10px;
+        border-radius: 8px;
+        font-size: 14px;
+        outline: none;
+    }
+
+    .clientes-input:focus {
+        border-color: #2563eb;
+    }
+
+    .primary-btn {
+        background: #2563eb;
+        color: white;
+        border: none;
+        padding: 10px 18px;
+        border-radius: 8px;
+        font-weight: bold;
+        font-size: 14px;
+        text-decoration: none;
+        display: inline-block;
+        text-align: center;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .primary-btn:hover {
+        background: #1d4ed8;
+    }
+
+    /* --- BARRAS DE CATEGORÍAS Y GÉNEROS --- */
+    .categories-bar {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        margin-bottom: 10px;
+        padding-bottom: 6px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .category-chip {
+        padding: 7px 14px;
+        color: white;
+        text-decoration: none;
+        border-radius: 8px;
+        white-space: nowrap;
+        font-size: 12px;
+        font-weight: 500;
+        transition: opacity 0.2s ease;
+    }
+
+    .category-chip:hover {
+        opacity: 0.85;
+    }
+
+    /* --- PAGINACIÓN --- */
+    .pagination-info {
+        font-size: 12px;
+        color: #9ca3af;
+        margin-bottom: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+
+    .pagination-controls {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        margin-top: 20px;
+        align-items: center;
+    }
+
+    .pagination-btn {
+        background: #1f2937;
+        color: white;
+        border: 1px solid #374151;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-weight: bold;
+        font-size: 13px;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .pagination-btn:hover {
+        background: #374151;
+    }
+
+    .pagination-btn.disabled {
+        opacity: 0.4;
+        pointer-events: none;
+    }
+
+    /* --- MEDIA QUERIES PARA PC / TABLET --- */
+    @media (min-width: 768px) {
         body {
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            margin: 0;
-            padding: 15px 10px;
-            background-color: #f4f6f8;
-            color: #333;
-            overflow-x: hidden;
+            padding: 20px;
         }
 
-        /* ---------------------------------------------------
-           PANEL SUPERIOR (Buscador y Filtros)
-           --------------------------------------------------- */
-        .panel-control {
-            background: #ffffff;
-            padding: 15px;
-            border-radius: 12px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-            margin-bottom: 20px;
+        .movies-grid-container {
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 16px;
         }
 
-        .buscador-box { margin-bottom: 15px; }
-
-        .buscador-box input {
-            width: 100%;
-            padding: 12px 15px;
-            font-size: 15px;
-            border: 1px solid #e0e0e0;
-            border-radius: 25px;
-            background-color: #f9f9f9;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-        
-        .buscador-box input:focus {
-            border-color: #007bff;
-            background-color: #ffffff;
+        .movie-card-grid img.poster-img {
+            height: 240px;
         }
 
-        /* Carrusel horizontal de botones para móvil */
-        .contenedor-botones {
-            display: flex;
-            flex-wrap: nowrap;
-            gap: 8px;
-            overflow-x: auto;
-            padding-bottom: 5px;
-            -webkit-overflow-scrolling: touch;
-            scrollbar-width: none;
-        }
-        .contenedor-botones::-webkit-scrollbar {
-            display: none;
+        .movie-card-mobile {
+            flex: 0 0 150px;
+            max-width: 150px;
         }
 
-        .btn-filtro {
-            flex: 0 0 auto;
-            padding: 8px 16px;
-            cursor: pointer;
-            border: 1px solid #dcdcdc;
-            background: #ffffff;
-            color: #555;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 600;
-            transition: all 0.2s ease;
-            white-space: nowrap;
+        .movie-card-mobile img.poster-img {
+            height: 220px;
         }
 
-        .btn-filtro.activo {
-            background: #007bff;
-            color: #ffffff;
-            border-color: #007bff;
+        .isp-title {
+            font-size: 20px;
         }
 
-        /* ---------------------------------------------------
-           CARRUSELES HORIZONTALES (Estrenos y Continuar Viendo)
-           --------------------------------------------------- */
-        .seccion-estrenos, .seccion-continuar {
-            margin-bottom: 25px;
+        .movie-title-mobile {
+            font-size: 12px;
         }
 
-        .seccion-estrenos h2, .seccion-continuar h2 {
-            margin: 0 0 12px 5px;
-            font-size: 18px;
-            font-weight: bold;
-            color: #222;
+        .lang-badge {
+            font-size: 10px;
+            padding: 4px 8px;
         }
-
-        .carrusel-estrenos, .carrusel-continuar {
-            display: flex;
-            gap: 12px;
-            overflow-x: auto;
-            scroll-behavior: smooth;
-            -webkit-overflow-scrolling: touch;
-            padding-bottom: 10px;
-            padding-left: 5px;
-        }
-
-        .carrusel-estrenos::-webkit-scrollbar, .carrusel-continuar::-webkit-scrollbar { display: none; }
-        
-        .carrusel-estrenos .pelicula-card, .carrusel-continuar .pelicula-card {
-            flex: 0 0 130px; 
-            min-width: 130px;
-        }
-
-        /* ---------------------------------------------------
-           GRILLA PRINCIPAL (2 Columnas en móvil)
-           --------------------------------------------------- */
-        .grid-peliculas {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-            padding: 0 5px;
-        }
-
-        @media (min-width: 600px) {
-            .grid-peliculas {
-                grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-            }
-        }
-
-        /* ---------------------------------------------------
-           DISEÑO DE LA TARJETA DE PELÍCULA (Compacto)
-           --------------------------------------------------- */
-        .pelicula-card {
-            background: #ffffff;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-            display: flex;
-            flex-direction: column;
-            text-decoration: none;
-        }
-
-        .portada-link {
-            display: block;
-            position: relative;
-            width: 100%;
-        }
-
-        .pelicula-portada {
-            width: 100%;
-            aspect-ratio: 2 / 3;
-            object-fit: cover;
-            background-color: #2c2c2c;
-            display: block;
-        }
-
-        .logo-empresa-overlay {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            max-width: 50px;
-            max-height: 25px;
-            object-fit: contain;
-            background-color: rgba(255, 255, 255, 0.7);
-            padding: 3px;
-            border-radius: 4px;
-            pointer-events: none;
-        }
-
-        /* Novedad: Etiqueta de tiempo reproducido */
-        .tiempo-overlay {
-            position: absolute;
-            top: 8px;
-            left: 8px;
-            background-color: rgba(0, 0, 0, 0.8);
-            color: #ffffff;
-            font-size: 11px;
-            font-weight: bold;
-            padding: 4px 6px;
-            border-radius: 4px;
-            pointer-events: none;
-            z-index: 2;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .audio-overlay {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
-            color: #ffffff;
-            font-size: 11px;
-            padding: 15px 8px 5px 8px;
-            text-align: right;
-            font-weight: bold;
-        }
-
-        .pelicula-info {
-            padding: 10px 8px;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .pelicula-card h3 {
-            margin: 0 0 4px 0;
-            color: #222;
-            font-size: 13px;
-            font-weight: 600;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .categorias-texto {
-            font-size: 11px;
-            color: #777;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .sin-resultados {
-            display: none;
-            grid-column: 1 / -1;
-            text-align: center;
-            padding: 40px 20px;
-            color: #777;
-            font-size: 16px;
-        }
-    </style>
+    }
+</style>
 </head>
 <body>
 
-    <div class="panel-control">
-        <!-- BUSCADOR -->
-        <div class="buscador-box">
-            <input 
-                type="text" 
-                id="inputBuscador" 
-                placeholder="🔍 Buscar película..." 
-                onkeyup="filtrarCatalogo()"
-            >
-        </div>
+<div class="app-container">
 
-        <!-- BOTONES DE CATEGORÍA (Carrusel deslizable) -->
-        <div class="contenedor-botones">
-            <button 
-                class="btn-filtro activo" 
-                data-categoria="todas" 
-                onclick="seleccionarCategoria('todas', this)"
-            >
-                Todas (<?php echo $total_peliculas; ?>)
-            </button>
+<?php
+require('../conectar.php');
 
-            <?php foreach ($conteo_categorias as $categoria => $cantidad): ?>
-                <button 
-                    class="btn-filtro" 
-                    data-categoria="<?php echo htmlspecialchars($categoria); ?>" 
-                    onclick="seleccionarCategoria('<?php echo htmlspecialchars($categoria); ?>', this)"
-                >
-                    <?php echo ucfirst(htmlspecialchars($categoria)) . ' (' . $cantidad . ')'; ?>
-                </button>
-            <?php endforeach; ?>
-        </div>
+/* --- 1. CONFIGURACIÓN E INICIALIZACIÓN --- */
+$resultado = $conexion->query("SELECT api, ip FROM jellyfin LIMIT 1");
+
+if ($resultado && $fila = $resultado->fetch_assoc()) {
+    $apikey = $fila['api'];
+    $ip_db = trim($fila['ip']);
+
+    $host_ping = preg_replace('#^https?://#', '', $ip_db);
+    if (strpos($host_ping, ':') !== false) {
+        $partes_host = explode(':', $host_ping);
+        $host_ping = $partes_host[0];
+    }
+    $host_ping = rtrim($host_ping, '/');
+
+    $ping_cmd = "ping -c 1 -W 1 " . escapeshellarg($host_ping);
+    exec($ping_cmd, $output, $status);
+
+    if ($status === 0) {
+        $server = rtrim($ip_db, "/");
+    } else {
+        $ip_limpia = preg_replace('#^https?://#', '', $ip_db);
+        if (strpos($ip_limpia, ':') !== false) {
+            $partes_limpias = explode(':', $ip_limpia);
+            $ip_limpia = $partes_limpias[0];
+        }
+        $ip_limpia = rtrim($ip_limpia, '/');
+        if (empty($ip_limpia)) { $ip_limpia = "127.0.0.1"; }
+        
+        $server = "http://" . $ip_limpia . ":30013";
+        echo '<script>
+            alert("No se puede conectar al equipo Jellyfin. Redirigiendo...");
+            window.location.href = "../configuracion/streaming.php";
+        </script>';
+        exit;
+    }
+} else {
+    echo '<script>
+        alert("No se encontró configuración de Jellyfin.");
+        window.location.href = "../configuracion/streaming.php";
+    </script>';
+    exit;
+}
+
+$server = "http://" . $server . ":30013";
+
+/* --- FUNCIÓN API --- */
+function fetchJellyfin($url, $apiKey) {
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ["X-Emby-Token: $apiKey"]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    return json_decode($response, true);
+}
+
+/* --- FUNCIÓN AUXILIAR PARA EXTRAER IDIOMAS --- */
+function getLanguages($streams) {
+    $langs = [];
+    if(is_array($streams)) {
+        foreach($streams as $s) {
+            if(($s['Type'] ?? '') === 'Audio' && !empty($s['Language'])) {
+                $lang = strtoupper(substr($s['Language'], 0, 3));
+                if(!in_array($lang, $langs)) {
+                    $langs[] = $lang;
+                }
+            }
+        }
+    }
+    return !empty($langs) ? implode(' • ', $langs) : 'UND';
+}
+
+// Obtener películas recientes
+$recentMovies = fetchJellyfin("$server/Items?IncludeItemTypes=Movie&Recursive=true&SortBy=DateCreated&SortOrder=Descending&Limit=20&Fields=MediaSources,MediaStreams,ProductionYear,Overview,Genres", $apikey);
+
+// Obtener Usuario y Librerías
+$userData = fetchJellyfin("$server/Users", $apikey);
+$userId = $userData[0]['Id'] ?? '';
+
+// OBTENER CONTENIDO EN PROGRESO (Ruta nativa Resume)
+$continueWatching = [];
+if (!empty($userId)) {
+    $continueWatching = fetchJellyfin("$server/Users/$userId/Items/Resume?Limit=20&MediaTypes=Video&Fields=MediaSources,MediaStreams,ProductionYear,Overview", $apikey);
+}
+
+$libraries = !empty($userId) ? fetchJellyfin("$server/Users/".$userId."/Views", $apikey) : [];
+$libraryId = $_GET['library'] ?? '';
+$genreFilter = $_GET['genre'] ?? '';
+
+// Paginación a 200 elementos por página
+$limitPerPage = 200;
+$page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+$startIndex = ($page - 1) * $limitPerPage;
+
+// Lista fija de géneros permitidos
+$allowedGenres = [
+    'Accion', 'Animacion', 'Aventura', 'Belica', 'Ciencia Ficcion', 
+    'Comedia', 'Crimen', 'Documental', 'Drama', 'Familia', 
+    'Fantasia', 'Horror', 'Misterio', 'Romance', 'Terror', 'War'
+];
+?>
+
+<div class="app-header">
+    <img src="../images/empresa/logo.png" alt="Logo Empresa" class="app-logo">
+</div>
+
+<!-- SECCIÓN: ÚLTIMAS PELÍCULAS -->
+<div class="panel-dark">
+    <div class="isp-title">Últimas películas</div>
+    <div class="mobile-scroll-container">
+        <?php
+        if(isset($recentMovies['Items'])) {
+            foreach($recentMovies['Items'] as $m) {
+                $res = "HD";
+                $year = $m['ProductionYear'] ?? '----';
+                $streams = $m['MediaStreams'] ?? [];
+
+                if(isset($m['MediaStreams'])) {
+                    foreach($m['MediaStreams'] as $s) {
+                        if(($s['Type'] ?? '') == 'Video') {
+                            $res = ($s['Width'] >= 3840) ? '4K' : (($s['Width'] >= 1920) ? '1080p' : '720p');
+                        }
+                    }
+                }
+
+                $movieId = $m['Id'];
+                $movieName = htmlspecialchars($m['Name'], ENT_QUOTES);
+                $languages = getLanguages($streams);
+
+                echo '
+                <div class="movie-card-mobile">
+                    <div>
+                        <a href="index_sistema.php?id='.$movieId.'" class="poster-container" style="display:block;">
+                            <div class="watermark-badge">
+                                <img src="../images/empresa/logo.png" alt="Logo">
+                            </div>
+                            <img src="'.$server.'/Items/'.$movieId.'/Images/Primary?Format=jpg&MaxWidth=300" class="poster-img" alt="'.$movieName.'">
+                            <div class="lang-badge">'.$languages.'</div>
+                        </a>
+                        <div style="padding: 6px 8px 8px 8px;">
+                            <div class="movie-title-mobile" title="'.$movieName.'">'.$movieName.'</div>
+                            <div class="movie-meta-mobile">'.$year.' • '.$res.'</div>
+                        </div>
+                    </div>
+                </div>';
+            }
+        }
+        ?>
     </div>
+</div>
 
-    <!-- SECCIÓN ÚLTIMOS ESTRENOS -->
-    <?php if (!empty($ultimos_estrenos)): ?>
-        <div class="seccion-estrenos" id="seccionEstrenosContainer">
-            <h2>🔥 Últimos Estrenos</h2>
-            <div class="carrusel-estrenos">
-                <?php foreach ($ultimos_estrenos as $peli_estreno): ?>
-                    <?php 
-                        $id_estreno = intval($peli_estreno['id_peliculas'] ?? 0);
-                        $cats_estreno = array_map('trim', explode(',', $peli_estreno['id_categoria']));
-                        $nombre_estreno = $peli_estreno['nombre'] ?? 'Sin nombre';
-                        $portada_estreno = !empty($peli_estreno['portada_url']) ? $peli_estreno['portada_url'] : 'https://via.placeholder.com/300x450?text=Sin+Portada';
-                        $audio_estreno = !empty($peli_estreno['audio']) ? $peli_estreno['audio'] : 'LAT';
-                        $tiempo_estreno = floatval($peli_estreno['reproduccion'] ?? 0);
-                    ?>
-                    <a href="ver.php?id=<?php echo $id_estreno; ?>" class="pelicula-card">
-                        <div class="portada-link">
-                            <img src="<?php echo htmlspecialchars($portada_estreno); ?>" alt="Portada" class="pelicula-portada">
-                            
-                            <?php if ($tiempo_estreno > 0): ?>
-                                <div class="tiempo-overlay">▶ <?php echo formatearTiempo($tiempo_estreno); ?></div>
-                            <?php endif; ?>
-                            
-                            <img src="../images/empresa/logo.png" alt="Logo" class="logo-empresa-overlay" onerror="this.style.display='none'">
-                            <div class="audio-overlay">🔊 <?php echo htmlspecialchars($audio_estreno); ?></div>
-                        </div>
-                        <div class="pelicula-info">
-                            <h3><?php echo htmlspecialchars($nombre_estreno); ?></h3>
-                            <div class="categorias-texto">
-                                <?php echo htmlspecialchars(implode(', ', $cats_estreno)); ?>
-                            </div>
-                        </div>
-                    </a>
-                <?php endforeach; ?>
-            </div>
-        </div>
-    <?php endif; ?>
+<!-- SECCIÓN: CONTINUAR VIENDO -->
+<?php if (!empty($continueWatching['Items'])): ?>
+<div class="panel-dark">
+    <div class="isp-title">Continuar viendo</div>
+    <div class="mobile-scroll-container">
+        <?php
+        foreach ($continueWatching['Items'] as $cw) {
+            $res = "HD";
+            $year = $cw['ProductionYear'] ?? '----';
+            $streams = $cw['MediaStreams'] ?? ($cw['MediaSources'][0]['MediaStreams'] ?? []);
 
-    <!-- SECCIÓN CONTINUAR VIENDO -->
-    <?php if (!empty($continuar_viendo)): ?>
-        <div class="seccion-continuar" id="seccionContinuarContainer">
-            <h2>▶ Continuar Viendo</h2>
-            <div class="carrusel-continuar">
-                <?php foreach ($continuar_viendo as $peli_cont): ?>
-                    <?php 
-                        $id_cont = intval($peli_cont['id_peliculas'] ?? 0);
-                        $cats_cont = array_map('trim', explode(',', $peli_cont['id_categoria']));
-                        $nombre_cont = $peli_cont['nombre'] ?? 'Sin nombre';
-                        $portada_cont = !empty($peli_cont['portada_url']) ? $peli_cont['portada_url'] : 'https://via.placeholder.com/300x450?text=Sin+Portada';
-                        $audio_cont = !empty($peli_cont['audio']) ? $peli_cont['audio'] : 'LAT';
-                        $tiempo_cont = floatval($peli_cont['reproduccion'] ?? 0);
-                    ?>
-                    <a href="ver.php?id=<?php echo $id_cont; ?>" class="pelicula-card">
-                        <div class="portada-link">
-                            <img src="<?php echo htmlspecialchars($portada_cont); ?>" alt="Portada" class="pelicula-portada">
-                            
-                            <?php if ($tiempo_cont > 0): ?>
-                                <div class="tiempo-overlay">▶ <?php echo formatearTiempo($tiempo_cont); ?></div>
-                            <?php endif; ?>
+            if(!empty($streams)) {
+                foreach($streams as $s) {
+                    if(($s['Type'] ?? '') == 'Video') {
+                        $w = $s['Width'] ?? 0;
+                        $res = ($w >= 3840) ? '4K' : (($w >= 1920) ? '1080p' : '720p');
+                        break;
+                    }
+                }
+            }
 
-                            <img src="../images/empresa/logo.png" alt="Logo" class="logo-empresa-overlay" onerror="this.style.display='none'">
-                            <div class="audio-overlay">🔊 <?php echo htmlspecialchars($audio_cont); ?></div>
+            $movieId = $cw['Id'];
+            $movieName = htmlspecialchars($cw['Name'], ENT_QUOTES);
+            $languages = getLanguages($streams);
+
+            $playedPercent = 0;
+            if (isset($cw['UserData']['PlayedPercentage'])) {
+                $playedPercent = round($cw['UserData']['PlayedPercentage']);
+            } elseif (isset($cw['UserData']['PlaybackPositionTicks']) && isset($cw['RunTimeTicks']) && $cw['RunTimeTicks'] > 0) {
+                $playedPercent = round(($cw['UserData']['PlaybackPositionTicks'] / $cw['RunTimeTicks']) * 100);
+            }
+
+            echo '
+            <div class="movie-card-mobile">
+
+                <div>
+                    <a href="index_sistema.php?id='.$movieId.'" class="poster-container" style="display:block;">
+                        <div class="watermark-badge">
+                            <img src="../images/empresa/logo.png" alt="Logo">
                         </div>
-                        <div class="pelicula-info">
-                            <h3><?php echo htmlspecialchars($nombre_cont); ?></h3>
-                            <div class="categorias-texto">
-                                <?php echo htmlspecialchars(implode(', ', $cats_cont)); ?>
-                            </div>
+                        <img src="'.$server.'/Items/'.$movieId.'/Images/Primary?Format=jpg&MaxWidth=300" class="poster-img" alt="'.$movieName.'">
+                        <div class="lang-badge">'.$languages.'</div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" style="width: '.$playedPercent.'%;"></div>
                         </div>
                     </a>
-                <?php endforeach; ?>
-            </div>
-        </div>
-    <?php endif; ?>
-
-    <!-- CATÁLOGO GENERAL -->
-    <div class="grid-peliculas" id="contenedorPeliculas">
-        <?php foreach ($peliculas as $peli): ?>
-            <?php 
-                $id_peli = intval($peli['id_peliculas'] ?? 0);
-                $cats_array = array_map('trim', explode(',', $peli['id_categoria']));
-                $cats_lower = array_map(function($c) { return mb_strtolower($c, 'UTF-8'); }, $cats_array);
-                $cats_atributo = implode(',', $cats_lower);
-                
-                $nombre = $peli['nombre'] ?? 'Sin nombre';
-                $portada = !empty($peli['portada_url']) ? $peli['portada_url'] : 'https://via.placeholder.com/300x450?text=Sin+Portada';
-                $audio = !empty($peli['audio']) ? $peli['audio'] : 'LAT';
-                $tiempo_general = floatval($peli['reproduccion'] ?? 0);
-            ?>
-            <a href="ver.php?id=<?php echo $id_peli; ?>" 
-               class="pelicula-card" 
-               data-titulo="<?php echo htmlspecialchars(mb_strtolower($nombre, 'UTF-8')); ?>" 
-               data-categorias="<?php echo htmlspecialchars($cats_atributo); ?>">
-               
-                <div class="portada-link">
-                    <img src="<?php echo htmlspecialchars($portada); ?>" alt="Portada" loading="lazy" class="pelicula-portada">
-                    
-                    <?php if ($tiempo_general > 0): ?>
-                        <div class="tiempo-overlay">▶ <?php echo formatearTiempo($tiempo_general); ?></div>
-                    <?php endif; ?>
-
-                    <img src="../images/empresa/logo.png" alt="Logo" class="logo-empresa-overlay" onerror="this.style.display='none'">
-                    <div class="audio-overlay">🔊 <?php echo htmlspecialchars($audio); ?></div>
-                </div>
-
-                <div class="pelicula-info">
-                    <h3><?php echo htmlspecialchars($nombre); ?></h3>
-                    <div class="categorias-texto">
-                        <?php echo htmlspecialchars(implode(', ', $cats_array)); ?>
+                    <div style="padding: 6px 8px 8px 8px;">
+                        <div class="movie-title-mobile" title="'.$movieName.'">'.$movieName.'</div>
+                        <div class="movie-meta-mobile">'.$year.' • '.$res.'</div>
                     </div>
                 </div>
-            </a>
-        <?php endforeach; ?>
+            </div>';
+        }
+        ?>
+    </div>
+</div>
+<?php endif; ?>
 
-        <div id="sinResultados" class="sin-resultados">
-            No encontramos películas con ese término de búsqueda. 🍿
-        </div>
+<!-- SECCIÓN: BIBLIOTECA COMPLETA -->
+<div class="panel-dark">
+    <div class="isp-title">Biblioteca Completa</div>
+
+    <!-- Categorías de Librerías -->
+    <div class="categories-bar">
+        <a href="?" class="category-chip" style="background: <?= (empty($libraryId) && empty($genreFilter)) ? '#2563eb' : '#1f2937' ?>;">Todas</a>
+        <?php
+        if(isset($libraries['Items'])) {
+            foreach($libraries['Items'] as $lib) {
+                if (($lib['CollectionType'] ?? 'folder') === 'boxsets') continue;
+                $active = ($libraryId == $lib['Id']) ? 'background:#2563eb;' : 'background:#1f2937;';
+                echo '<a href="?library='.$lib['Id'].'" class="category-chip" style="'.$active.'">'.$lib['Name'].'</a>';
+            }
+        }
+        ?>
     </div>
 
-    <!-- SCRIPT DE FILTRADO OPTIMIZADO -->
-    <script>
-        let categoriaSeleccionada = 'todas';
+    <!-- Géneros con recuento dinámico de películas -->
+    <div class="categories-bar">
+        <span style="font-size: 11px; color: #9ca3af; align-self: center; white-space: nowrap;">Género:</span>
+        <?php
+        $parentParam = !empty($libraryId) ? "&ParentId=".$libraryId : "";
+        foreach($allowedGenres as $gName) {
+            // Consulta ligera a la API para obtener únicamente la cantidad por género
+            $genreCountUrl = $server . "/Items?Recursive=true&IncludeItemTypes=Movie&Limit=0&Genres=" . urlencode($gName) . $parentParam;
+            $genreCountData = fetchJellyfin($genreCountUrl, $apikey);
+            $genreCount = $genreCountData['TotalRecordCount'] ?? 0;
 
-        function seleccionarCategoria(categoria, elementoBoton) {
-            document.querySelectorAll('.btn-filtro').forEach(btn => btn.classList.remove('activo'));
-            elementoBoton.classList.add('activo');
-
-            categoriaSeleccionada = categoria.toLowerCase().trim();
-            
-            filtrarCatalogo();
-            
-            elementoBoton.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            $activeGenre = ($genreFilter === $gName) ? 'background:#ea580c;' : 'background:#374151;';
+            $libraryParam = !empty($libraryId) ? '&library='.$libraryId : '';
+            echo '<a href="?genre='.urlencode($gName).$libraryParam.'" class="category-chip" style="'.$activeGenre.'">'.$gName.' ('.$genreCount.')</a>';
         }
+        ?>
+    </div>
 
-        function filtrarCatalogo() {
-            const textoBusqueda = document.getElementById('inputBuscador').value.toLowerCase().trim();
-            const tarjetas = document.querySelectorAll('#contenedorPeliculas .pelicula-card');
-            const seccionEstrenos = document.getElementById('seccionEstrenosContainer');
-            const seccionContinuar = document.getElementById('seccionContinuarContainer');
-            let visiblesPeliculas = 0;
+    <!-- Buscador -->
+    <form method="GET" class="search-form">
+        <?php 
+        if(!empty($libraryId)) echo '<input type="hidden" name="library" value="'.$libraryId.'">'; 
+        if(!empty($genreFilter)) echo '<input type="hidden" name="genre" value="'.htmlspecialchars($genreFilter).'">'; 
+        ?>
+        <input type="text" name="search" class="clientes-input" placeholder="Buscar película..." value="<?= htmlspecialchars($_GET['search'] ?? '') ?>">
+        <button type="submit" class="primary-btn">Buscar</button>
+    </form>
 
-            // Ocultar los carruseles especiales si el usuario está haciendo una búsqueda por texto
-            if (seccionEstrenos) {
-                seccionEstrenos.style.display = (textoBusqueda !== '') ? 'none' : 'block';
-            }
-            if (seccionContinuar) {
-                seccionContinuar.style.display = (textoBusqueda !== '') ? 'none' : 'block';
-            }
+    <?php
+    $baseUrlParams = "Recursive=true&Fields=MediaSources,MediaStreams,ProductionYear,Overview,Genres";
+    if(!empty($libraryId)) {
+        $baseUrlParams .= "&ParentId=".$libraryId."&IncludeItemTypes=Movie,Series";
+    } else {
+        $baseUrlParams .= "&IncludeItemTypes=Movie";
+    }
+    if(!empty($genreFilter)) {
+        $baseUrlParams .= "&Genres=".urlencode($genreFilter);
+    }
+    if(!empty($_GET['search'])) {
+        $baseUrlParams .= "&SearchTerm=".urlencode(trim($_GET['search']));
+    }
 
-            tarjetas.forEach(card => {
-                const titulo = card.getAttribute('data-titulo');
-                const categorias = card.getAttribute('data-categorias').split(',');
+    $countUrl = $server."/Items?".$baseUrlParams."&Limit=0";
+    $countData = fetchJellyfin($countUrl, $apikey);
+    $totalRecords = isset($countData['TotalRecordCount']) ? intval($countData['TotalRecordCount']) : 0;
 
-                const coincideTexto = (textoBusqueda === '') || titulo.includes(textoBusqueda);
-                const coincideCategoria = (categoriaSeleccionada === 'todas') || categorias.includes(categoriaSeleccionada);
+    $pagedUrl = $server."/Items?".$baseUrlParams."&StartIndex=".$startIndex."&Limit=".$limitPerPage;
+    $bibData = fetchJellyfin($pagedUrl, $apikey);
 
-                if (coincideTexto && coincideCategoria) {
-                    card.style.display = 'flex';
-                    visiblesPeliculas++;
-                } else {
-                    card.style.display = 'none';
+    $itemsList = $bibData['Items'] ?? [];
+    $currentShownCount = count($itemsList);
+    
+    if ($totalRecords === 0 && $currentShownCount > 0) {
+        $totalRecords = isset($bibData['TotalRecordCount']) ? intval($bibData['TotalRecordCount']) : $currentShownCount;
+    }
+
+    $endRecord = min($startIndex + $currentShownCount, $totalRecords);
+    $startRecord = $totalRecords > 0 ? $startIndex + 1 : 0;
+    
+    $hasMore = $endRecord < $totalRecords;
+    $totalPages = max(1, ceil($totalRecords / $limitPerPage));
+    ?>
+
+    <div class="pagination-info">
+        <span>Mostrando registros <strong><?= $startRecord ?> - <?= $endRecord ?></strong> de un total de <strong><?= $totalRecords ?></strong></span>
+        <?php if($hasMore || $totalPages > 1): ?>
+            <span style="color: #3b82f6; font-weight: bold;">Hay más páginas disponibles ➔</span>
+        <?php else: ?>
+            <span style="color: #10b981;">Fin de los resultados</span>
+        <?php endif; ?>
+    </div>
+
+    <!-- LISTADO FLUIDO ADAPTATIVO CON CSS GRID -->
+    <div class="movies-grid-container">
+        <?php
+        if($currentShownCount > 0) {
+            foreach($itemsList as $m) {
+                $res = "SD";
+                $streams = $m['MediaSources'][0]['MediaStreams'] ?? ($m['MediaStreams'] ?? []);
+
+                if(!empty($streams)) {
+                    foreach($streams as $stream) {
+                        if(($stream['Type'] ?? '') == 'Video') {
+                            $w = $stream['Width'] ?? 0;
+                            $res = ($w >= 3840) ? "4K" : (($w >= 1920) ? "1080p" : (($w >= 1280) ? "720p" : "SD"));
+                            break;
+                        }
+                    }
                 }
-            });
 
-            const sinResultados = document.getElementById('sinResultados');
-            if (visiblesPeliculas === 0 && tarjetas.length > 0) {
-                sinResultados.style.display = 'block';
-            } else {
-                sinResultados.style.display = 'none';
+                $movieId = $m['Id'];
+                $movieName = htmlspecialchars($m['Name'], ENT_QUOTES);
+                $year = $m['ProductionYear'] ?? 'N/A';
+                $poster = $server."/Items/".$movieId."/Images/Primary?MaxWidth=300";
+                $languages = getLanguages($streams);
+
+                echo '
+                <div class="movie-card-grid">
+                    <div>
+                        <a href="index_sistema.php?id='.$movieId.'" class="poster-container" style="display:block;">
+                            <div class="watermark-badge">
+                                <img src="../images/empresa/logo.png" alt="Logo">
+                            </div>
+                            <img src="'.$poster.'" class="poster-img" alt="'.$movieName.'">
+                            <div class="lang-badge">'.$languages.'</div>
+                        </a>
+                        <div style="padding: 6px 8px 8px 8px;">
+                            <div class="movie-title-mobile" title="'.$movieName.'">'.$movieName.'</div>
+                            <div class="movie-meta-mobile">'.$year.' • '.$res.'</div>
+                        </div>
+                    </div>
+                </div>';
             }
+        } else {
+            echo '<div style="color:#9ca3af; text-align:center; padding:30px; grid-column: 1 / -1;">No se encontraron resultados.</div>';
         }
-    </script>
+        ?>
+    </div>
+
+    <?php if($totalPages > 1): ?>
+    <div class="pagination-controls">
+        <?php 
+        $queryParams = [];
+        if(!empty($libraryId)) $queryParams['library'] = $libraryId;
+        if(!empty($genreFilter)) $queryParams['genre'] = $genreFilter;
+        if(!empty($_GET['search'])) $queryParams['search'] = $_GET['search'];
+        
+        $prevParams = $queryParams;
+        $prevParams['page'] = $page - 1;
+        $prevUrl = '?' . http_build_query($prevParams);
+
+        $nextParams = $queryParams;
+        $nextParams['page'] = $page + 1;
+        $nextUrl = '?' . http_build_query($nextParams);
+        ?>
+
+        <a href="<?= $prevUrl ?>" class="pagination-btn <?= ($page <= 1) ? 'disabled' : '' ?>">◀ Anterior</a>
+        <span style="font-size: 13px; color: #e5e7eb;">Página <?= $page ?> de <?= $totalPages ?> (Total: <?= $totalRecords ?>)</span>
+        <a href="<?= $nextUrl ?>" class="pagination-btn <?= ($page >= $totalPages) ? 'disabled' : '' ?>">Siguiente ➔</a>
+    </div>
+    <?php endif; ?>
+</div>
+
+</div>
+
 </body>
 </html>

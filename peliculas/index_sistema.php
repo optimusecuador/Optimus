@@ -378,7 +378,9 @@ $poster = "$server/Items/$movieId/Images/Primary?MaxWidth=400";
 $audioStreams = [];
 $subtitleStreams = [];
 
-$mediaStreams = $movieData['MediaSources'][0]['MediaStreams'] ?? $movieData['MediaStreams'] ?? [];
+$mediaSources = $movieData['MediaSources'] ?? [];
+$mediaStreams = $mediaSources[0]['MediaStreams'] ?? $movieData['MediaStreams'] ?? [];
+$mediaSourceId = $mediaSources[0]['Id'] ?? $movieId;
 
 foreach ($mediaStreams as $stream) {
     $sType = $stream['Type'] ?? '';
@@ -469,6 +471,7 @@ if (!empty($mediaStreams)) {
 
 <script>
 const currentMovieId = '<?= $movieId ?>';
+const mediaSourceId = '<?= $mediaSourceId ?>';
 const serverUrl = '<?= $server ?>';
 const apiKey = '<?= $apikey ?>';
 
@@ -476,51 +479,23 @@ let shakaPlayer = null;
 let shakaUI = null;
 let isPlayingIntro = false;
 
-// Inicializamos Shaka de forma global para la película
-function initShakaPlayer() {
-    if (shakaPlayer) return; // Si ya existe, no recrear
-
-    const video = document.getElementById('moviePlayer');
-    const videoContainer = document.getElementById('shaka-container');
-    
-    shakaPlayer = new shaka.Player(video);
-    
-    // Configuración para redes inestables
-    shakaPlayer.configure({
-        streaming: {
-            bufferingGoal: 60,       
-            rebufferingGoal: 15,     
-            bufferBehind: 30,        
-            retryParameters: {
-                maxAttempts: 5,      
-                baseDelay: 1000,
-                backoffFactor: 2,
-                fuzzFactor: 0.5,
-                timeout: 10000       
-            }
-        },
-        abr: {
-            enabled: true,
-            defaultBandwidthEstimate: 500000 
-        }
-    });
-    
-    shakaUI = new shaka.ui.Overlay(shakaPlayer, videoContainer, video);
+function resetVideoElement(video) {
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    shaka.polyfill.installAll();
-});
 
 function startPlayback() {
     document.getElementById('moviePlayerModal').style.display = 'block';
     const video = document.getElementById('moviePlayer');
 
-    // 1. Si Shaka Player estaba activo, lo destruimos temporalmente para liberar el elemento de video nativo
     if (shakaPlayer) {
         shakaPlayer.destroy().then(() => {
             shakaPlayer = null;
             shakaUI = null;
+            playIntroFile(video);
+        }).catch(() => {
+            shakaPlayer = null;
             playIntroFile(video);
         });
     } else {
@@ -530,10 +505,10 @@ function startPlayback() {
 
 function playIntroFile(video) {
     isPlayingIntro = true;
-    video.src = '../descripcion/intro.mp4';
-    video.load();
+    resetVideoElement(video);
     
-    // Limpiamos eventos anteriores de 'ended' para evitar duplicados
+    video.src = '../descripcion/intro.mp4';
+    
     video.onended = function() {
         if (isPlayingIntro) {
             isPlayingIntro = false;
@@ -553,62 +528,76 @@ function playIntroFile(video) {
 
 function playMainMovie() {
     const video = document.getElementById('moviePlayer');
-    
-    // 2. Recreamos Shaka Player para que controle la transmisión adaptativa de Jellyfin
-    initShakaPlayer();
-
-    let audioIndex = document.getElementById('audioStreamSelect').value;
-    let subIndex = document.getElementById('subtitleStreamSelect').value;
-    
-    const sessionId = Math.random().toString(36).substring(2, 15);
-
-    let hlsUrl = `${serverUrl}/Videos/${currentMovieId}/master.m3u8?api_key=${apiKey}&PlaySessionId=${sessionId}`;
-    let fallbackUrl = `${serverUrl}/Videos/${currentMovieId}/stream?api_key=${apiKey}&PlaySessionId=${sessionId}`;
-    
-    if (audioIndex !== "") {
-        hlsUrl += `&AudioStreamIndex=${audioIndex}`;
-        fallbackUrl += `&AudioStreamIndex=${audioIndex}`;
-    }
-    if (subIndex !== "-1") {
-        hlsUrl += `&SubtitleStreamIndex=${subIndex}`;
-        fallbackUrl += `&SubtitleStreamIndex=${subIndex}`;
-    } else {
-        hlsUrl += `&SubtitleStreamIndex=-1`;
-        fallbackUrl += `&SubtitleStreamIndex=-1`;
-    }
-
-    // Quitamos el evento ended de la intro
+    resetVideoElement(video);
     video.onended = null;
 
-    shakaPlayer.load(hlsUrl).then(() => {
-        console.log("Película cargada exitosamente vía HLS con Shaka.");
-        video.play();
-    }).catch(e => {
-        console.warn("Fallo HLS o CORS. Usando reproductor HTML5 nativo como respaldo...");
+    const audioIndex = document.getElementById('audioStreamSelect').value;
+    const subIndex = document.getElementById('subtitleStreamSelect').value;
+    const sessionId = Math.random().toString(36).substring(2, 15);
+
+    // Configuración universal para streaming en Jellyfin (Universal Stream endpoint)
+    const streamParams = new URLSearchParams({
+        'api_key': apiKey,
+        'PlaySessionId': sessionId,
+        'MediaSourceId': mediaSourceId,
+        'VideoCodec': 'h264',
+        'AudioCodec': 'aac',
+        'Container': 'mp4,ts,mkv',
+        'maxStreamingBitrate': '140000000'
+    });
+
+    if (audioIndex !== "") streamParams.append('AudioStreamIndex', audioIndex);
+    if (subIndex !== "-1") streamParams.append('SubtitleStreamIndex', subIndex);
+
+    // URL de stream mp4 directo (Garantiza compatibilidad en navegadores sin fallas de HLS)
+    const directStreamUrl = `${serverUrl}/Videos/${currentMovieId}/stream.mp4?${streamParams.toString()}`;
+
+    // Forzar reproducción por el elemento HTML5 nativo del navegador para máxima estabilidad
+    video.src = directStreamUrl;
+    video.load();
+    
+    video.play().catch(err => {
+        console.warn("Intento con MP4 fallido, intentando con HLS...", err);
         
-        shakaPlayer.destroy().then(() => {
-            shakaPlayer = null;
-            shakaUI = null;
-            video.src = fallbackUrl;
-            video.load();
-            video.play().catch(err => {
-                console.error("Fallo total reproductor nativo:", err);
-                alert("Error crítico al cargar el video desde Jellyfin.");
-            });
+        // Si el stream directo fallara, intentamos mediante Shaka HLS
+        initShakaPlayer();
+        const hlsUrl = `${serverUrl}/Videos/${currentMovieId}/master.m3u8?${streamParams.toString()}`;
+        
+        shakaPlayer.load(hlsUrl).then(() => {
+            video.play();
+        }).catch(e => {
+            console.error("Error crítico al reproducir el video:", e);
+            alert("No se pudo reproducir este video. Verifica que la aceleración por hardware o transcodificación esté habilitada en Jellyfin.");
         });
     });
 }
 
+function initShakaPlayer() {
+    if (shakaPlayer) return;
+    const video = document.getElementById('moviePlayer');
+    const videoContainer = document.getElementById('shaka-container');
+    
+    shakaPlayer = new shaka.Player(video);
+    shakaUI = new shaka.ui.Overlay(shakaPlayer, videoContainer, video);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (window.shaka) {
+        shaka.polyfill.installAll();
+    }
+});
+
 function closeMoviePlayer() {
     const video = document.getElementById('moviePlayer');
-    video.pause();
-    video.src = '';
+    resetVideoElement(video);
     video.onended = null;
     
     if (shakaPlayer) {
         shakaPlayer.destroy().then(() => {
             shakaPlayer = null;
             shakaUI = null;
+        }).catch(() => {
+            shakaPlayer = null;
         });
     }
     document.getElementById('moviePlayerModal').style.display = 'none';

@@ -113,9 +113,8 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title><?php echo htmlspecialchars($nombre); ?> - Ver Película</title>
     
-    <!-- Librería Shaka Player Versión Estable -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/controls.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/shaka-player.ui.min.js"></script>
+    <!-- Librería Hls.js de alto rendimiento -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.8/hls.min.js"></script>
 
     <style>
         * { box-sizing: border-box; }
@@ -239,13 +238,7 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
         let tiempoInicioPelicula = 0;
         let ultimoTiempoEnviado = 0;
         let reproduciendoPelicula = false;
-        let player = null;
-
-        document.addEventListener('DOMContentLoaded', () => {
-            if (typeof shaka !== 'undefined') {
-                shaka.polyfill.installAll();
-            }
-        });
+        let hlsInstance = null;
 
         async function solicitarWakeLock() {
             if ('wakeLock' in navigator) {
@@ -284,7 +277,7 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
             solicitarPantallaCompleta();
             solicitarWakeLock();
 
-            // Reproducción inicial del intro en HTML5 nativo
+            // Cargar Intro Nativamente
             video.src = urlIntro;
             video.play().catch(() => {
                 iniciarPelicula();
@@ -295,85 +288,103 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
             };
         }
 
-        async function destruirShakaPlayer() {
-            if (player) {
-                try {
-                    await player.destroy();
-                } catch (e) {
-                    console.log("Error al limpiar Shaka Player:", e);
-                }
-                player = null;
+        function destruirHls() {
+            if (hlsInstance) {
+                hlsInstance.destroy();
+                hlsInstance = null;
             }
         }
 
-        async function iniciarPelicula() {
+        function iniciarPelicula() {
             reproduciendoPelicula = true;
             video.onended = null;
 
-            await destruirShakaPlayer();
+            destruirHls();
 
+            // Limpieza profunda del elemento HTML5
             video.pause();
             video.removeAttribute('src');
             video.load();
 
-            const esHlsODash = /\.(m3u8|mpd)($|\?)/i.test(urlStreamPelicula);
-            const soporteNativoHls = video.canPlayType('application/vnd.apple.mpegurl');
+            const esHLS = /\.m3u8($|\?)/i.test(urlStreamPelicula);
 
-            // Usar Shaka Player si es HLS/DASH y el navegador no soporta HLS de forma nativa
-            if (esHlsODash && !soporteNativoHls && typeof shaka !== 'undefined' && shaka.Player.isBrowserSupported()) {
-                player = new shaka.Player(video);
+            if (esHLS && Hls.isSupported()) {
+                // Configuración Anti-Cortes y Anti-Stall en HLS
+                hlsInstance = new Hls({
+                    maxBufferLength: 60,            // Almacena hasta 60 segundos de video en buffer
+                    maxMaxBufferLength: 120,        // Máximo buffer absoluto (120s)
+                    maxBufferSize: 60 * 1024 * 1024,// Limite de memoria 60MB
+                    maxBufferHole: 0.5,             // Auto-resuelve pequeños saltos o vacíos de fragmentos
+                    highBufferWatchdogPeriod: 2,    // Monitorea congelamientos de pantalla cada 2s
+                    nudgeOffset: 0.1,               // Avance automático en caso de congelamiento
+                    nudgeMaxRetry: 5,
+                    manifestLoadingTimeOut: 10000,
+                    manifestLoadingMaxRetry: 4,
+                    fragLoadingTimeOut: 20000,
+                    fragLoadingMaxRetry: 6,
+                    enableWorker: true              // Decodificación multihilo sin congelar interfaz
+                });
 
-                player.configure({
-                    streaming: {
-                        rebufferingGoal: 2,          // Espera 2s tras un corte para arrancar
-                        bufferingGoal: 20,          // Mantiene 20s adelantados en búfer para evitar cortes
-                        bufferBehind: 15,           // Mantiene 15s atrás en caché
-                        jumpLargeGaps: true,        // Salta vacíos en los fragmentos de video
-                        stallEnabled: true,
-                        stallThreshold: 1
-                    },
-                    abr: {
-                        enabled: true,
-                        switchInterval: 8
+                hlsInstance.loadSource(urlStreamPelicula);
+                hlsInstance.attachMedia(video);
+
+                hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+                    if (tiempoInicioPelicula > 0) {
+                        video.currentTime = tiempoInicioPelicula;
+                    }
+                    video.play().catch(e => console.log("Autoplay bloqueado:", e));
+                });
+
+                // Gestor de recuperación automática ante congelamiento/cortes de red
+                hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                console.warn("Error de red detectado, reintentando descarga...");
+                                hlsInstance.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                console.warn("Error en fragmento de medios, autorecuperando...");
+                                hlsInstance.recoverMediaError();
+                                break;
+                            default:
+                                console.error("Error fatal irrecuperable. Pasando a nativo.");
+                                destruirHls();
+                                reproducirDirectoNativo();
+                                break;
+                        }
                     }
                 });
 
-                player.addEventListener('error', (e) => {
-                    console.error('Error de Shaka, cambiando a nativo:', e.detail);
-                    reproducirNativo();
-                });
-
-                try {
-                    await player.load(urlStreamPelicula, tiempoInicioPelicula);
-                    await video.play();
-                } catch (e) {
-                    console.warn("Shaka fallo al cargar, pasando a nativo:", e);
-                    reproducirNativo();
-                }
             } else {
-                reproducirNativo();
+                reproducirDirectoNativo();
             }
         }
 
-        function reproducirNativo() {
-            destruirShakaPlayer();
+        function reproducirDirectoNativo() {
             video.src = urlStreamPelicula;
 
-            const intentarReproducir = () => {
+            const aplicarSeekYPlay = () => {
                 if (tiempoInicioPelicula > 0 && Math.abs(video.currentTime - tiempoInicioPelicula) > 1) {
                     video.currentTime = tiempoInicioPelicula;
                 }
-                video.play().catch(e => console.log("Reproducción nativa pausada por autoplay:", e));
+                video.play().catch(e => console.log("Error al reproducir en nativo:", e));
             };
 
-            video.addEventListener('loadedmetadata', () => {
-                intentarReproducir();
-            }, { once: true });
+            video.addEventListener('loadedmetadata', aplicarSeekYPlay, { once: true });
 
             if (video.readyState >= 1) {
-                intentarReproducir();
+                aplicarSeekYPlay();
             }
         }
+
+        // Recuperación ante congelamiento nativo (Safari / MP4 directo)
+        video.addEventListener('stalled', () => {
+            if (reproduciendoPelicula && !video.paused) {
+                console.warn("Detección de congelamiento nativo: re-sincronizando posición");
+                video.currentTime = video.currentTime + 0.1;
+            }
+        });
 
         video.addEventListener('timeupdate', () => {
             guardarProgreso(video.currentTime);

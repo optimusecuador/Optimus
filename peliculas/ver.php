@@ -113,7 +113,7 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title><?php echo htmlspecialchars($nombre); ?> - Ver Película</title>
     
-    <!-- Librería Shaka Player -->
+    <!-- Librería Shaka Player Versión Estable -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/controls.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/shaka-player.ui.min.js"></script>
 
@@ -184,7 +184,6 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
                 </div>
             </div>
 
-            <!-- SE CAMBIÓ preload="auto" POR preload="metadata" PARA EVITAR CONGESTIÓN DE RED -->
             <video id="videoPlayer" controls playsinline webkit-playsinline crossorigin="anonymous" preload="metadata"></video>
         </div>
 
@@ -243,7 +242,9 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
         let player = null;
 
         document.addEventListener('DOMContentLoaded', () => {
-            shaka.polyfill.installAll();
+            if (typeof shaka !== 'undefined') {
+                shaka.polyfill.installAll();
+            }
         });
 
         async function solicitarWakeLock() {
@@ -283,6 +284,7 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
             solicitarPantallaCompleta();
             solicitarWakeLock();
 
+            // Reproducción inicial del intro en HTML5 nativo
             video.src = urlIntro;
             video.play().catch(() => {
                 iniciarPelicula();
@@ -293,61 +295,83 @@ $rotten_audiencia = $pelicula['audiencia'] ?? '0';
             };
         }
 
+        async function destruirShakaPlayer() {
+            if (player) {
+                try {
+                    await player.destroy();
+                } catch (e) {
+                    console.log("Error al limpiar Shaka Player:", e);
+                }
+                player = null;
+            }
+        }
+
         async function iniciarPelicula() {
             reproduciendoPelicula = true;
             video.onended = null;
 
-            if (player) {
-                try { await player.destroy(); } catch(e){}
-                player = null;
-            }
+            await destruirShakaPlayer();
 
-            // Limpieza del reproductor antes de cargar el video final
             video.pause();
             video.removeAttribute('src');
             video.load();
 
-            const esVideoDirecto = /\.(mp4|mkv|avi|webm|mov)($|\?)/i.test(urlStreamPelicula);
+            const esHlsODash = /\.(m3u8|mpd)($|\?)/i.test(urlStreamPelicula);
+            const soporteNativoHls = video.canPlayType('application/vnd.apple.mpegurl');
 
-            if (esVideoDirecto) {
-                video.src = urlStreamPelicula;
-                video.preload = "metadata";
-                
-                const intentarReproducir = () => {
-                    if (tiempoInicioPelicula > 0 && Math.abs(video.currentTime - tiempoInicioPelicula) > 1) {
-                        video.currentTime = tiempoInicioPelicula;
-                    }
-                    video.play().catch(e => console.log("Reproducción pausada por el navegador", e));
-                };
-
-                // Arranque inmediato apenas carguen los metadatos necesarios
-                video.addEventListener('loadedmetadata', () => {
-                    intentarReproducir();
-                }, { once: true });
-                
-                if (video.readyState >= 1) {
-                    intentarReproducir();
-                }
-            } else {
-                // Configuración de Shaka Player para formatos de streaming como .m3u8
+            // Usar Shaka Player si es HLS/DASH y el navegador no soporta HLS de forma nativa
+            if (esHlsODash && !soporteNativoHls && typeof shaka !== 'undefined' && shaka.Player.isBrowserSupported()) {
                 player = new shaka.Player(video);
+
                 player.configure({
                     streaming: {
-                        rebufferingGoal: 1,
-                        bufferingGoal: 5,
-                        bufferBehind: 10,
-                        lowLatencyMode: true
+                        rebufferingGoal: 2,          // Espera 2s tras un corte para arrancar
+                        bufferingGoal: 20,          // Mantiene 20s adelantados en búfer para evitar cortes
+                        bufferBehind: 15,           // Mantiene 15s atrás en caché
+                        jumpLargeGaps: true,        // Salta vacíos en los fragmentos de video
+                        stallEnabled: true,
+                        stallThreshold: 1
+                    },
+                    abr: {
+                        enabled: true,
+                        switchInterval: 8
                     }
+                });
+
+                player.addEventListener('error', (e) => {
+                    console.error('Error de Shaka, cambiando a nativo:', e.detail);
+                    reproducirNativo();
                 });
 
                 try {
                     await player.load(urlStreamPelicula, tiempoInicioPelicula);
                     await video.play();
                 } catch (e) {
-                    video.src = urlStreamPelicula;
-                    if (tiempoInicioPelicula > 0) video.currentTime = tiempoInicioPelicula;
-                    video.play().catch(err => console.log("Error en respaldo:", err));
+                    console.warn("Shaka fallo al cargar, pasando a nativo:", e);
+                    reproducirNativo();
                 }
+            } else {
+                reproducirNativo();
+            }
+        }
+
+        function reproducirNativo() {
+            destruirShakaPlayer();
+            video.src = urlStreamPelicula;
+
+            const intentarReproducir = () => {
+                if (tiempoInicioPelicula > 0 && Math.abs(video.currentTime - tiempoInicioPelicula) > 1) {
+                    video.currentTime = tiempoInicioPelicula;
+                }
+                video.play().catch(e => console.log("Reproducción nativa pausada por autoplay:", e));
+            };
+
+            video.addEventListener('loadedmetadata', () => {
+                intentarReproducir();
+            }, { once: true });
+
+            if (video.readyState >= 1) {
+                intentarReproducir();
             }
         }
 

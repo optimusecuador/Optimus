@@ -1,639 +1,1607 @@
-<?php
-// ==============================================================================
-// 1. CONEXIÓN A LA BASE DE DATOS Y CONSULTAS CON FILTROS Y PAGINACIÓN
-// ==============================================================================
-require('../conectar.php');
-
-// Función auxiliar para formatear el tiempo en segundos a HH:MM:SS o MM:SS
-function formatearTiempo($segundos_totales) {
-    $seg = floatval($segundos_totales);
-    $horas = floor($seg / 3600);
-    $minutos = floor(($seg / 60) % 60);
-    $segundos = floor($seg % 60);
-    
-    if ($horas > 0) {
-        return sprintf('%d:%02d:%02d', $horas, $minutos, $segundos);
-    } else {
-        return sprintf('%02d:%02d', $minutos, $segundos);
-    }
-}
-
-// Recoger filtros activos desde la URL (GET)
-$filtro_idioma = isset($_GET['idioma']) ? trim($_GET['idioma']) : 'todos';
-$filtro_categoria = isset($_GET['categoria']) ? trim($_GET['categoria']) : 'todas';
-$filtro_busqueda = isset($_GET['busqueda']) ? trim($_GET['busqueda']) : '';
-
-// Configuración de la paginación (200 resultados por página)
-$resultados_por_pagina = 200;
-$pagina_actual = isset($_GET['pagina']) ? max(1, intval($_GET['pagina'])) : 1;
-$offset = ($pagina_actual - 1) * $resultados_por_pagina;
-
-// Construir la cláusula WHERE dinámica para las consultas SQL
-$where_clauses = [];
-$params = [];
-$types = "";
-
-if ($filtro_idioma !== '' && $filtro_idioma !== 'todos') {
-    // Buscar el idioma dentro del campo 'audio' (ej. si el campo tiene "Español, Inglés")
-    $where_clauses[] = "audio LIKE ?";
-    $params[] = "%" . $filtro_idioma . "%";
-    $types .= "s";
-}
-
-if ($filtro_categoria !== '' && $filtro_categoria !== 'todas') {
-    // Buscar la categoría dentro del campo 'id_categoria'
-    $where_clauses[] = "id_categoria LIKE ?";
-    $params[] = "%" . $filtro_categoria . "%";
-    $types .= "s";
-}
-
-if ($filtro_busqueda !== '') {
-    $where_clauses[] = "nombre LIKE ?";
-    $params[] = "%" . $filtro_busqueda . "%";
-    $types .= "s";
-}
-
-$sql_where = "";
-if (count($where_clauses) > 0) {
-    $sql_where = " WHERE " . implode(" AND ", $where_clauses);
-}
-
-// 1. Consulta para contar el total de películas filtradas (para la paginación)
-$query_total = "SELECT COUNT(*) as total FROM peliculas" . $sql_where;
-if (count($params) > 0) {
-    $stmt_total = mysqli_prepare($conexion, $query_total);
-    mysqli_stmt_bind_param($stmt_total, $types, ...$params);
-    mysqli_stmt_execute($stmt_total);
-    $resultado_total = mysqli_stmt_get_result($stmt_total);
-} else {
-    $resultado_total = mysqli_query($conexion, $query_total);
-}
-$fila_total = mysqli_fetch_assoc($resultado_total);
-$total_peliculas = intval($fila_total['total'] ?? 0);
-$total_paginas = max(1, ceil($total_peliculas / $resultados_por_pagina));
-
-if ($pagina_actual > $total_paginas) {
-    $pagina_actual = $total_paginas;
-    $offset = ($pagina_actual - 1) * $resultados_por_pagina;
-}
-
-// 2. Consulta principal de películas con límites de paginación y filtros
-$query = "SELECT * FROM peliculas" . $sql_where . " LIMIT ? OFFSET ?";
-$params_finales = $params;
-$types_finales = $types . "ii";
-$params_finales[] = $resultados_por_pagina;
-$params_finales[] = $offset;
-
-$stmt = mysqli_prepare($conexion, $query);
-if (count($params_finales) > 0) {
-    mysqli_stmt_bind_param($stmt, $types_finales, ...$params_finales);
-}
-mysqli_stmt_execute($stmt);
-$resultado = mysqli_stmt_get_result($stmt);
-
-$peliculas = [];
-if ($resultado) {
-    while ($fila = mysqli_fetch_assoc($resultado)) {
-        $peliculas[] = $fila;
-    }
-}
-
-// 3. Consulta global para extraer todos los contadores de categorías e idiomas disponibles (sin filtros de paginación)
-$conteo_categorias = [];
-$idiomas_disponibles = [];
-$query_globales = "SELECT id_categoria, audio FROM peliculas";
-$resultado_globales = mysqli_query($conexion, $query_globales);
-if ($resultado_globales) {
-    while ($fila_g = mysqli_fetch_assoc($resultado_globales)) {
-        if (!empty($fila_g['id_categoria'])) {
-            $lista = explode(',', $fila_g['id_categoria']);
-            foreach ($lista as $cat) {
-                $cat_limpia = trim($cat);
-                if ($cat_limpia !== '') {
-                    if (!isset($conteo_categorias[$cat_limpia])) {
-                        $conteo_categorias[$cat_limpia] = 1;
-                    } else {
-                        $conteo_categorias[$cat_limpia]++;
-                    }
-                }
-            }
-        }
-        if (!empty($fila_g['audio'])) {
-            $sub_idiomas = explode(',', $fila_g['audio']);
-            foreach ($sub_idiomas as $idioma_item) {
-                $idioma_limpio = trim($idioma_item);
-                if ($idioma_limpio !== '') {
-                    $idiomas_disponibles[$idioma_limpio] = true;
-                }
-            }
-        }
-    }
-    ksort($conteo_categorias);
-    $lista_idiomas = array_keys($idiomas_disponibles);
-    sort($lista_idiomas);
-}
-
-// Consulta de Estrenos recientes
-$query_estrenos = "SELECT * FROM peliculas ORDER BY fecha DESC LIMIT 20";
-$resultado_estrenos = mysqli_query($conexion, $query_estrenos);
-$ultimos_estrenos = [];
-if ($resultado_estrenos) {
-    while ($fila_estreno = mysqli_fetch_assoc($resultado_estrenos)) {
-        $ultimos_estrenos[] = $fila_estreno;
-    }
-}
-
-// Consulta de Continuar viendo
-$query_continuar = "SELECT * FROM peliculas WHERE reproduccion != 0 ORDER BY reproduccion DESC";
-$resultado_continuar = mysqli_query($conexion, $query_continuar);
-$continuar_viendo = [];
-if ($resultado_continuar) {
-    while ($fila_cont = mysqli_fetch_assoc($resultado_continuar)) {
-        $continuar_viendo[] = $fila_cont;
-    }
-}
-
-// Función auxiliar para mantener parámetros actuales al paginar
-function obtenerUrlPaginacion($nueva_pagina) {
-    $_GET['pagina'] = $nueva_pagina;
-    return '?' . http_build_query($_GET);
-}
-?>
-
-<!DOCTYPE html>
-<html lang="es">
+<!doctype html>
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#121212">
-    <title>Catálogo de Películas</title>
-    <style>
-        * {
-            box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent;
-        }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Streaming Móvil y PC</title>
+<link rel="stylesheet" href="../css/styles.css" />
+<style>
+    /* --- RESET Y ESTILOS BASE --- */
+    * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+    }
 
+    body {
+        background-color: #0b0f19;
+        color: #fff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        margin: 0;
+        padding: 10px;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+
+    /* Envoltorio principal para PC */
+    .app-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        width: 100%;
+    }
+
+    /* --- ENCABEZADO Y LOGO --- */
+    .app-header {
+        display: flex;
+        align-items: center;
+        padding: 10px 5px 15px 5px;
+    }
+
+    .app-logo {
+        height: 38px;
+        width: auto;
+        object-fit: contain;
+    }
+
+    /* --- PANELES --- */
+    .panel-dark {
+        background: #111827;
+        border-radius: 12px;
+        padding: 15px;
+        margin-bottom: 15px;
+        border: 1px solid #1f2937;
+    }
+
+    .isp-title {
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 12px;
+        color: #f3f4f6;
+    }
+
+    /* --- CONTENEDORES HORIZONTALES (Swipe / Scroll) --- */
+    .mobile-scroll-container {
+        display: flex;
+        gap: 12px;
+        overflow-x: auto;
+        scroll-behavior: smooth;
+        padding-bottom: 10px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .mobile-scroll-container::-webkit-scrollbar,
+    .categories-bar::-webkit-scrollbar {
+        height: 6px;
+    }
+    .mobile-scroll-container::-webkit-scrollbar-track,
+    .categories-bar::-webkit-scrollbar-track {
+        background: #111827;
+        border-radius: 10px;
+    }
+    .mobile-scroll-container::-webkit-scrollbar-thumb,
+    .categories-bar::-webkit-scrollbar-thumb {
+        background: #374151;
+        border-radius: 10px;
+    }
+
+    /* --- MARCA DE AGUA Y SUPERPOSICIONES SOBRE LA PORTADA --- */
+    .poster-container {
+        position: relative;
+        width: 100%;
+        overflow: hidden;
+    }
+
+    .watermark-badge {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background-color: rgba(255, 255, 255, 0.4);
+        backdrop-filter: blur(2px);
+        border-radius: 6px;
+        padding: 6px 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2;
+        pointer-events: none;
+    }
+
+    .watermark-badge img {
+        height: 28px;
+        width: auto;
+        object-fit: contain;
+    }
+
+    /* Badge para mostrar los idiomas en la parte inferior de la portada */
+    .lang-badge {
+        position: absolute;
+        bottom: 6px;
+        left: 6px;
+        right: 6px;
+        background-color: rgba(0, 0, 0, 0.75);
+        backdrop-filter: blur(2px);
+        border-radius: 4px;
+        padding: 3px 6px;
+        font-size: 9px;
+        font-weight: bold;
+        color: #38bdf8;
+        text-transform: uppercase;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-align: center;
+        z-index: 2;
+        pointer-events: none;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* BARRA DE PROGRESO "CONTINUAR VIENDO" */
+    .progress-bar-bg {
+        width: 100%;
+        height: 5px;
+        background-color: rgba(255, 255, 255, 0.2);
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        z-index: 3;
+    }
+
+    .progress-bar-fill {
+        height: 100%;
+        background-color: #2563eb;
+    }
+
+    /* --- TARJETAS MÓVILES / RECIENTES --- */
+    .movie-card-mobile {
+        flex: 0 0 130px;
+        max-width: 130px;
+        background: #1f2937;
+        border-radius: 8px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .movie-card-mobile:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+    }
+
+    .movie-card-mobile img.poster-img {
+        width: 100%;
+        height: 190px;
+        object-fit: cover;
+        display: block;
+        cursor: pointer;
+    }
+
+    .movie-title-mobile {
+        font-size: 11px;
+        font-weight: bold;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 2px;
+        color: #f9fafb;
+    }
+
+    .movie-meta-mobile {
+        font-size: 10px;
+        color: #9ca3af;
+        margin-bottom: 2px;
+    }
+
+    /* --- GRID ADAPTATIVO PARA BIBLIOTECA COMPLETA --- */
+    .movies-grid-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+        gap: 12px;
+        width: 100%;
+        margin-top: 10px;
+    }
+
+    .movie-card-grid {
+        background: #1f2937;
+        border-radius: 8px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .movie-card-grid:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 18px rgba(0,0,0,0.5);
+    }
+
+    .movie-card-grid img.poster-img {
+        width: 100%;
+        height: 200px;
+        object-fit: cover;
+        display: block;
+        cursor: pointer;
+    }
+
+    /* --- BUSCADOR Y FORMULARIO --- */
+    .search-form {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 15px;
+        max-width: 800px;
+        flex-wrap: wrap;
+    }
+
+    .clientes-input {
+        flex: 1;
+        min-width: 160px;
+        background: #1f2937;
+        border: 1px solid #374151;
+        color: white;
+        padding: 10px;
+        border-radius: 8px;
+        font-size: 14px;
+        outline: none;
+    }
+
+    .clientes-input:focus {
+        border-color: #2563eb;
+    }
+
+    .primary-btn {
+        background: #2563eb;
+        color: white;
+        border: none;
+        padding: 10px 18px;
+        border-radius: 8px;
+        font-weight: bold;
+        font-size: 14px;
+        text-decoration: none;
+        display: inline-block;
+        text-align: center;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .primary-btn:hover {
+        background: #1d4ed8;
+    }
+
+    /* --- BARRAS DE CATEGORÍAS Y GÉNEROS --- */
+    .categories-bar {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        margin-bottom: 10px;
+        padding-bottom: 6px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .category-chip {
+        padding: 7px 14px;
+        color: white;
+        text-decoration: none;
+        border-radius: 8px;
+        white-space: nowrap;
+        font-size: 12px;
+        font-weight: 500;
+        transition: opacity 0.2s ease;
+    }
+
+    .category-chip:hover {
+        opacity: 0.85;
+    }
+
+    /* --- PAGINACIÓN --- */
+    .pagination-info {
+        font-size: 12px;
+        color: #9ca3af;
+        margin-bottom: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+
+    .pagination-controls {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        margin-top: 20px;
+        align-items: center;
+    }
+
+    .pagination-btn {
+        background: #1f2937;
+        color: white;
+        border: 1px solid #374151;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-weight: bold;
+        font-size: 13px;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .pagination-btn:hover {
+        background: #374151;
+    }
+
+    .pagination-btn.disabled {
+        opacity: 0.4;
+        pointer-events: none;
+    }
+
+    /* --- MEDIA QUERIES PARA PC / TABLET --- */
+    @media (min-width: 768px) {
         body {
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            margin: 0;
-            padding: 15px 10px;
-            background-color: #121212;
-            color: #e0e0e0;
-            overflow-x: hidden;
+            padding: 20px;
         }
 
-        .panel-control {
-            background: #1e1e1e;
-            padding: 15px;
-            border-radius: 12px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            margin-bottom: 20px;
-            border: 1px solid #2c2c2c;
+        .movies-grid-container {
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 16px;
         }
 
-        .filtros-superiores {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
+        .movie-card-grid img.poster-img {
+            height: 240px;
         }
 
-        .buscador-box {
-            flex: 2;
-            margin-bottom: 0;
+        .movie-card-mobile {
+            flex: 0 0 150px;
+            max-width: 150px;
         }
 
-        .select-idioma-box {
-            flex: 1;
+        .movie-card-mobile img.poster-img {
+            height: 220px;
         }
 
-        .buscador-box input, .select-idioma-box select {
-            width: 100%;
-            padding: 12px 15px;
-            font-size: 14px;
-            border: 1px solid #333;
-            border-radius: 25px;
-            background-color: #2c2c2c;
-            color: #ffffff;
-            outline: none;
-            transition: border-color 0.2s, background-color 0.2s;
-        }
-        
-        .buscador-box input::placeholder {
-            color: #888;
+        .isp-title {
+            font-size: 20px;
         }
 
-        .buscador-box input:focus, .select-idioma-box select:focus {
-            border-color: #007bff;
-            background-color: #1a1a1a;
+        .movie-title-mobile {
+            font-size: 12px;
         }
 
-        .contenedor-botones {
-            display: flex;
-            flex-wrap: nowrap;
-            gap: 8px;
-            overflow-x: auto;
-            padding-bottom: 5px;
-            -webkit-overflow-scrolling: touch;
-            scrollbar-width: none;
+        .lang-badge {
+            font-size: 10px;
+            padding: 4px 8px;
         }
-        .contenedor-botones::-webkit-scrollbar {
-            display: none;
-        }
-
-        .btn-filtro {
-            flex: 0 0 auto;
-            padding: 8px 16px;
-            cursor: pointer;
-            border: 1px solid #333;
-            background: #252525;
-            color: #b0b0b0;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 600;
-            transition: all 0.2s ease;
-            white-space: nowrap;
-            text-decoration: none;
-            display: inline-block;
-        }
-
-        .btn-filtro:hover {
-            background: #333;
-            color: #fff;
-        }
-
-        .btn-filtro.activo {
-            background: #007bff;
-            color: #ffffff;
-            border-color: #007bff;
-        }
-
-        .paginacion-contenedor {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #1e1e1e;
-            padding: 12px 15px;
-            border-radius: 10px;
-            margin: 15px 0;
-            border: 1px solid #2c2c2c;
-            font-size: 13px;
-            color: #aaa;
-        }
-
-        .paginacion-botones {
-            display: flex;
-            gap: 8px;
-        }
-
-        .btn-pag {
-            background: #2c2c2c;
-            color: #ffffff;
-            padding: 8px 14px;
-            border-radius: 6px;
-            text-decoration: none;
-            font-weight: 600;
-            border: 1px solid #444;
-            transition: background 0.2s;
-        }
-
-        .btn-pag:hover:not(.disabled) {
-            background: #007bff;
-            border-color: #007bff;
-        }
-
-        .btn-pag.disabled {
-            opacity: 0.4;
-            pointer-events: none;
-        }
-
-        .seccion-estrenos, .seccion-continuar {
-            margin-bottom: 25px;
-        }
-
-        .seccion-estrenos h2, .seccion-continuar h2 {
-            margin: 0 0 12px 5px;
-            font-size: 18px;
-            font-weight: bold;
-            color: #ffffff;
-        }
-
-        .carrusel-estrenos, .carrusel-continuar {
-            display: flex;
-            gap: 12px;
-            overflow-x: auto;
-            scroll-behavior: smooth;
-            -webkit-overflow-scrolling: touch;
-            padding-bottom: 10px;
-            padding-left: 5px;
-        }
-
-        .carrusel-estrenos::-webkit-scrollbar, .carrusel-continuar::-webkit-scrollbar { display: none; }
-        
-        .carrusel-estrenos .pelicula-card, .carrusel-continuar .pelicula-card {
-            flex: 0 0 130px; 
-            min-width: 130px;
-        }
-
-        .grid-peliculas {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-            padding: 0 5px;
-        }
-
-        @media (min-width: 600px) {
-            .grid-peliculas {
-                grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-            }
-        }
-
-        .pelicula-card {
-            background: #1e1e1e;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-            display: flex;
-            flex-direction: column;
-            text-decoration: none;
-            border: 1px solid #2c2c2c;
-            transition: transform 0.2s ease, border-color 0.2s ease;
-        }
-
-        .pelicula-card:hover {
-            border-color: #444;
-            transform: translateY(-2px);
-        }
-
-        .portada-link {
-            display: block;
-            position: relative;
-            width: 100%;
-        }
-
-        .pelicula-portada {
-            width: 100%;
-            aspect-ratio: 2 / 3;
-            object-fit: cover;
-            background-color: #1a1a1a;
-            display: block;
-        }
-
-        .logo-empresa-overlay {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            max-width: 50px;
-            max-height: 25px;
-            object-fit: contain;
-            background-color: rgba(0, 0, 0, 0.6);
-            padding: 3px;
-            border-radius: 4px;
-            pointer-events: none;
-        }
-
-        .tiempo-overlay {
-            position: absolute;
-            top: 8px;
-            left: 8px;
-            background-color: rgba(0, 0, 0, 0.85);
-            color: #ffffff;
-            font-size: 11px;
-            font-weight: bold;
-            padding: 4px 6px;
-            border-radius: 4px;
-            pointer-events: none;
-            z-index: 2;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-        }
-
-        .audio-overlay {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            background: linear-gradient(to top, rgba(0,0,0,0.95), transparent);
-            color: #ffffff;
-            font-size: 11px;
-            padding: 15px 8px 5px 8px;
-            text-align: right;
-            font-weight: bold;
-        }
-
-        .pelicula-info {
-            padding: 10px 8px;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .pelicula-card h3 {
-            margin: 0 0 4px 0;
-            color: #f0f0f0;
-            font-size: 13px;
-            font-weight: 600;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .categorias-texto {
-            font-size: 11px;
-            color: #999;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .sin-resultados {
-            grid-column: 1 / -1;
-            text-align: center;
-            padding: 40px 20px;
-            color: #888;
-            font-size: 16px;
-        }
-    </style>
+    }
+</style>
 </head>
 <body>
 
-    <div class="panel-control">
-        <!-- FORMULARIO DE FILTRADO Y BÚSQUEDA -->
-        <form method="GET" action="" id="formFiltros">
-            <!-- Mantener la categoría actual si se busca o cambia idioma -->
-            <input type="hidden" name="categoria" value="<?php echo htmlspecialchars($filtro_categoria); ?>">
-            
-            <div class="filtros-superiores">
-                <div class="buscador-box">
-                    <input 
-                        type="text" 
-                        name="busqueda" 
-                        id="inputBuscador" 
-                        placeholder="🔍 Buscar película..." 
-                        value="<?php echo htmlspecialchars($filtro_busqueda); ?>"
-                    >
-                </div>
-                
-                <div class="select-idioma-box">
-                    <select name="idioma" id="selectIdioma" onchange="document.getElementById('formFiltros').submit()">
-                        <option value="todos">🌐 Todos los idiomas</option>
-                        <?php foreach ($lista_idiomas as $idioma): ?>
-                            <option value="<?php echo htmlspecialchars($idioma); ?>" <?php echo ($filtro_idioma === $idioma) ? 'selected' : ''; ?>>
-                                🔊 <?php echo htmlspecialchars($idioma); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-            </div>
-        </form>
+<div class="app-container">
 
-        <!-- BOTONES DE CATEGORÍA -->
-        <div class="contenedor-botones">
-            <?php 
-                $url_todas = "?idioma=" . urlencode($filtro_idioma) . "&busqueda=" . urlencode($filtro_busqueda);
-            ?>
-            <a href="<?php echo $url_todas; ?>" class="btn-filtro <?php echo ($filtro_categoria === 'todas') ? 'activo' : ''; ?>">
-                Todas
-            </a>
+<?php
+require('../conectar.php');
 
-            <?php foreach ($conteo_categorias as $cat => $cantidad): ?>
-                <?php 
-                    $url_cat = "?categoria=" . urlencode($cat) . "&idioma=" . urlencode($filtro_idioma) . "&busqueda=" . urlencode($filtro_busqueda);
-                ?>
-                <a href="<?php echo $url_cat; ?>" class="btn-filtro <?php echo ($filtro_categoria === $cat) ? 'activo' : ''; ?>">
-                    <?php echo ucfirst(htmlspecialchars($cat)) . ' (' . $cantidad . ')'; ?>
-                </a>
-            <?php endforeach; ?>
-        </div>
-    </div>
+/* --- 1. CONFIGURACIÓN E INICIALIZACIÓN --- */
+$resultado = $conexion->query("SELECT api, ip FROM jellyfin LIMIT 1");
 
-    <!-- SECCIÓN ÚLTIMOS ESTRENOS (Se oculta si hay filtros activos) -->
-    <?php if (empty($filtro_busqueda) && $filtro_idioma === 'todos' && $filtro_categoria === 'todas' && !empty($ultimos_estrenos)): ?>
-        <div class="seccion-estrenos">
-            <h2>🔥 Últimos Estrenos</h2>
-            <div class="carrusel-estrenos">
-                <?php foreach ($ultimos_estrenos as $peli_estreno): ?>
-                    <?php 
-                        $id_estreno = intval($peli_estreno['id_peliculas'] ?? 0);
-                        $cats_estreno = array_map('trim', explode(',', $peli_estreno['id_categoria']));
-                        $nombre_estreno = $peli_estreno['nombre'] ?? 'Sin nombre';
-                        $portada_estreno = !empty($peli_estreno['portada_url']) ? $peli_estreno['portada_url'] : 'https://via.placeholder.com/300x450?text=Sin+Portada';
-                        $audio_estreno = !empty($peli_estreno['audio']) ? $peli_estreno['audio'] : 'LAT';
-                        $tiempo_estreno = floatval($peli_estreno['reproduccion'] ?? 0);
-                    ?>
-                    <a href="ver.php?id=<?php echo $id_estreno; ?>" class="pelicula-card">
-                        <div class="portada-link">
-                            <img src="<?php echo htmlspecialchars($portada_estreno); ?>" alt="Portada" class="pelicula-portada">
-                            <?php if ($tiempo_estreno > 0): ?>
-                                <div class="tiempo-overlay">▶ <?php echo formatearTiempo($tiempo_estreno); ?></div>
-                            <?php endif; ?>
-                            <img src="../images/empresa/logo.png" alt="Logo" class="logo-empresa-overlay" onerror="this.style.display='none'">
-                            <div class="audio-overlay">🔊 <?php echo htmlspecialchars($audio_estreno); ?></div>
+if ($resultado && $fila = $resultado->fetch_assoc()) {
+    $apikey = $fila['api'];
+    $ip_db = trim($fila['ip']);
+
+    $host_ping = preg_replace('#^https?://#', '', $ip_db);
+    if (strpos($host_ping, ':') !== false) {
+        $partes_host = explode(':', $host_ping);
+        $host_ping = $partes_host[0];
+    }
+    $host_ping = rtrim($host_ping, '/');
+
+    $ping_cmd = "ping -c 1 -W 1 " . escapeshellarg($host_ping);
+    exec($ping_cmd, $output, $status);
+
+    if ($status === 0) {
+        $server = rtrim($ip_db, "/");
+    } else {
+        $ip_limpia = preg_replace('#^https?://#', '', $ip_db);
+        if (strpos($ip_limpia, ':') !== false) {
+            $partes_limpias = explode(':', $ip_limpia);
+            $ip_limpia = $partes_limpias[0];
+        }
+        $ip_limpia = rtrim($ip_limpia, '/');
+        if (empty($ip_limpia)) { $ip_limpia = "127.0.0.1"; }
+        
+        $server = "http://" . $ip_limpia . ":30013";
+        echo '<script>
+            alert("No se puede conectar al equipo Jellyfin. Redirigiendo...");
+            window.location.href = "../configuracion/streaming.php";
+        </script>';
+        exit;
+    }
+} else {
+    echo '<script>
+        alert("No se encontró configuración de Jellyfin.");
+        window.location.href = "../configuracion/streaming.php";
+    </script>';
+    exit;
+}
+
+$server = "http://" . $server . ":30013";
+
+/* --- FUNCIÓN API --- */
+function fetchJellyfin($url, $apiKey) {
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ["X-Emby-Token: $apiKey"]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    return json_decode($response, true);
+}
+
+/* --- FUNCIÓN AUXILIAR PARA EXTRAER IDIOMAS --- */
+function getLanguages($streams) {
+    $langs = [];
+    if(is_array($streams)) {
+        foreach($streams as $s) {
+            if(($s['Type'] ?? '') === 'Audio' && !empty($s['Language'])) {
+                $lang = strtoupper(substr($s['Language'], 0, 3));
+                if(!in_array($lang, $langs)) {
+                    $langs[] = $lang;
+                }
+            }
+        }
+    }
+    return !empty($langs) ? implode(' • ', $langs) : 'UND';
+}
+
+/* --- FUNCIÓN VERIFICADORA DE FILTRADO POR IDIOMA --- */
+function hasLanguage($streams, $targetLang) {
+    if (empty($targetLang) || !is_array($streams)) return true;
+    
+    foreach ($streams as $s) {
+        if (($s['Type'] ?? '') === 'Audio' && !empty($s['Language'])) {
+            $langCode = strtolower($s['Language']);
+            if ($targetLang === 'es' && in_array($langCode, ['spa', 'es', 'spanish', 'esp'])) {
+                return true;
+            }
+            if ($targetLang === 'en' && in_array($langCode, ['eng', 'en', 'english', 'ing'])) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Obtener películas recientes
+$recentMovies = fetchJellyfin("$server/Items?IncludeItemTypes=Movie&Recursive=true&SortBy=DateCreated&SortOrder=Descending&Limit=20&Fields=MediaSources,MediaStreams,ProductionYear,Overview,Genres", $apikey);
+
+// Obtener Usuario y Librerías
+$userData = fetchJellyfin("$server/Users", $apikey);
+$userId = $userData[0]['Id'] ?? '';
+
+// OBTENER CONTENIDO EN PROGRESO (Ruta nativa Resume)
+$continueWatching = [];
+if (!empty($userId)) {
+    $continueWatching = fetchJellyfin("$server/Users/$userId/Items/Resume?Limit=20&MediaTypes=Video&Fields=MediaSources,MediaStreams,ProductionYear,Overview", $apikey);
+}
+
+$libraries = !empty($userId) ? fetchJellyfin("$server/Users/".$userId."/Views", $apikey) : [];
+$libraryId = $_GET['library'] ?? '';
+$genreFilter = $_GET['genre'] ?? '';
+$langFilter = $_GET['lang'] ?? '';
+
+// Paginación a 200 elementos por página
+$limitPerPage = 200;
+$page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+$startIndex = ($page - 1) * $limitPerPage;
+
+// Lista fija de géneros permitidos
+$allowedGenres = [
+    'Accion', 'Animacion', 'Aventura', 'Belica', 'Ciencia Ficcion', 
+    'Comedia', 'Crimen', 'Documental', 'Drama', 'Familia', 
+    'Fantasia', 'Horror', 'Misterio', 'Romance', 'Terror', 'War'
+];
+?>
+
+<div class="app-header">
+    <img src="../images/empresa/logo.png" alt="Logo Empresa" class="app-logo">
+</div>
+
+<!-- SECCIÓN: ÚLTIMAS PELÍCULAS -->
+<div class="panel-dark">
+    <div class="isp-title">Últimas películas</div>
+    <div class="mobile-scroll-container">
+        <?php
+        if(isset($recentMovies['Items'])) {
+            foreach($recentMovies['Items'] as $m) {
+                $res = "HD";
+                $year = $m['ProductionYear'] ?? '----';
+                $streams = $m['MediaStreams'] ?? [];
+
+                if(isset($m['MediaStreams'])) {
+                    foreach($m['MediaStreams'] as $s) {
+                        if(($s['Type'] ?? '') == 'Video') {
+                            $res = ($s['Width'] >= 3840) ? '4K' : (($s['Width'] >= 1920) ? '1080p' : '720p');
+                        }
+                    }
+                }
+
+                $movieId = $m['Id'];
+                $movieName = htmlspecialchars($m['Name'], ENT_QUOTES);
+                $languages = getLanguages($streams);
+
+                echo '
+                <div class="movie-card-mobile">
+                    <div>
+                        <a href="index_sistema.php?id='.$movieId.'" class="poster-container" style="display:block;">
+                            <div class="watermark-badge">
+                                <img src="../images/empresa/logo.png" alt="Logo">
+                            </div>
+                            <img src="'.$server.'/Items/'.$movieId.'/Images/Primary?Format=jpg&MaxWidth=300" class="poster-img" alt="'.$movieName.'">
+                            <div class="lang-badge">'.$languages.'</div>
+                        </a>
+                        <div style="padding: 6px 8px 8px 8px;">
+                            <div class="movie-title-mobile" title="'.$movieName.'">'.$movieName.'</div>
+                            <div class="movie-meta-mobile">'.$year.' • '.$res.'</div>
                         </div>
-                        <div class="pelicula-info">
-                            <h3><?php echo htmlspecialchars($nombre_estreno); ?></h3>
-                            <div class="categorias-texto"><?php echo htmlspecialchars(implode(', ', $cats_estreno)); ?></div>
+                    </div>
+                </div>';
+            }
+        }
+        ?>
+    </div>
+</div>
+
+<!-- SECCIÓN: CONTINUAR VIENDO -->
+<?php if (!empty($continueWatching['Items'])): ?>
+<div class="panel-dark">
+    <div class="isp-title">Continuar viendo</div>
+    <div class="mobile-scroll-container">
+        <?php
+        foreach ($continueWatching['Items'] as $cw) {
+            $res = "HD";
+            $year = $cw['ProductionYear'] ?? '----';
+            $streams = $cw['MediaStreams'] ?? ($cw['MediaSources'][0]['MediaStreams'] ?? []);
+
+            if(!empty($streams)) {
+                foreach($streams as $s) {
+                    if(($s['Type'] ?? '') == 'Video') {
+                        $w = $s['Width'] ?? 0;
+                        $res = ($w >= 3840) ? '4K' : (($w >= 1920) ? '1080p' : '720p');
+                        break;
+                    }
+                }
+            }
+
+            $movieId = $cw['Id'];
+            $movieName = htmlspecialchars($cw['Name'], ENT_QUOTES);
+            $languages = getLanguages($streams);
+
+            $playedPercent = 0;
+            if (isset($cw['UserData']['PlayedPercentage'])) {
+                $playedPercent = round($cw['UserData']['PlayedPercentage']);
+            } elseif (isset($cw['UserData']['PlaybackPositionTicks']) && isset($cw['RunTimeTicks']) && $cw['RunTimeTicks'] > 0) {
+                $playedPercent = round(($cw['UserData']['PlaybackPositionTicks'] / $cw['RunTimeTicks']) * 100);
+            }
+
+            echo '
+            <div class="movie-card-mobile">
+
+                <div>
+                    <a href="index_sistema.php?id='.$movieId.'" class="poster-container" style="display:block;">
+                        <div class="watermark-badge">
+                            <img src="../images/empresa/logo.png" alt="Logo">
+                        </div>
+                        <img src="'.$server.'/Items/'.$movieId.'/Images/Primary?Format=jpg&MaxWidth=300" class="poster-img" alt="'.$movieName.'">
+                        <div class="lang-badge">'.$languages.'</div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" style="width: '.$playedPercent.'%;"></div>
                         </div>
                     </a>
-                <?php endforeach; ?>
-            </div>
-        </div>
-    <?php endif; ?>
+                    <div style="padding: 6px 8px 8px 8px;">
+                        <div class="movie-title-mobile" title="'.$movieName.'">'.$movieName.'</div>
+                        <div class="movie-meta-mobile">'.$year.' • '.$res.'</div>
+                    </div>
+                </div>
+            </div>';
+        }
+        ?>
+    </div>
+</div>
+<?php endif; ?>
 
-    <!-- SECCIÓN CONTINUAR VIENDO (Se oculta si hay filtros activos) -->
-    <?php if (empty($filtro_busqueda) && $filtro_idioma === 'todos' && $filtro_categoria === 'todas' && !empty($continuar_viendo)): ?>
-        <div class="seccion-continuar">
-            <h2>▶ Continuar Viendo</h2>
-            <div class="carrusel-continuar">
-                <?php foreach ($continuar_viendo as $peli_cont): ?>
-                    <?php 
-                        $id_cont = intval($peli_cont['id_peliculas'] ?? 0);
-                        $cats_cont = array_map('trim', explode(',', $peli_cont['id_categoria']));
-                        $nombre_cont = $peli_cont['nombre'] ?? 'Sin nombre';
-                        $portada_cont = !empty($peli_cont['portada_url']) ? $peli_cont['portada_url'] : 'https://via.placeholder.com/300x450?text=Sin+Portada';
-                        $audio_cont = !empty($peli_cont['audio']) ? $peli_cont['audio'] : 'LAT';
-                        $tiempo_cont = floatval($peli_cont['reproduccion'] ?? 0);
-                    ?>
-                    <a href="ver.php?id=<?php echo $id_cont; ?>" class="pelicula-card">
-                        <div class="portada-link">
-                            <img src="<?php echo htmlspecialchars($portada_cont); ?>" alt="Portada" class="pelicula-portada">
-                            <?php if ($tiempo_cont > 0): ?>
-                                <div class="tiempo-overlay">▶ <?php echo formatearTiempo($tiempo_cont); ?></div>
-                            <?php endif; ?>
-                            <img src="../images/empresa/logo.png" alt="Logo" class="logo-empresa-overlay" onerror="this.style.display='none'">
-                            <div class="audio-overlay">🔊 <?php echo htmlspecialchars($audio_cont); ?></div>
-                        </div>
-                        <div class="pelicula-info">
-                            <h3><?php echo htmlspecialchars($nombre_cont); ?></h3>
-                            <div class="categorias-texto"><?php echo htmlspecialchars(implode(', ', $cats_cont)); ?></div>
-                        </div>
-                    </a>
-                <?php endforeach; ?>
-            </div>
-        </div>
-    <?php endif; ?>
+<!-- SECCIÓN: BIBLIOTECA COMPLETA -->
+<div class="panel-dark">
+    <div class="isp-title">Biblioteca Completa</div>
 
-    <!-- PAGINACIÓN SUPERIOR -->
-    <div class="paginacion-contenedor">
-        <span>Página <strong><?php echo $pagina_actual; ?></strong> de <strong><?php echo $total_paginas; ?></strong> (Total: <?php echo $total_peliculas; ?> películas)</span>
-        <div class="paginacion-botones">
-            <a href="<?php echo obtenerUrlPaginacion($pagina_actual - 1); ?>" class="btn-pag <?php echo ($pagina_actual <= 1) ? 'disabled' : ''; ?>">⬅ Anterior</a>
-            <a href="<?php echo obtenerUrlPaginacion($pagina_actual + 1); ?>" class="btn-pag <?php echo ($pagina_actual >= $total_paginas) ? 'disabled' : ''; ?>">Siguiente ➡</a>
-        </div>
+    <!-- Categorías de Librerías -->
+    <div class="categories-bar">
+        <?php 
+        $langParam = !empty($langFilter) ? '&lang='.urlencode($langFilter) : '';
+        ?>
+        <a href="?<?= !empty($langFilter) ? 'lang='.urlencode($langFilter) : '' ?>" class="category-chip" style="<?= (empty($libraryId) && empty($genreFilter)) ? 'background:#2563eb;' : 'background:#1f2937;' ?>">Todas</a>
+        <?php
+        if(isset($libraries['Items'])) {
+            foreach($libraries['Items'] as $lib) {
+                if (($lib['CollectionType'] ?? 'folder') === 'boxsets') continue;
+                $active = ($libraryId == $lib['Id']) ? 'background:#2563eb;' : 'background:#1f2937;';
+                echo '<a href="?library='.$lib['Id'].$langParam.'" class="category-chip" style="'.$active.'">'.$lib['Name'].'</a>';
+            }
+        }
+        ?>
     </div>
 
-    <!-- CATÁLOGO GENERAL -->
-    <div class="grid-peliculas" id="contenedorPeliculas">
-        <?php if (!empty($peliculas)): ?>
-            <?php foreach ($peliculas as $peli): ?>
-                <?php 
-                    $id_peli = intval($peli['id_peliculas'] ?? 0);
-                    $cats_array = array_map('trim', explode(',', $peli['id_categoria']));
-                    $nombre = $peli['nombre'] ?? 'Sin nombre';
-                    $portada = !empty($peli['portada_url']) ? $peli['portada_url'] : 'https://via.placeholder.com/300x450?text=Sin+Portada';
-                    $audio = !empty($peli['audio']) ? $peli['audio'] : 'LAT';
-                    $tiempo_general = floatval($peli['reproduccion'] ?? 0);
-                ?>
-                <a href="ver.php?id=<?php echo $id_peli; ?>" class="pelicula-card">
-                    <div class="portada-link">
-                        <img src="<?php echo htmlspecialchars($portada); ?>" alt="Portada" loading="lazy" class="pelicula-portada">
-                        <?php if ($tiempo_general > 0): ?>
-                            <div class="tiempo-overlay">▶ <?php echo formatearTiempo($tiempo_general); ?></div>
-                        <?php endif; ?>
-                        <img src="../images/empresa/logo.png" alt="Logo" class="logo-empresa-overlay" onerror="this.style.display='none'">
-                        <div class="audio-overlay">🔊 <?php echo htmlspecialchars($audio); ?></div>
-                    </div>
-                    <div class="pelicula-info">
-                        <h3><?php echo htmlspecialchars($nombre); ?></h3>
-                        <div class="categorias-texto"><?php echo htmlspecialchars(implode(', ', $cats_array)); ?></div>
-                    </div>
-                </a>
-            <?php endforeach; ?>
+    <!-- Géneros con recuento dinámico de películas -->
+    <div class="categories-bar">
+        <span style="font-size: 11px; color: #9ca3af; align-self: center; white-space: nowrap;">Género:</span>
+        <?php
+        $parentParam = !empty($libraryId) ? "&ParentId=".$libraryId : "";
+        foreach($allowedGenres as $gName) {
+            $genreCountUrl = $server . "/Items?Recursive=true&IncludeItemTypes=Movie&Limit=0&Genres=" . urlencode($gName) . $parentParam;
+            $genreCountData = fetchJellyfin($genreCountUrl, $apikey);
+            $genreCount = $genreCountData['TotalRecordCount'] ?? 0;
+
+            $activeGenre = ($genreFilter === $gName) ? 'background:#ea580c;' : 'background:#374151;';
+            $libraryParam = !empty($libraryId) ? '&library='.$libraryId : '';
+            echo '<a href="?genre='.urlencode($gName).$libraryParam.$langParam.'" class="category-chip" style="'.$activeGenre.'">'.$gName.' ('.$genreCount.')</a>';
+        }
+        ?>
+    </div>
+
+    <!-- Buscador y Selección de Idioma -->
+    <form method="GET" class="search-form">
+        <?php 
+        if(!empty($libraryId)) echo '<input type="hidden" name="library" value="'.$libraryId.'">'; 
+        if(!empty($genreFilter)) echo '<input type="hidden" name="genre" value="'.htmlspecialchars($genreFilter).'">'; 
+        ?>
+        
+        <!-- Select de Selección de Idioma -->
+        <select name="lang" class="clientes-input" onchange="this.form.submit()" style="max-width: 180px;">
+            <option value="">Todos los idiomas</option>
+            <option value="es" <?= ($langFilter === 'es') ? 'selected' : '' ?>>Español</option>
+            <option value="en" <?= ($langFilter === 'en') ? 'selected' : '' ?>>Inglés</option>
+        </select>
+
+        <input type="text" name="search" class="clientes-input" placeholder="Buscar película..." value="<?= htmlspecialchars($_GET['search'] ?? '') ?>">
+        <button type="submit" class="primary-btn">Buscar</button>
+    </form>
+
+    <?php
+    $baseUrlParams = "Recursive=true&Fields=MediaSources,MediaStreams,ProductionYear,Overview,Genres";
+    if(!empty($libraryId)) {
+        $baseUrlParams .= "&ParentId=".$libraryId."&IncludeItemTypes=Movie,Series";
+    } else {
+        $baseUrlParams .= "&IncludeItemTypes=Movie";
+    }
+    if(!empty($genreFilter)) {
+        $baseUrlParams .= "&Genres=".urlencode($genreFilter);
+    }
+    if(!empty($_GET['search'])) {
+        $baseUrlParams .= "&SearchTerm=".urlencode(trim($_GET['search']));
+    }
+
+    $countUrl = $server."/Items?".$baseUrlParams."&Limit=0";
+    $countData = fetchJellyfin($countUrl, $apikey);
+    $totalRecords = isset($countData['TotalRecordCount']) ? intval($countData['TotalRecordCount']) : 0;
+
+    $pagedUrl = $server."/Items?".$baseUrlParams."&StartIndex=".$startIndex."&Limit=".$limitPerPage;
+    $bibData = fetchJellyfin($pagedUrl, $apikey);
+
+    $rawItemsList = $bibData['Items'] ?? [];
+    
+    // Filtrar localmente por idioma si el usuario seleccionó una opción
+    $itemsList = [];
+    if (!empty($rawItemsList)) {
+        foreach ($rawItemsList as $item) {
+            $streams = $item['MediaSources'][0]['MediaStreams'] ?? ($item['MediaStreams'] ?? []);
+            if (hasLanguage($streams, $langFilter)) {
+                $itemsList[] = $item;
+            }
+        }
+    }
+
+    $currentShownCount = count($itemsList);
+    
+    if (empty($langFilter)) {
+        if ($totalRecords === 0 && $currentShownCount > 0) {
+            $totalRecords = isset($bibData['TotalRecordCount']) ? intval($bibData['TotalRecordCount']) : $currentShownCount;
+        }
+        $endRecord = min($startIndex + $currentShownCount, $totalRecords);
+        $startRecord = $totalRecords > 0 ? $startIndex + 1 : 0;
+    } else {
+        $totalRecords = $currentShownCount;
+        $startRecord = $totalRecords > 0 ? 1 : 0;
+        $endRecord = $totalRecords;
+    }
+    
+    $hasMore = $endRecord < $totalRecords;
+    $totalPages = max(1, ceil($totalRecords / $limitPerPage));
+    ?>
+
+    <div class="pagination-info">
+        <span>Mostrando registros <strong><?= $startRecord ?> - <?= $endRecord ?></strong> de un total de <strong><?= $totalRecords ?></strong></span>
+        <?php if($hasMore || $totalPages > 1): ?>
+            <span style="color: #3b82f6; font-weight: bold;">Hay más páginas disponibles ➔</span>
         <?php else: ?>
-            <div class="sin-resultados">
-                No encontramos películas con esos criterios de búsqueda o filtro. 🍿
-            </div>
+            <span style="color: #10b981;">Fin de los resultados</span>
         <?php endif; ?>
     </div>
 
-    <!-- PAGINACIÓN INFERIOR -->
-    <div class="paginacion-contenedor">
-        <span>Página <strong><?php echo $pagina_actual; ?></strong> de <strong><?php echo $total_paginas; ?></strong></span>
-        <div class="paginacion-botones">
-            <a href="<?php echo obtenerUrlPaginacion($pagina_actual - 1); ?>" class="btn-pag <?php echo ($pagina_actual <= 1) ? 'disabled' : ''; ?>">⬅ Anterior</a>
-            <a href="<?php echo obtenerUrlPaginacion($pagina_actual + 1); ?>" class="btn-pag <?php echo ($pagina_actual >= $total_paginas) ? 'disabled' : ''; ?>">Siguiente ➡</a>
-        </div>
+    <!-- LISTADO FLUIDO ADAPTATIVO CON CSS GRID -->
+    <div class="movies-grid-container">
+        <?php
+        if($currentShownCount > 0) {
+            foreach($itemsList as $m) {
+                $res = "SD";
+                $streams = $m['MediaSources'][0]['MediaStreams'] ?? ($m['MediaStreams'] ?? []);
+
+                if(!empty($streams)) {
+                    foreach($streams as $stream) {
+                        if(($stream['Type'] ?? '') == 'Video') {
+                            $w = $stream['Width'] ?? 0;
+                            $res = ($w >= 3840) ? "4K" : (($w >= 1920) ? "1080p" : (($w >= 1280) ? "720p" : "SD"));
+                            break;
+                        }
+                    }
+                }
+
+                $movieId = $m['Id'];
+                $movieName = htmlspecialchars($m['Name'], ENT_QUOTES);
+                $year = $m['ProductionYear'] ?? 'N/A';
+                $poster = $server."/Items/".$movieId."/Images/Primary?MaxWidth=300";
+                $languages = getLanguages($streams);
+
+                echo '
+                <div class="movie-card-grid">
+                    <div>
+                        <a href="index_sistema.php?id='.$movieId.'" class="poster-container" style="display:block;">
+                            <div class="watermark-badge">
+                                <img src="../images/empresa/logo.png" alt="Logo">
+                            </div>
+                            <img src="'.$poster.'" class="poster-img" alt="'.$movieName.'">
+                            <div class="lang-badge">'.$languages.'</div>
+                        </a>
+                        <div style="padding: 6px 8px 8px 8px;">
+                            <div class="movie-title-mobile" title="'.$movieName.'">'.$movieName.'</div>
+                            <div class="movie-meta-mobile">'.$year.' • '.$res.'</div>
+                        </div>
+                    </div>
+                </div>';
+            }
+        } else {
+            echo '<div style="color:#9ca3af; text-align:center; padding:30px; grid-column: 1 / -1;">No se encontraron resultados para el idioma o búsqueda especificada.</div>';
+        }
+        ?>
     </div>
 
-    <script>
-        // Enviar el buscador automáticamente al presionar Enter o escribir (con un pequeño retraso opcional)
-        let timerBusqueda;
-        const inputBuscador = document.getElementById('inputBuscador');
-        if (inputBuscador) {
-            inputBuscador.addEventListener('input', function() {
-                clearTimeout(timerBusqueda);
-                timerBusqueda = setTimeout(() => {
-                    document.getElementById('formFiltros').submit();
-                }, 600); // Espera 600ms de inactividad para enviar el formulario de búsqueda
-            });
+    <?php if($totalPages > 1): ?>
+    <div class="pagination-controls">
+        <?php 
+        $queryParams = [];
+        if(!empty($libraryId)) $queryParams['library'] = $libraryId;
+        if(!empty($genreFilter)) $queryParams['genre'] = $genreFilter;
+        if(!empty($langFilter)) $queryParams['lang'] = $langFilter;
+        if(!empty($_GET['search'])) $queryParams['search'] = $_GET['search'];
+        
+        $prevParams = $queryParams;
+        $prevParams['page'] = $page - 1;
+        $prevUrl = '?' . http_build_query($prevParams);
+
+        $nextParams = $queryParams;
+        $nextParams['page'] = $page + 1;
+        $nextUrl = '?' . http_build_query($nextParams);
+        ?>
+
+        <a href="<?= $prevUrl ?>" class="pagination-btn <?= ($page <= 1) ? 'disabled' : '' ?>">◀ Anterior</a>
+        <span style="font-size: 13px; color: #e5e7eb;">Página <?= $page ?> de <?= $totalPages ?> (Total: <?= $totalRecords ?>)</span>
+        <a href="<?= $nextUrl ?>" class="pagination-btn <?= ($page >= $totalPages) ? 'disabled' : '' ?>">Siguiente ➔</a>
+    </div>
+    <?php endif; ?>
+</div>
+
+</div>
+
+</body>
+</html><!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Streaming Móvil y PC</title>
+<link rel="stylesheet" href="../css/styles.css" />
+<style>
+    /* --- RESET Y ESTILOS BASE --- */
+    * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+        background-color: #0b0f19;
+        color: #fff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        margin: 0;
+        padding: 10px;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+
+    /* Envoltorio principal para PC */
+    .app-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        width: 100%;
+    }
+
+    /* --- ENCABEZADO Y LOGO --- */
+    .app-header {
+        display: flex;
+        align-items: center;
+        padding: 10px 5px 15px 5px;
+    }
+
+    .app-logo {
+        height: 38px;
+        width: auto;
+        object-fit: contain;
+    }
+
+    /* --- PANELES --- */
+    .panel-dark {
+        background: #111827;
+        border-radius: 12px;
+        padding: 15px;
+        margin-bottom: 15px;
+        border: 1px solid #1f2937;
+    }
+
+    .isp-title {
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 12px;
+        color: #f3f4f6;
+    }
+
+    /* --- CONTENEDORES HORIZONTALES (Swipe / Scroll) --- */
+    .mobile-scroll-container {
+        display: flex;
+        gap: 12px;
+        overflow-x: auto;
+        scroll-behavior: smooth;
+        padding-bottom: 10px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .mobile-scroll-container::-webkit-scrollbar,
+    .categories-bar::-webkit-scrollbar {
+        height: 6px;
+    }
+    .mobile-scroll-container::-webkit-scrollbar-track,
+    .categories-bar::-webkit-scrollbar-track {
+        background: #111827;
+        border-radius: 10px;
+    }
+    .mobile-scroll-container::-webkit-scrollbar-thumb,
+    .categories-bar::-webkit-scrollbar-thumb {
+        background: #374151;
+        border-radius: 10px;
+    }
+
+    /* --- MARCA DE AGUA Y SUPERPOSICIONES SOBRE LA PORTADA --- */
+    .poster-container {
+        position: relative;
+        width: 100%;
+        overflow: hidden;
+    }
+
+    .watermark-badge {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background-color: rgba(255, 255, 255, 0.4);
+        backdrop-filter: blur(2px);
+        border-radius: 6px;
+        padding: 6px 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2;
+        pointer-events: none;
+    }
+
+    .watermark-badge img {
+        height: 28px;
+        width: auto;
+        object-fit: contain;
+    }
+
+    /* Badge para mostrar los idiomas en la parte inferior de la portada */
+    .lang-badge {
+        position: absolute;
+        bottom: 6px;
+        left: 6px;
+        right: 6px;
+        background-color: rgba(0, 0, 0, 0.75);
+        backdrop-filter: blur(2px);
+        border-radius: 4px;
+        padding: 3px 6px;
+        font-size: 9px;
+        font-weight: bold;
+        color: #38bdf8;
+        text-transform: uppercase;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-align: center;
+        z-index: 2;
+        pointer-events: none;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* BARRA DE PROGRESO "CONTINUAR VIENDO" */
+    .progress-bar-bg {
+        width: 100%;
+        height: 5px;
+        background-color: rgba(255, 255, 255, 0.2);
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        z-index: 3;
+    }
+
+    .progress-bar-fill {
+        height: 100%;
+        background-color: #2563eb;
+    }
+
+    /* --- TARJETAS MÓVILES / RECIENTES --- */
+    .movie-card-mobile {
+        flex: 0 0 130px;
+        max-width: 130px;
+        background: #1f2937;
+        border-radius: 8px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .movie-card-mobile:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+    }
+
+    .movie-card-mobile img.poster-img {
+        width: 100%;
+        height: 190px;
+        object-fit: cover;
+        display: block;
+        cursor: pointer;
+    }
+
+    .movie-title-mobile {
+        font-size: 11px;
+        font-weight: bold;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 2px;
+        color: #f9fafb;
+    }
+
+    .movie-meta-mobile {
+        font-size: 10px;
+        color: #9ca3af;
+        margin-bottom: 2px;
+    }
+
+    /* --- GRID ADAPTATIVO PARA BIBLIOTECA COMPLETA --- */
+    .movies-grid-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+        gap: 12px;
+        width: 100%;
+        margin-top: 10px;
+    }
+
+    .movie-card-grid {
+        background: #1f2937;
+        border-radius: 8px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .movie-card-grid:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 18px rgba(0,0,0,0.5);
+    }
+
+    .movie-card-grid img.poster-img {
+        width: 100%;
+        height: 200px;
+        object-fit: cover;
+        display: block;
+        cursor: pointer;
+    }
+
+    /* --- BUSCADOR Y FORMULARIO --- */
+    .search-form {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 15px;
+        max-width: 800px;
+        flex-wrap: wrap;
+    }
+
+    .clientes-input {
+        flex: 1;
+        min-width: 160px;
+        background: #1f2937;
+        border: 1px solid #374151;
+        color: white;
+        padding: 10px;
+        border-radius: 8px;
+        font-size: 14px;
+        outline: none;
+    }
+
+    .clientes-input:focus {
+        border-color: #2563eb;
+    }
+
+    .primary-btn {
+        background: #2563eb;
+        color: white;
+        border: none;
+        padding: 10px 18px;
+        border-radius: 8px;
+        font-weight: bold;
+        font-size: 14px;
+        text-decoration: none;
+        display: inline-block;
+        text-align: center;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .primary-btn:hover {
+        background: #1d4ed8;
+    }
+
+    /* --- BARRAS DE CATEGORÍAS Y GÉNEROS --- */
+    .categories-bar {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        margin-bottom: 10px;
+        padding-bottom: 6px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .category-chip {
+        padding: 7px 14px;
+        color: white;
+        text-decoration: none;
+        border-radius: 8px;
+        white-space: nowrap;
+        font-size: 12px;
+        font-weight: 500;
+        transition: opacity 0.2s ease;
+    }
+
+    .category-chip:hover {
+        opacity: 0.85;
+    }
+
+    /* --- PAGINACIÓN --- */
+    .pagination-info {
+        font-size: 12px;
+        color: #9ca3af;
+        margin-bottom: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+
+    .pagination-controls {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        margin-top: 20px;
+        align-items: center;
+    }
+
+    .pagination-btn {
+        background: #1f2937;
+        color: white;
+        border: 1px solid #374151;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-weight: bold;
+        font-size: 13px;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .pagination-btn:hover {
+        background: #374151;
+    }
+
+    .pagination-btn.disabled {
+        opacity: 0.4;
+        pointer-events: none;
+    }
+
+    /* --- MEDIA QUERIES PARA PC / TABLET --- */
+    @media (min-width: 768px) {
+        body {
+            padding: 20px;
         }
-    </script>
+
+        .movies-grid-container {
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 16px;
+        }
+
+        .movie-card-grid img.poster-img {
+            height: 240px;
+        }
+
+        .movie-card-mobile {
+            flex: 0 0 150px;
+            max-width: 150px;
+        }
+
+        .movie-card-mobile img.poster-img {
+            height: 220px;
+        }
+
+        .isp-title {
+            font-size: 20px;
+        }
+
+        .movie-title-mobile {
+            font-size: 12px;
+        }
+
+        .lang-badge {
+            font-size: 10px;
+            padding: 4px 8px;
+        }
+    }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+
+<?php
+require('../conectar.php');
+
+/* --- 1. CONFIGURACIÓN E INICIALIZACIÓN --- */
+$resultado = $conexion->query("SELECT api, ip FROM jellyfin LIMIT 1");
+
+if ($resultado && $fila = $resultado->fetch_assoc()) {
+    $apikey = $fila['api'];
+    $ip_db = trim($fila['ip']);
+
+    $host_ping = preg_replace('#^https?://#', '', $ip_db);
+    if (strpos($host_ping, ':') !== false) {
+        $partes_host = explode(':', $host_ping);
+        $host_ping = $partes_host[0];
+    }
+    $host_ping = rtrim($host_ping, '/');
+
+    $ping_cmd = "ping -c 1 -W 1 " . escapeshellarg($host_ping);
+    exec($ping_cmd, $output, $status);
+
+    if ($status === 0) {
+        $server = rtrim($ip_db, "/");
+    } else {
+        $ip_limpia = preg_replace('#^https?://#', '', $ip_db);
+        if (strpos($ip_limpia, ':') !== false) {
+            $partes_limpias = explode(':', $ip_limpia);
+            $ip_limpia = $partes_limpias[0];
+        }
+        $ip_limpia = rtrim($ip_limpia, '/');
+        if (empty($ip_limpia)) { $ip_limpia = "127.0.0.1"; }
+        
+        $server = "http://" . $ip_limpia . ":30013";
+        echo '<script>
+            alert("No se puede conectar al equipo Jellyfin. Redirigiendo...");
+            window.location.href = "../configuracion/streaming.php";
+        </script>';
+        exit;
+    }
+} else {
+    echo '<script>
+        alert("No se encontró configuración de Jellyfin.");
+        window.location.href = "../configuracion/streaming.php";
+    </script>';
+    exit;
+}
+
+$server = "http://" . $server . ":30013";
+
+/* --- FUNCIÓN API --- */
+function fetchJellyfin($url, $apiKey) {
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ["X-Emby-Token: $apiKey"]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    return json_decode($response, true);
+}
+
+/* --- FUNCIÓN AUXILIAR PARA EXTRAER IDIOMAS --- */
+function getLanguages($streams) {
+    $langs = [];
+    if(is_array($streams)) {
+        foreach($streams as $s) {
+            if(($s['Type'] ?? '') === 'Audio' && !empty($s['Language'])) {
+                $lang = strtoupper(substr($s['Language'], 0, 3));
+                if(!in_array($lang, $langs)) {
+                    $langs[] = $lang;
+                }
+            }
+        }
+    }
+    return !empty($langs) ? implode(' • ', $langs) : 'UND';
+}
+
+/* --- FUNCIÓN VERIFICADORA DE FILTRADO POR IDIOMA --- */
+function hasLanguage($streams, $targetLang) {
+    if (empty($targetLang) || !is_array($streams)) return true;
+    
+    foreach ($streams as $s) {
+        if (($s['Type'] ?? '') === 'Audio' && !empty($s['Language'])) {
+            $langCode = strtolower($s['Language']);
+            if ($targetLang === 'es' && in_array($langCode, ['spa', 'es', 'spanish', 'esp'])) {
+                return true;
+            }
+            if ($targetLang === 'en' && in_array($langCode, ['eng', 'en', 'english', 'ing'])) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Obtener películas recientes
+$recentMovies = fetchJellyfin("$server/Items?IncludeItemTypes=Movie&Recursive=true&SortBy=DateCreated&SortOrder=Descending&Limit=20&Fields=MediaSources,MediaStreams,ProductionYear,Overview,Genres", $apikey);
+
+// Obtener Usuario y Librerías
+$userData = fetchJellyfin("$server/Users", $apikey);
+$userId = $userData[0]['Id'] ?? '';
+
+// OBTENER CONTENIDO EN PROGRESO (Ruta nativa Resume)
+$continueWatching = [];
+if (!empty($userId)) {
+    $continueWatching = fetchJellyfin("$server/Users/$userId/Items/Resume?Limit=20&MediaTypes=Video&Fields=MediaSources,MediaStreams,ProductionYear,Overview", $apikey);
+}
+
+$libraries = !empty($userId) ? fetchJellyfin("$server/Users/".$userId."/Views", $apikey) : [];
+$libraryId = $_GET['library'] ?? '';
+$genreFilter = $_GET['genre'] ?? '';
+$langFilter = $_GET['lang'] ?? '';
+
+// Paginación a 200 elementos por página
+$limitPerPage = 200;
+$page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+$startIndex = ($page - 1) * $limitPerPage;
+
+// Lista fija de géneros permitidos
+$allowedGenres = [
+    'Accion', 'Animacion', 'Aventura', 'Belica', 'Ciencia Ficcion', 
+    'Comedia', 'Crimen', 'Documental', 'Drama', 'Familia', 
+    'Fantasia', 'Horror', 'Misterio', 'Romance', 'Terror', 'War'
+];
+?>
+
+<div class="app-header">
+    <img src="../images/empresa/logo.png" alt="Logo Empresa" class="app-logo">
+</div>
+
+<!-- SECCIÓN: ÚLTIMAS PELÍCULAS -->
+<div class="panel-dark">
+    <div class="isp-title">Últimas películas</div>
+    <div class="mobile-scroll-container">
+        <?php
+        if(isset($recentMovies['Items'])) {
+            foreach($recentMovies['Items'] as $m) {
+                $res = "HD";
+                $year = $m['ProductionYear'] ?? '----';
+                $streams = $m['MediaStreams'] ?? [];
+
+                if(isset($m['MediaStreams'])) {
+                    foreach($m['MediaStreams'] as $s) {
+                        if(($s['Type'] ?? '') == 'Video') {
+                            $res = ($s['Width'] >= 3840) ? '4K' : (($s['Width'] >= 1920) ? '1080p' : '720p');
+                        }
+                    }
+                }
+
+                $movieId = $m['Id'];
+                $movieName = htmlspecialchars($m['Name'], ENT_QUOTES);
+                $languages = getLanguages($streams);
+
+                echo '
+                <div class="movie-card-mobile">
+                    <div>
+                        <a href="index_sistema.php?id='.$movieId.'" class="poster-container" style="display:block;">
+                            <div class="watermark-badge">
+                                <img src="../images/empresa/logo.png" alt="Logo">
+                            </div>
+                            <img src="'.$server.'/Items/'.$movieId.'/Images/Primary?Format=jpg&MaxWidth=300" class="poster-img" alt="'.$movieName.'">
+                            <div class="lang-badge">'.$languages.'</div>
+                        </a>
+                        <div style="padding: 6px 8px 8px 8px;">
+                            <div class="movie-title-mobile" title="'.$movieName.'">'.$movieName.'</div>
+                            <div class="movie-meta-mobile">'.$year.' • '.$res.'</div>
+                        </div>
+                    </div>
+                </div>';
+            }
+        }
+        ?>
+    </div>
+</div>
+
+<!-- SECCIÓN: CONTINUAR VIENDO -->
+<?php if (!empty($continueWatching['Items'])): ?>
+<div class="panel-dark">
+    <div class="isp-title">Continuar viendo</div>
+    <div class="mobile-scroll-container">
+        <?php
+        foreach ($continueWatching['Items'] as $cw) {
+            $res = "HD";
+            $year = $cw['ProductionYear'] ?? '----';
+            $streams = $cw['MediaStreams'] ?? ($cw['MediaSources'][0]['MediaStreams'] ?? []);
+
+            if(!empty($streams)) {
+                foreach($streams as $s) {
+                    if(($s['Type'] ?? '') == 'Video') {
+                        $w = $s['Width'] ?? 0;
+                        $res = ($w >= 3840) ? '4K' : (($w >= 1920) ? '1080p' : '720p');
+                        break;
+                    }
+                }
+            }
+
+            $movieId = $cw['Id'];
+            $movieName = htmlspecialchars($cw['Name'], ENT_QUOTES);
+            $languages = getLanguages($streams);
+
+            $playedPercent = 0;
+            if (isset($cw['UserData']['PlayedPercentage'])) {
+                $playedPercent = round($cw['UserData']['PlayedPercentage']);
+            } elseif (isset($cw['UserData']['PlaybackPositionTicks']) && isset($cw['RunTimeTicks']) && $cw['RunTimeTicks'] > 0) {
+                $playedPercent = round(($cw['UserData']['PlaybackPositionTicks'] / $cw['RunTimeTicks']) * 100);
+            }
+
+            echo '
+            <div class="movie-card-mobile">
+
+                <div>
+                    <a href="index_sistema.php?id='.$movieId.'" class="poster-container" style="display:block;">
+                        <div class="watermark-badge">
+                            <img src="../images/empresa/logo.png" alt="Logo">
+                        </div>
+                        <img src="'.$server.'/Items/'.$movieId.'/Images/Primary?Format=jpg&MaxWidth=300" class="poster-img" alt="'.$movieName.'">
+                        <div class="lang-badge">'.$languages.'</div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" style="width: '.$playedPercent.'%;"></div>
+                        </div>
+                    </a>
+                    <div style="padding: 6px 8px 8px 8px;">
+                        <div class="movie-title-mobile" title="'.$movieName.'">'.$movieName.'</div>
+                        <div class="movie-meta-mobile">'.$year.' • '.$res.'</div>
+                    </div>
+                </div>
+            </div>';
+        }
+        ?>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- SECCIÓN: BIBLIOTECA COMPLETA -->
+<div class="panel-dark">
+    <div class="isp-title">Biblioteca Completa</div>
+
+    <!-- Categorías de Librerías -->
+    <div class="categories-bar">
+        <?php 
+        $langParam = !empty($langFilter) ? '&lang='.urlencode($langFilter) : '';
+        ?>
+        <a href="?<?= !empty($langFilter) ? 'lang='.urlencode($langFilter) : '' ?>" class="category-chip" style="<?= (empty($libraryId) && empty($genreFilter)) ? 'background:#2563eb;' : 'background:#1f2937;' ?>">Todas</a>
+        <?php
+        if(isset($libraries['Items'])) {
+            foreach($libraries['Items'] as $lib) {
+                if (($lib['CollectionType'] ?? 'folder') === 'boxsets') continue;
+                $active = ($libraryId == $lib['Id']) ? 'background:#2563eb;' : 'background:#1f2937;';
+                echo '<a href="?library='.$lib['Id'].$langParam.'" class="category-chip" style="'.$active.'">'.$lib['Name'].'</a>';
+            }
+        }
+        ?>
+    </div>
+
+    <!-- Géneros con recuento dinámico de películas -->
+    <div class="categories-bar">
+        <span style="font-size: 11px; color: #9ca3af; align-self: center; white-space: nowrap;">Género:</span>
+        <?php
+        $parentParam = !empty($libraryId) ? "&ParentId=".$libraryId : "";
+        foreach($allowedGenres as $gName) {
+            $genreCountUrl = $server . "/Items?Recursive=true&IncludeItemTypes=Movie&Limit=0&Genres=" . urlencode($gName) . $parentParam;
+            $genreCountData = fetchJellyfin($genreCountUrl, $apikey);
+            $genreCount = $genreCountData['TotalRecordCount'] ?? 0;
+
+            $activeGenre = ($genreFilter === $gName) ? 'background:#ea580c;' : 'background:#374151;';
+            $libraryParam = !empty($libraryId) ? '&library='.$libraryId : '';
+            echo '<a href="?genre='.urlencode($gName).$libraryParam.$langParam.'" class="category-chip" style="'.$activeGenre.'">'.$gName.' ('.$genreCount.')</a>';
+        }
+        ?>
+    </div>
+
+    <!-- Buscador y Selección de Idioma -->
+    <form method="GET" class="search-form">
+        <?php 
+        if(!empty($libraryId)) echo '<input type="hidden" name="library" value="'.$libraryId.'">'; 
+        if(!empty($genreFilter)) echo '<input type="hidden" name="genre" value="'.htmlspecialchars($genreFilter).'">'; 
+        ?>
+        
+        <!-- Select de Selección de Idioma -->
+        <select name="lang" class="clientes-input" onchange="this.form.submit()" style="max-width: 180px;">
+            <option value="">Todos los idiomas</option>
+            <option value="es" <?= ($langFilter === 'es') ? 'selected' : '' ?>>Español</option>
+            <option value="en" <?= ($langFilter === 'en') ? 'selected' : '' ?>>Inglés</option>
+        </select>
+
+        <input type="text" name="search" class="clientes-input" placeholder="Buscar película..." value="<?= htmlspecialchars($_GET['search'] ?? '') ?>">
+        <button type="submit" class="primary-btn">Buscar</button>
+    </form>
+
+    <?php
+    $baseUrlParams = "Recursive=true&Fields=MediaSources,MediaStreams,ProductionYear,Overview,Genres";
+    if(!empty($libraryId)) {
+        $baseUrlParams .= "&ParentId=".$libraryId."&IncludeItemTypes=Movie,Series";
+    } else {
+        $baseUrlParams .= "&IncludeItemTypes=Movie";
+    }
+    if(!empty($genreFilter)) {
+        $baseUrlParams .= "&Genres=".urlencode($genreFilter);
+    }
+    if(!empty($_GET['search'])) {
+        $baseUrlParams .= "&SearchTerm=".urlencode(trim($_GET['search']));
+    }
+
+    $countUrl = $server."/Items?".$baseUrlParams."&Limit=0";
+    $countData = fetchJellyfin($countUrl, $apikey);
+    $totalRecords = isset($countData['TotalRecordCount']) ? intval($countData['TotalRecordCount']) : 0;
+
+    $pagedUrl = $server."/Items?".$baseUrlParams."&StartIndex=".$startIndex."&Limit=".$limitPerPage;
+    $bibData = fetchJellyfin($pagedUrl, $apikey);
+
+    $rawItemsList = $bibData['Items'] ?? [];
+    
+    // Filtrar localmente por idioma si el usuario seleccionó una opción
+    $itemsList = [];
+    if (!empty($rawItemsList)) {
+        foreach ($rawItemsList as $item) {
+            $streams = $item['MediaSources'][0]['MediaStreams'] ?? ($item['MediaStreams'] ?? []);
+            if (hasLanguage($streams, $langFilter)) {
+                $itemsList[] = $item;
+            }
+        }
+    }
+
+    $currentShownCount = count($itemsList);
+    
+    if (empty($langFilter)) {
+        if ($totalRecords === 0 && $currentShownCount > 0) {
+            $totalRecords = isset($bibData['TotalRecordCount']) ? intval($bibData['TotalRecordCount']) : $currentShownCount;
+        }
+        $endRecord = min($startIndex + $currentShownCount, $totalRecords);
+        $startRecord = $totalRecords > 0 ? $startIndex + 1 : 0;
+    } else {
+        $totalRecords = $currentShownCount;
+        $startRecord = $totalRecords > 0 ? 1 : 0;
+        $endRecord = $totalRecords;
+    }
+    
+    $hasMore = $endRecord < $totalRecords;
+    $totalPages = max(1, ceil($totalRecords / $limitPerPage));
+    ?>
+
+    <div class="pagination-info">
+        <span>Mostrando registros <strong><?= $startRecord ?> - <?= $endRecord ?></strong> de un total de <strong><?= $totalRecords ?></strong></span>
+        <?php if($hasMore || $totalPages > 1): ?>
+            <span style="color: #3b82f6; font-weight: bold;">Hay más páginas disponibles ➔</span>
+        <?php else: ?>
+            <span style="color: #10b981;">Fin de los resultados</span>
+        <?php endif; ?>
+    </div>
+
+    <!-- LISTADO FLUIDO ADAPTATIVO CON CSS GRID -->
+    <div class="movies-grid-container">
+        <?php
+        if($currentShownCount > 0) {
+            foreach($itemsList as $m) {
+                $res = "SD";
+                $streams = $m['MediaSources'][0]['MediaStreams'] ?? ($m['MediaStreams'] ?? []);
+
+                if(!empty($streams)) {
+                    foreach($streams as $stream) {
+                        if(($stream['Type'] ?? '') == 'Video') {
+                            $w = $stream['Width'] ?? 0;
+                            $res = ($w >= 3840) ? "4K" : (($w >= 1920) ? "1080p" : (($w >= 1280) ? "720p" : "SD"));
+                            break;
+                        }
+                    }
+                }
+
+                $movieId = $m['Id'];
+                $movieName = htmlspecialchars($m['Name'], ENT_QUOTES);
+                $year = $m['ProductionYear'] ?? 'N/A';
+                $poster = $server."/Items/".$movieId."/Images/Primary?MaxWidth=300";
+                $languages = getLanguages($streams);
+
+                echo '
+                <div class="movie-card-grid">
+                    <div>
+                        <a href="index_sistema.php?id='.$movieId.'" class="poster-container" style="display:block;">
+                            <div class="watermark-badge">
+                                <img src="../images/empresa/logo.png" alt="Logo">
+                            </div>
+                            <img src="'.$poster.'" class="poster-img" alt="'.$movieName.'">
+                            <div class="lang-badge">'.$languages.'</div>
+                        </a>
+                        <div style="padding: 6px 8px 8px 8px;">
+                            <div class="movie-title-mobile" title="'.$movieName.'">'.$movieName.'</div>
+                            <div class="movie-meta-mobile">'.$year.' • '.$res.'</div>
+                        </div>
+                    </div>
+                </div>';
+            }
+        } else {
+            echo '<div style="color:#9ca3af; text-align:center; padding:30px; grid-column: 1 / -1;">No se encontraron resultados para el idioma o búsqueda especificada.</div>';
+        }
+        ?>
+    </div>
+
+    <?php if($totalPages > 1): ?>
+    <div class="pagination-controls">
+        <?php 
+        $queryParams = [];
+        if(!empty($libraryId)) $queryParams['library'] = $libraryId;
+        if(!empty($genreFilter)) $queryParams['genre'] = $genreFilter;
+        if(!empty($langFilter)) $queryParams['lang'] = $langFilter;
+        if(!empty($_GET['search'])) $queryParams['search'] = $_GET['search'];
+        
+        $prevParams = $queryParams;
+        $prevParams['page'] = $page - 1;
+        $prevUrl = '?' . http_build_query($prevParams);
+
+        $nextParams = $queryParams;
+        $nextParams['page'] = $page + 1;
+        $nextUrl = '?' . http_build_query($nextParams);
+        ?>
+
+        <a href="<?= $prevUrl ?>" class="pagination-btn <?= ($page <= 1) ? 'disabled' : '' ?>">◀ Anterior</a>
+        <span style="font-size: 13px; color: #e5e7eb;">Página <?= $page ?> de <?= $totalPages ?> (Total: <?= $totalRecords ?>)</span>
+        <a href="<?= $nextUrl ?>" class="pagination-btn <?= ($page >= $totalPages) ? 'disabled' : '' ?>">Siguiente ➔</a>
+    </div>
+    <?php endif; ?>
+</div>
+
+</div>
+
 </body>
 </html>

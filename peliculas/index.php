@@ -126,7 +126,6 @@
         object-fit: contain;
     }
 
-    /* Badge para mostrar los idiomas en la parte inferior de la portada */
     .lang-badge {
         position: absolute;
         bottom: 6px;
@@ -149,7 +148,6 @@
         border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
-    /* BARRA DE PROGRESO "CONTINUAR VIENDO" */
     .progress-bar-bg {
         width: 100%;
         height: 5px;
@@ -331,7 +329,6 @@
     .pagination-btn {
         background: #1f2937;
         color: white;
-
         border: 1px solid #374151;
         padding: 8px 16px;
         border-radius: 8px;
@@ -351,7 +348,6 @@
         pointer-events: none;
     }
 
-    /* --- MEDIA QUERIES PARA PC / TABLET --- */
     @media (min-width: 768px) {
         body {
             padding: 20px;
@@ -453,72 +449,104 @@ function fetchJellyfin($url, $apiKey) {
     return json_decode($response, true);
 }
 
-/* --- NORMALIZACIÓN DE CÓDIGOS DE IDIOMA --- */
-function normalizeLangCode($code) {
-    $c = strtolower(trim($code));
-    if (in_array($c, ['spa', 'es', 'spanish', 'esp', 'castellano', 'latino'])) return 'spa';
-    if (in_array($c, ['eng', 'en', 'english', 'ing'])) return 'eng';
-    if (in_array($c, ['fre', 'fra', 'fr', 'french'])) return 'fre';
-    if (in_array($c, ['ger', 'deu', 'de', 'german'])) return 'ger';
-    if (in_array($c, ['ita', 'it', 'italian'])) return 'ita';
-    if (in_array($c, ['por', 'pt', 'portuguese'])) return 'por';
-    if (in_array($c, ['jpn', 'ja', 'japanese'])) return 'jpn';
-    if (in_array($c, ['zho', 'chi', 'zh', 'chinese'])) return 'zho';
-    if (in_array($c, ['rus', 'ru', 'russian'])) return 'rus';
-    if (in_array($c, ['kor', 'ko', 'korean'])) return 'kor';
-    return !empty($c) ? substr($c, 0, 3) : 'und';
-}
-
-/* --- TRADUCCIÓN DE CÓDIGOS A TEXTO --- */
+/* --- TRADUCCIÓN DE CÓDIGOS ISO --- */
 function getLanguageName($code) {
-    $norm = normalizeLangCode($code);
+    $c = strtolower(trim($code));
     $map = [
-        'spa' => 'Español',
-        'eng' => 'Inglés',
-        'fre' => 'Francés',
-        'ger' => 'Alemán',
-        'ita' => 'Italiano',
-        'por' => 'Portugués',
-        'jpn' => 'Japonés',
-        'zho' => 'Chino',
-        'rus' => 'Ruso',
-        'kor' => 'Coreano'
+        'spa' => 'Español', 'es' => 'Español', 'spanish' => 'Español', 'castellano' => 'Español', 'Lat' => 'Español',
+        'eng' => 'Inglés', 'en' => 'Inglés', 'english' => 'Inglés', 'English' => 'Inglés',
+        'fra' => 'Francés', 'fre' => 'Francés', 'fr' => 'Francés', 'french' => 'Francés',
+        'ger' => 'Alemán', 'deu' => 'Alemán', 'de' => 'Alemán', 'german' => 'Alemán',
+        'ita' => 'Italiano', 'it' => 'Italiano', 'italian' => 'Italiano',
+        'por' => 'Portugués', 'pt' => 'Portugués', 'portuguese' => 'Portugués',
+        'jpn' => 'Japonés', 'ja' => 'Japonés', 'japanese' => 'Japonés',
+        'zho' => 'Chino', 'chi' => 'Chino', 'zh' => 'Chino', 'chinese' => 'Chino',
+        'rus' => 'Ruso', 'ru' => 'Ruso', 'russian' => 'Ruso',
+        'kor' => 'Coreano', 'ko' => 'Coreano', 'korean' => 'Coreano',
+        'cat' => 'Catalán', 'ca' => 'Catalán', 'catalan' => 'Catalán'
     ];
-    return $map[$norm] ?? strtoupper($norm);
+    return $map[$c] ?? strtoupper($c);
 }
 
-/* --- EXTRAER IDIOMAS DE UNA PELÍCULA --- */
-function getLanguages($streams) {
-    $langs = [];
-    if(is_array($streams)) {
-        foreach($streams as $s) {
-            if(($s['Type'] ?? '') === 'Audio') {
-                $rawLang = $s['Language'] ?? ($s['DisplayTitle'] ?? '');
-                if (!empty($rawLang)) {
-                    $norm = strtoupper(normalizeLangCode($rawLang));
-                    if(!in_array($norm, $langs) && $norm !== 'UND') {
-                        $langs[] = $norm;
-                    }
-                }
+/* --- EXTRACTOR GLOBAL DE STREAMS MULTIMEDIA --- */
+function extractStreams($movie) {
+    $streams = [];
+    if (!empty($movie['MediaStreams']) && is_array($movie['MediaStreams'])) {
+        $streams = array_merge($streams, $movie['MediaStreams']);
+    }
+    if (!empty($movie['MediaSources']) && is_array($movie['MediaSources'])) {
+        foreach ($movie['MediaSources'] as $source) {
+            if (!empty($source['MediaStreams']) && is_array($source['MediaStreams'])) {
+                $streams = array_merge($streams, $source['MediaStreams']);
             }
         }
     }
-    return !empty($langs) ? implode(' • ', $langs) : 'MULTI';
+    return $streams;
 }
 
-/* --- VERIFICAR IDIOMA ESPECÍFICO --- */
-function hasLanguage($streams, $targetLang) {
-    if (empty($targetLang) || !is_array($streams)) return true;
+/* --- OBTENER ETIQUETA DE IDIOMAS PARA LA TARJETA --- */
+function getLanguages($movie) {
+    $streams = extractStreams($movie);
+    $langs = [];
+    foreach ($streams as $s) {
+        if (($s['Type'] ?? '') === 'Audio' && !empty($s['Language'])) {
+            $name = getLanguageName($s['Language']);
+            if (!in_array($name, $langs)) {
+                $langs[] = $name;
+            }
+        }
+    }
+    return !empty($langs) ? implode(' • ', $langs) : 'Desconocido';
+}
+
+/* --- COMPROBAR SI CONTIENE UN IDIOMA ESPECÍFICO --- */
+function hasLanguage($movie, $targetLang) {
+    if (empty($targetLang)) return true;
     
-    $targetNorm = normalizeLangCode($targetLang);
+    $targetLang = strtolower(trim($targetLang));
+    $streams = extractStreams($movie);
+    
+    $spaMatches = ['spa', 'es', 'spanish', 'castellano', 'español'];
+    $engMatches = ['eng', 'en', 'english'];
+    $fraMatches = ['fra', 'fre', 'fr', 'french'];
+    $gerMatches = ['ger', 'deu', 'de', 'german'];
+    $itaMatches = ['ita', 'it', 'italian'];
+    $porMatches = ['por', 'pt', 'portuguese'];
+    $jpnMatches = ['jpn', 'ja', 'japanese'];
+    $zhoMatches = ['zho', 'chi', 'zh', 'chinese'];
+    $rusMatches = ['rus', 'ru', 'russian'];
+    $korMatches = ['kor', 'ko', 'korean'];
+    $catMatches = ['cat', 'ca', 'catalan'];
+
     foreach ($streams as $s) {
         if (($s['Type'] ?? '') === 'Audio') {
-            $rawLang = $s['Language'] ?? ($s['DisplayTitle'] ?? '');
-            if (!empty($rawLang)) {
-                $streamNorm = normalizeLangCode($rawLang);
-                if ($streamNorm === $targetNorm) {
-                    return true;
-                }
+            $lang = strtolower(trim($s['Language'] ?? ''));
+            $title = strtolower(trim($s['DisplayTitle'] ?? ''));
+            
+            if ($targetLang === 'spa') {
+                if (in_array($lang, $spaMatches) || strpos($title, 'spanish') !== false || strpos($title, 'español') !== false || strpos($title, 'spa') !== false) return true;
+            } elseif ($targetLang === 'eng') {
+                if (in_array($lang, $engMatches) || strpos($title, 'english') !== false) return true;
+            } elseif ($targetLang === 'fra') {
+                if (in_array($lang, $fraMatches) || strpos($title, 'french') !== false) return true;
+            } elseif ($targetLang === 'ger') {
+                if (in_array($lang, $gerMatches) || strpos($title, 'german') !== false) return true;
+            } elseif ($targetLang === 'ita') {
+                if (in_array($lang, $itaMatches) || strpos($title, 'italian') !== false) return true;
+            } elseif ($targetLang === 'por') {
+                if (in_array($lang, $porMatches) || strpos($title, 'portuguese') !== false) return true;
+            } elseif ($targetLang === 'jpn') {
+                if (in_array($lang, $jpnMatches) || strpos($title, 'japanese') !== false) return true;
+            } elseif ($targetLang === 'zho') {
+                if (in_array($lang, $zhoMatches) || strpos($title, 'chinese') !== false) return true;
+            } elseif ($targetLang === 'rus') {
+                if (in_array($lang, $rusMatches) || strpos($title, 'russian') !== false) return true;
+            } elseif ($targetLang === 'kor') {
+                if (in_array($lang, $korMatches) || strpos($title, 'korean') !== false) return true;
+            } elseif ($targetLang === 'cat') {
+                if (in_array($lang, $catMatches) || strpos($title, 'catalan') !== false) return true;
+            } else {
+                if ($lang === $targetLang) return true;
             }
         }
     }
@@ -544,7 +572,7 @@ $genreFilter = $_GET['genre'] ?? '';
 $langFilter = $_GET['lang'] ?? '';
 $searchTerm = $_GET['search'] ?? '';
 
-// Paginación a 200 items por página
+// Paginación fija de 200 ítems
 $limitPerPage = 200;
 $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
 
@@ -555,16 +583,32 @@ $allowedGenres = [
     'Fantasia', 'Horror', 'Misterio', 'Romance', 'Terror', 'War'
 ];
 
-/* --- CONSTRUCCIÓN SECURIZADA DE LA CONSULTA PRINCIPAL A JELLYFIN --- */
+$masterLanguages = [
+    'spa' => 'Español',
+    'eng' => 'Inglés',
+    'fra' => 'Francés',
+    'ger' => 'Alemán',
+    'ita' => 'Italiano',
+    'por' => 'Portugués',
+    'jpn' => 'Japonés',
+    'zho' => 'Chino',
+    'rus' => 'Ruso',
+    'kor' => 'Coreano',
+    'cat' => 'Catalán'
+];
+
+/* --- CONSULTA COMPLETA A LA API --- */
 $queryParams = [
     'Recursive' => 'true',
     'IncludeItemTypes' => 'Movie',
-    'Fields' => 'MediaSources,MediaStreams,ProductionYear,Overview,Genres'
+    'Fields' => 'MediaSources,MediaStreams,ProductionYear,Overview,Genres',
+    'Limit' => 5000 // Forzar a recuperar todas las películas registradas
 ];
 
 if (!empty($libraryId)) {
     $queryParams['ParentId'] = $libraryId;
 }
+
 if (!empty($genreFilter)) {
     $queryParams['Genres'] = $genreFilter;
 }
@@ -576,34 +620,6 @@ $baseQueryUrl = $server . "/Items?" . http_build_query($queryParams);
 $allMoviesData = fetchJellyfin($baseQueryUrl, $apikey);
 $allMoviesList = $allMoviesData['Items'] ?? [];
 
-/* --- DICIONARIO BASE Y ESCANEO DINÁMICO DE IDIOMAS --- */
-$detectedLanguages = [
-    'spa' => 'Español',
-    'eng' => 'Inglés',
-    'fre' => 'Francés',
-    'ger' => 'Alemán',
-    'ita' => 'Italiano',
-    'por' => 'Portugués',
-    'jpn' => 'Japonés'
-];
-
-foreach ($allMoviesList as $mItem) {
-    $mStreams = $mItem['MediaSources'][0]['MediaStreams'] ?? ($mItem['MediaStreams'] ?? []);
-    if (is_array($mStreams)) {
-        foreach ($mStreams as $st) {
-            if (($st['Type'] ?? '') === 'Audio') {
-                $rawL = $st['Language'] ?? ($st['DisplayTitle'] ?? '');
-                if (!empty($rawL)) {
-                    $normCode = normalizeLangCode($rawL);
-                    if ($normCode !== 'und' && !isset($detectedLanguages[$normCode])) {
-                        $detectedLanguages[$normCode] = getLanguageName($normCode);
-                    }
-                }
-            }
-        }
-    }
-}
-asort($detectedLanguages);
 ?>
 
 <div class="app-header">
@@ -618,8 +634,10 @@ asort($detectedLanguages);
     <div class="categories-bar">
         <?php 
         $langParam = !empty($langFilter) ? '&lang='.urlencode($langFilter) : '';
+        $isAllActive = empty($libraryId);
         ?>
-        <a href="?<?= !empty($langFilter) ? 'lang='.urlencode($langFilter) : '' ?>" class="category-chip" style="<?= (empty($libraryId) && empty($genreFilter)) ? 'background:#2563eb;' : 'background:#1f2937;' ?>">Todas</a>
+        <a href="?<?= !empty($langFilter) ? 'lang='.urlencode($langFilter) : '' ?>" class="category-chip" style="<?= $isAllActive ? 'background:#2563eb;' : 'background:#1f2937;' ?>">Todas</a>
+        
         <?php
         if(isset($libraries['Items'])) {
             foreach($libraries['Items'] as $lib) {
@@ -658,8 +676,8 @@ asort($detectedLanguages);
         <select name="lang" class="clientes-input" onchange="this.form.submit()" style="max-width: 200px;">
             <option value="">Todos los idiomas</option>
             <?php
-            foreach ($detectedLanguages as $isoCode => $langLabel) {
-                $selected = (normalizeLangCode($langFilter) === normalizeLangCode($isoCode)) ? 'selected' : '';
+            foreach ($masterLanguages as $isoCode => $langLabel) {
+                $selected = ($langFilter === $isoCode) ? 'selected' : '';
                 echo '<option value="'.htmlspecialchars($isoCode).'" '.$selected.'>'.htmlspecialchars($langLabel).'</option>';
             }
             ?>
@@ -678,19 +696,18 @@ asort($detectedLanguages);
                 foreach($recentMovies['Items'] as $m) {
                     $res = "HD";
                     $year = $m['ProductionYear'] ?? '----';
-                    $streams = $m['MediaStreams'] ?? [];
+                    $streams = extractStreams($m);
 
-                    if(isset($m['MediaStreams'])) {
-                        foreach($m['MediaStreams'] as $s) {
-                            if(($s['Type'] ?? '') == 'Video') {
-                                $res = ($s['Width'] >= 3840) ? '4K' : (($s['Width'] >= 1920) ? '1080p' : '720p');
-                            }
+                    foreach($streams as $s) {
+                        if(($s['Type'] ?? '') == 'Video') {
+                            $res = ($s['Width'] >= 3840) ? '4K' : (($s['Width'] >= 1920) ? '1080p' : '720p');
+                            break;
                         }
                     }
 
                     $movieId = $m['Id'];
                     $movieName = htmlspecialchars($m['Name'], ENT_QUOTES);
-                    $languages = getLanguages($streams);
+                    $languages = getLanguages($m);
 
                     echo '
                     <div class="movie-card-mobile">
@@ -723,21 +740,19 @@ asort($detectedLanguages);
             foreach ($continueWatching['Items'] as $cw) {
                 $res = "HD";
                 $year = $cw['ProductionYear'] ?? '----';
-                $streams = $cw['MediaStreams'] ?? ($cw['MediaSources'][0]['MediaStreams'] ?? []);
+                $streams = extractStreams($cw);
 
-                if(!empty($streams)) {
-                    foreach($streams as $s) {
-                        if(($s['Type'] ?? '') == 'Video') {
-                            $w = $s['Width'] ?? 0;
-                            $res = ($w >= 3840) ? '4K' : (($w >= 1920) ? '1080p' : '720p');
-                            break;
-                        }
+                foreach($streams as $s) {
+                    if(($s['Type'] ?? '') == 'Video') {
+                        $w = $s['Width'] ?? 0;
+                        $res = ($w >= 3840) ? '4K' : (($w >= 1920) ? '1080p' : '720p');
+                        break;
                     }
                 }
 
                 $movieId = $cw['Id'];
                 $movieName = htmlspecialchars($cw['Name'], ENT_QUOTES);
-                $languages = getLanguages($streams);
+                $languages = getLanguages($cw);
 
                 $playedPercent = 0;
                 if (isset($cw['UserData']['PlayedPercentage'])) {
@@ -771,15 +786,14 @@ asort($detectedLanguages);
     </div>
     <?php endif; ?>
 
-    <!-- LÓGICA DE FILTRADO LOCAL DE IDIOMA Y PAGINACIÓN -->
+    <!-- LÓGICA DE FILTRADO LOCAL Y PAGINACIÓN -->
     <?php
     $finalFilteredList = [];
 
-    // Filtrar películas por idioma si hay uno seleccionado
+    // Filtrar películas por idioma seleccionado
     if (!empty($langFilter)) {
         foreach ($allMoviesList as $movieItem) {
-            $streams = $movieItem['MediaSources'][0]['MediaStreams'] ?? ($movieItem['MediaStreams'] ?? []);
-            if (hasLanguage($streams, $langFilter)) {
+            if (hasLanguage($movieItem, $langFilter)) {
                 $finalFilteredList[] = $movieItem;
             }
         }
@@ -787,14 +801,10 @@ asort($detectedLanguages);
         $finalFilteredList = $allMoviesList;
     }
 
-    // Mezclado aleatorio
-    shuffle($finalFilteredList);
-
     $totalRecords = count($finalFilteredList);
     $totalPages = max(1, ceil($totalRecords / $limitPerPage));
     $page = min($page, $totalPages);
 
-    // Trocear el array para la paginación actual
     $startIndex = ($page - 1) * $limitPerPage;
     $itemsList = array_slice($finalFilteredList, $startIndex, $limitPerPage);
 
@@ -802,7 +812,6 @@ asort($detectedLanguages);
     $endRecord = min($startIndex + $limitPerPage, $totalRecords);
     $startRecord = $totalRecords > 0 ? $startIndex + 1 : 0;
 
-    // Construcción de URLs de navegación
     $queryParamsNav = [];
     if(!empty($libraryId)) $queryParamsNav['library'] = $libraryId;
     if(!empty($genreFilter)) $queryParamsNav['genre'] = $genreFilter;
@@ -843,15 +852,13 @@ asort($detectedLanguages);
         if($currentShownCount > 0) {
             foreach($itemsList as $m) {
                 $res = "SD";
-                $streams = $m['MediaSources'][0]['MediaStreams'] ?? ($m['MediaStreams'] ?? []);
+                $streams = extractStreams($m);
 
-                if(!empty($streams)) {
-                    foreach($streams as $stream) {
-                        if(($stream['Type'] ?? '') == 'Video') {
-                            $w = $stream['Width'] ?? 0;
-                            $res = ($w >= 3840) ? "4K" : (($w >= 1920) ? "1080p" : (($w >= 1280) ? "720p" : "SD"));
-                            break;
-                        }
+                foreach($streams as $stream) {
+                    if(($stream['Type'] ?? '') == 'Video') {
+                        $w = $stream['Width'] ?? 0;
+                        $res = ($w >= 3840) ? "4K" : (($w >= 1920) ? "1080p" : (($w >= 1280) ? "720p" : "SD"));
+                        break;
                     }
                 }
 
@@ -859,7 +866,7 @@ asort($detectedLanguages);
                 $movieName = htmlspecialchars($m['Name'], ENT_QUOTES);
                 $year = $m['ProductionYear'] ?? 'N/A';
                 $poster = $server."/Items/".$movieId."/Images/Primary?MaxWidth=300";
-                $languages = getLanguages($streams);
+                $languages = getLanguages($m);
 
                 echo '
                 <div class="movie-card-grid">
@@ -879,7 +886,7 @@ asort($detectedLanguages);
                 </div>';
             }
         } else {
-            echo '<div style="color:#9ca3af; text-align:center; padding:30px; grid-column: 1 / -1;">No se encontraron resultados en la biblioteca.</div>';
+            echo '<div style="color:#9ca3af; text-align:center; padding:30px; grid-column: 1 / -1;">No se encontraron resultados para el filtro seleccionado.</div>';
         }
         ?>
     </div>

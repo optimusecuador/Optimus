@@ -51,11 +51,26 @@
         border: 1px solid #1f2937;
     }
 
+    .panel-sub {
+        background: #161e2e;
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 15px;
+        border: 1px solid #243044;
+    }
+
     .isp-title {
         font-size: 18px;
         font-weight: bold;
         margin-bottom: 12px;
         color: #f3f4f6;
+    }
+
+    .isp-subtitle {
+        font-size: 15px;
+        font-weight: bold;
+        margin-bottom: 10px;
+        color: #e5e7eb;
     }
 
     /* --- CONTENEDORES HORIZONTALES (Swipe / Scroll) --- */
@@ -111,7 +126,6 @@
         object-fit: contain;
     }
 
-    /* Badge para mostrar los idiomas en la parte inferior de la portada */
     .lang-badge {
         position: absolute;
         bottom: 6px;
@@ -134,7 +148,6 @@
         border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
-    /* BARRA DE PROGRESO "CONTINUAR VIENDO" */
     .progress-bar-bg {
         width: 100%;
         height: 5px;
@@ -229,11 +242,13 @@
         display: flex;
         gap: 8px;
         margin-bottom: 15px;
-        max-width: 600px;
+        max-width: 800px;
+        flex-wrap: wrap;
     }
 
     .clientes-input {
         flex: 1;
+        min-width: 160px;
         background: #1f2937;
         border: 1px solid #374151;
         color: white;
@@ -307,7 +322,7 @@
         display: flex;
         justify-content: center;
         gap: 12px;
-        margin-top: 20px;
+        margin: 15px 0;
         align-items: center;
     }
 
@@ -333,7 +348,6 @@
         pointer-events: none;
     }
 
-    /* --- MEDIA QUERIES PARA PC / TABLET --- */
     @media (min-width: 768px) {
         body {
             padding: 20px;
@@ -429,26 +443,116 @@ function fetchJellyfin($url, $apiKey) {
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, ["X-Emby-Token: $apiKey"]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 90); 
     $response = curl_exec($ch);
     curl_close($ch);
     return json_decode($response, true);
 }
 
-/* --- FUNCIÓN AUXILIAR PARA EXTRAER IDIOMAS --- */
-function getLanguages($streams) {
-    $langs = [];
-    if(is_array($streams)) {
-        foreach($streams as $s) {
-            if(($s['Type'] ?? '') === 'Audio' && !empty($s['Language'])) {
-                $lang = strtoupper(substr($s['Language'], 0, 3));
-                if(!in_array($lang, $langs)) {
-                    $langs[] = $lang;
-                }
+/* --- TRADUCCIÓN DE CÓDIGOS ISO --- */
+function getLanguageName($code) {
+    $c = mb_strtolower(trim($code), 'UTF-8');
+    
+    $map = [
+        'es' => 'Español', 'spa' => 'Español', 'spanish' => 'Español', 'español' => 'Español', 'espanol' => 'Español', 'castellano' => 'Español', 'lat' => 'Español', 'latam' => 'Español', 'mx' => 'Español', 'es-es' => 'Español', 'es-mx' => 'Español', 'es-la' => 'Español',
+        'en' => 'Inglés', 'eng' => 'Inglés', 'english' => 'Inglés', 'inglés' => 'Inglés', 'ingles' => 'Inglés', 'en-us' => 'Inglés', 'en-gb' => 'Inglés', 'en-uk' => 'Inglés',
+        'fr' => 'Francés', 'fra' => 'Francés', 'fre' => 'Francés', 'french' => 'Francés', 'francés' => 'Francés', 'frances' => 'Francés', 'français' => 'Francés', 'francais' => 'Francés', 'vf' => 'Francés', 'fr-fr' => 'Francés', 'fr-ca' => 'Francés', 'French' => 'Francés',
+        'de' => 'Alemán', 'deu' => 'Alemán', 'ger' => 'Alemán', 'german' => 'Alemán', 'alemán' => 'Alemán', 'aleman' => 'Alemán', 'deutsch' => 'Alemán', 'de-de' => 'Alemán',
+        'it' => 'Italiano', 'ita' => 'Italiano', 'italian' => 'Italiano', 'italiano' => 'Italiano', 'it-it' => 'Italiano',
+        'pt' => 'Portugués', 'por' => 'Portugués', 'portuguese' => 'Portugués', 'portugués' => 'Portugués', 'portugues' => 'Portugués', 'pt-br' => 'Portugués', 'pt-pt' => 'Portugués', 'brasileiro' => 'Portugués', 'brasil' => 'Portugués',
+        'ja' => 'Japonés', 'jpn' => 'Japonés', 'japanese' => 'Japonés', 'japonés' => 'Japonés', 'japones' => 'Japonés', 'nihongo' => 'Japonés',
+        'zh' => 'Chino', 'zho' => 'Chino', 'chi' => 'Chino', 'chinese' => 'Chino', 'chino' => 'Chino', 'mandarin' => 'Chino', 'cantonese' => 'Chino', 'zh-cn' => 'Chino', 'zh-tw' => 'Chino', 'zh-hk' => 'Chino', 'hans' => 'Chino', 'hant' => 'Chino',
+        'ru' => 'Ruso', 'rus' => 'Ruso', 'russian' => 'Ruso', 'ruso' => 'Ruso', 'russkiy' => 'Ruso', 'ru-ru' => 'Ruso',
+        'ko' => 'Coreano', 'kor' => 'Coreano', 'korean' => 'Coreano', 'coreano' => 'Coreano', 'hangul' => 'Coreano', 'ko-kr' => 'Coreano',
+        'ca' => 'Catalán', 'cat' => 'Catalán', 'catalan' => 'Catalán', 'catalán' => 'Catalán'
+    ];
+    
+    return $map[$c] ?? strtoupper($c);
+}
+
+/* --- EXTRACTOR GLOBAL DE STREAMS MULTIMEDIA --- */
+function extractStreams($movie) {
+    $streams = [];
+    if (!empty($movie['MediaStreams']) && is_array($movie['MediaStreams'])) {
+        $streams = array_merge($streams, $movie['MediaStreams']);
+    }
+    if (!empty($movie['MediaSources']) && is_array($movie['MediaSources'])) {
+        foreach ($movie['MediaSources'] as $source) {
+            if (!empty($source['MediaStreams']) && is_array($source['MediaStreams'])) {
+                $streams = array_merge($streams, $source['MediaStreams']);
             }
         }
     }
-    return !empty($langs) ? implode(' • ', $langs) : 'UND';
+    return $streams;
+}
+
+/* --- OBTENER ETIQUETA DE IDIOMAS PARA LA TARJETA --- */
+function getLanguages($movie) {
+    $streams = extractStreams($movie);
+    $langs = [];
+    foreach ($streams as $s) {
+        if (($s['Type'] ?? '') === 'Audio' && !empty($s['Language'])) {
+            $name = getLanguageName($s['Language']);
+            if (!in_array($name, $langs)) {
+                $langs[] = $name;
+            }
+        }
+    }
+    return !empty($langs) ? implode(' • ', $langs) : 'Desconocido';
+}
+
+/* --- COMPROBAR SI CONTIENE UN IDIOMA ESPECÍFICO --- */
+function hasLanguage($movie, $targetLang) {
+    if (empty($targetLang)) return true;
+    
+    $targetLang = strtolower(trim($targetLang));
+    $streams = extractStreams($movie);
+    
+    $spaMatches = ['spa', 'es', 'spanish', 'castellano', 'español'];
+    $engMatches = ['eng', 'en', 'english'];
+    $fraMatches = ['fra', 'fre', 'fr', 'french'];
+    $gerMatches = ['ger', 'deu', 'de', 'german'];
+    $itaMatches = ['ita', 'it', 'italian'];
+    $porMatches = ['por', 'pt', 'portuguese'];
+    $jpnMatches = ['jpn', 'ja', 'japanese'];
+    $zhoMatches = ['zho', 'chi', 'zh', 'chinese'];
+    $rusMatches = ['rus', 'ru', 'russian'];
+    $korMatches = ['kor', 'ko', 'korean'];
+    $catMatches = ['cat', 'ca', 'catalan'];
+
+    foreach ($streams as $s) {
+        if (($s['Type'] ?? '') === 'Audio') {
+            $lang = strtolower(trim($s['Language'] ?? ''));
+            $title = strtolower(trim($s['DisplayTitle'] ?? ''));
+            
+            if ($targetLang === 'spa') {
+                if (in_array($lang, $spaMatches) || strpos($title, 'spanish') !== false || strpos($title, 'español') !== false || strpos($title, 'spa') !== false) return true;
+            } elseif ($targetLang === 'eng') {
+                if (in_array($lang, $engMatches) || strpos($title, 'english') !== false) return true;
+            } elseif ($targetLang === 'fra') {
+                if (in_array($lang, $fraMatches) || strpos($title, 'french') !== false) return true;
+            } elseif ($targetLang === 'ger') {
+                if (in_array($lang, $gerMatches) || strpos($title, 'german') !== false) return true;
+            } elseif ($targetLang === 'ita') {
+                if (in_array($lang, $itaMatches) || strpos($title, 'italian') !== false) return true;
+            } elseif ($targetLang === 'por') {
+                if (in_array($lang, $porMatches) || strpos($title, 'portuguese') !== false) return true;
+            } elseif ($targetLang === 'jpn') {
+                if (in_array($lang, $jpnMatches) || strpos($title, 'japanese') !== false) return true;
+            } elseif ($targetLang === 'zho') {
+                if (in_array($lang, $zhoMatches) || strpos($title, 'chinese') !== false) return true;
+            } elseif ($targetLang === 'rus') {
+                if (in_array($lang, $rusMatches) || strpos($title, 'russian') !== false) return true;
+            } elseif ($targetLang === 'kor') {
+                if (in_array($lang, $korMatches) || strpos($title, 'korean') !== false) return true;
+            } elseif ($targetLang === 'cat') {
+                if (in_array($lang, $catMatches) || strpos($title, 'catalan') !== false) return true;
+            } else {
+                if ($lang === $targetLang) return true;
+            }
+        }
+    }
+    return false;
 }
 
 // Obtener películas recientes
@@ -458,7 +562,7 @@ $recentMovies = fetchJellyfin("$server/Items?IncludeItemTypes=Movie&Recursive=tr
 $userData = fetchJellyfin("$server/Users", $apikey);
 $userId = $userData[0]['Id'] ?? '';
 
-// OBTENER CONTENIDO EN PROGRESO (Ruta nativa Resume)
+// OBTENER CONTENIDO EN PROGRESO
 $continueWatching = [];
 if (!empty($userId)) {
     $continueWatching = fetchJellyfin("$server/Users/$userId/Items/Resume?Limit=20&MediaTypes=Video&Fields=MediaSources,MediaStreams,ProductionYear,Overview", $apikey);
@@ -467,46 +571,244 @@ if (!empty($userId)) {
 $libraries = !empty($userId) ? fetchJellyfin("$server/Users/".$userId."/Views", $apikey) : [];
 $libraryId = $_GET['library'] ?? '';
 $genreFilter = $_GET['genre'] ?? '';
+$langFilter = $_GET['lang'] ?? '';
+$searchTerm = $_GET['search'] ?? '';
 
-// Paginación a 200 elementos por página
+// Paginación fija de 200 ítems
 $limitPerPage = 200;
 $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
-$startIndex = ($page - 1) * $limitPerPage;
 
-// Lista fija de géneros permitidos
+// Lista fija de géneros
 $allowedGenres = [
     'Accion', 'Animacion', 'Aventura', 'Belica', 'Ciencia Ficcion', 
     'Comedia', 'Crimen', 'Documental', 'Drama', 'Familia', 
     'Fantasia', 'Horror', 'Misterio', 'Romance', 'Terror', 'War'
 ];
+
+$masterLanguages = [
+    'spa' => 'Español',
+    'eng' => 'Inglés',
+    'fra' => 'Francés',
+    'ger' => 'Alemán',
+    'ita' => 'Italiano',
+    'por' => 'Portugués',
+    'jpn' => 'Japonés',
+    'zho' => 'Chino',
+    'rus' => 'Ruso',
+    'kor' => 'Coreano',
+    'cat' => 'Catalán'
+];
+
+/* --- CONSULTA COMPLETA A LA API --- */
+$queryParams = [
+    'Recursive' => 'true',
+    'IncludeItemTypes' => 'Movie',
+    'Fields' => 'MediaSources,MediaStreams,ProductionYear,Overview,Genres',
+    'Limit' => 10000 
+];
+
+if (!empty($libraryId)) {
+    $queryParams['ParentId'] = $libraryId;
+}
+
+if (!empty($genreFilter)) {
+    $queryParams['Genres'] = $genreFilter;
+}
+if (!empty($searchTerm)) {
+    $queryParams['SearchTerm'] = trim($searchTerm);
+}
+
+$baseQueryUrl = $server . "/Items?" . http_build_query($queryParams);
+$allMoviesData = fetchJellyfin($baseQueryUrl, $apikey);
+$allMoviesList = $allMoviesData['Items'] ?? [];
+
+/* --- SINCRONIZACIÓN AUTOMÁTICA CON LA BASE DE DATOS --- */
+if (!empty($allMoviesList)) {
+    $sqlSync = "INSERT INTO peliculas (
+                    id_peliculas, id_categoria, nombre, descripcion, generos, 
+                    fecha, pelicula_url, portada_url, estreno, audio, reproduccion
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE 
+                    id_categoria = VALUES(id_categoria),
+                    nombre = VALUES(nombre),
+                    descripcion = VALUES(descripcion),
+                    generos = VALUES(generos),
+                    fecha = VALUES(fecha),
+                    pelicula_url = VALUES(pelicula_url),
+                    portada_url = VALUES(portada_url),
+                    estreno = VALUES(estreno),
+                    audio = VALUES(audio),
+                    reproduccion = VALUES(reproduccion)";
+
+    if ($stmt = $conexion->prepare($sqlSync)) {
+        foreach ($allMoviesList as $m) {
+            $idPel = $m['Id'] ?? '';
+            $idCat = $libraryId ?: 'general';
+            $nombre = $m['Name'] ?? '';
+            $desc = $m['Overview'] ?? '';
+            
+            $generosArr = $m['Genres'] ?? [];
+            $generos = implode(', ', $generosArr);
+
+            $fecha = $m['ProductionYear'] ?? '';
+            $estreno = !empty($m['PremiereDate']) ? substr($m['PremiereDate'], 0, 10) : ($fecha ?: '');
+            
+            $peliculaUrl = $server . "/Items/" . $idPel . "/Download";
+            $portadaUrl = $server . "/Items/" . $idPel . "/Images/Primary?Format=jpg&MaxWidth=300";
+            
+            $audioLangs = getLanguages($m);
+            $reproduccion = '0';
+
+            $stmt->bind_param(
+                "sssssssssss", 
+                $idPel, $idCat, $nombre, $desc, $generos, 
+                $fecha, $peliculaUrl, $portadaUrl, $estreno, $audioLangs, $reproduccion
+            );
+            $stmt->execute();
+        }
+        $stmt->close();
+    }
+}
 ?>
 
 <div class="app-header">
     <img src="../images/empresa/logo.png" alt="Logo Empresa" class="app-logo">
 </div>
 
-<!-- SECCIÓN: ÚLTIMAS PELÍCULAS -->
+<!-- SECCIÓN PRINCIPAL: BIBLIOTECA Y CONTENIDOS -->
 <div class="panel-dark">
-    <div class="isp-title">Últimas películas</div>
-    <div class="mobile-scroll-container">
-        <?php
-        if(isset($recentMovies['Items'])) {
-            foreach($recentMovies['Items'] as $m) {
-                $res = "HD";
-                $year = $m['ProductionYear'] ?? '----';
-                $streams = $m['MediaStreams'] ?? [];
+    <div class="isp-title">Biblioteca Completa</div>
 
-                if(isset($m['MediaStreams'])) {
-                    foreach($m['MediaStreams'] as $s) {
+    <!-- Categorías de Librerías -->
+    <div class="categories-bar">
+        <?php 
+        $langParam = !empty($langFilter) ? '&lang='.urlencode($langFilter) : '';
+        $isAllActive = empty($libraryId);
+        ?>
+        <a href="?<?= !empty($langFilter) ? 'lang='.urlencode($langFilter) : '' ?>" class="category-chip" style="<?= $isAllActive ? 'background:#2563eb;' : 'background:#1f2937;' ?>">Todas</a>
+        
+        <?php
+        if(isset($libraries['Items'])) {
+            foreach($libraries['Items'] as $lib) {
+                if (($lib['CollectionType'] ?? 'folder') === 'boxsets') continue;
+                $active = ($libraryId == $lib['Id']) ? 'background:#2563eb;' : 'background:#1f2937;';
+                echo '<a href="?library='.$lib['Id'].$langParam.'" class="category-chip" style="'.$active.'">'.$lib['Name'].'</a>';
+            }
+        }
+        ?>
+    </div>
+
+    <!-- Géneros con recuento dinámico -->
+    <div class="categories-bar">
+        <span style="font-size: 11px; color: #9ca3af; align-self: center; white-space: nowrap;">Género:</span>
+        <?php
+        $parentParam = !empty($libraryId) ? "&ParentId=".$libraryId : "";
+        foreach($allowedGenres as $gName) {
+            $genreCountUrl = $server . "/Items?Recursive=true&IncludeItemTypes=Movie&Limit=0&Genres=" . urlencode($gName) . $parentParam;
+            $genreCountData = fetchJellyfin($genreCountUrl, $apikey);
+            $genreCount = $genreCountData['TotalRecordCount'] ?? 0;
+
+            $activeGenre = ($genreFilter === $gName) ? 'background:#ea580c;' : 'background:#374151;';
+            $libraryParam = !empty($libraryId) ? '&library='.$libraryId : '';
+            echo '<a href="?genre='.urlencode($gName).$libraryParam.$langParam.'" class="category-chip" style="'.$activeGenre.'">'.$gName.' ('.$genreCount.')</a>';
+        }
+        ?>
+    </div>
+
+    <!-- Buscador y Selección de Idiomas -->
+    <form method="GET" class="search-form">
+        <?php 
+        if(!empty($libraryId)) echo '<input type="hidden" name="library" value="'.htmlspecialchars($libraryId).'">'; 
+        if(!empty($genreFilter)) echo '<input type="hidden" name="genre" value="'.htmlspecialchars($genreFilter).'">'; 
+        ?>
+        
+        <select name="lang" class="clientes-input" onchange="this.form.submit()" style="max-width: 200px;">
+            <option value="">Todos los idiomas</option>
+            <?php
+            foreach ($masterLanguages as $isoCode => $langLabel) {
+                $selected = ($langFilter === $isoCode) ? 'selected' : '';
+                echo '<option value="'.htmlspecialchars($isoCode).'" '.$selected.'>'.htmlspecialchars($langLabel).'</option>';
+            }
+            ?>
+        </select>
+
+        <input type="text" name="search" class="clientes-input" placeholder="Buscar película..." value="<?= htmlspecialchars($searchTerm) ?>">
+        <button type="submit" class="primary-btn">Buscar</button>
+    </form>
+
+    <!-- 1. SUB-SECCIÓN: ÚLTIMAS PELÍCULAS -->
+    <div class="panel-sub">
+        <div class="isp-subtitle">Últimas películas</div>
+        <div class="mobile-scroll-container">
+            <?php
+            if(isset($recentMovies['Items'])) {
+                foreach($recentMovies['Items'] as $m) {
+                    $res = "HD";
+                    $year = $m['ProductionYear'] ?? '----';
+                    $streams = extractStreams($m);
+
+                    foreach($streams as $s) {
                         if(($s['Type'] ?? '') == 'Video') {
                             $res = ($s['Width'] >= 3840) ? '4K' : (($s['Width'] >= 1920) ? '1080p' : '720p');
+                            break;
                         }
+                    }
+
+                    $movieId = $m['Id'];
+                    $movieName = htmlspecialchars($m['Name'], ENT_QUOTES);
+                    $languages = getLanguages($m);
+
+                    echo '
+                    <div class="movie-card-mobile">
+                        <div>
+                            <a href="index_sistema.php?id='.$movieId.'" class="poster-container" style="display:block;">
+                                <div class="watermark-badge">
+                                    <img src="../images/empresa/logo.png" alt="Logo">
+                                </div>
+                                <img src="'.$server.'/Items/'.$movieId.'/Images/Primary?Format=jpg&MaxWidth=300" class="poster-img" alt="'.$movieName.'">
+                                <div class="lang-badge">'.$languages.'</div>
+                            </a>
+                            <div style="padding: 6px 8px 8px 8px;">
+                                <div class="movie-title-mobile" title="'.$movieName.'">'.$movieName.'</div>
+                                <div class="movie-meta-mobile">'.$year.' • '.$res.'</div>
+                            </div>
+                        </div>
+                    </div>';
+                }
+            }
+            ?>
+        </div>
+    </div>
+
+    <!-- 2. SUB-SECCIÓN: CONTINUAR VIENDO -->
+    <?php if (!empty($continueWatching['Items'])): ?>
+    <div class="panel-sub">
+        <div class="isp-subtitle">Continuar viendo</div>
+        <div class="mobile-scroll-container">
+            <?php
+            foreach ($continueWatching['Items'] as $cw) {
+                $res = "HD";
+                $year = $cw['ProductionYear'] ?? '----';
+                $streams = extractStreams($cw);
+
+                foreach($streams as $s) {
+                    if(($s['Type'] ?? '') == 'Video') {
+                        $w = $s['Width'] ?? 0;
+                        $res = ($w >= 3840) ? '4K' : (($w >= 1920) ? '1080p' : '720p');
+                        break;
                     }
                 }
 
-                $movieId = $m['Id'];
-                $movieName = htmlspecialchars($m['Name'], ENT_QUOTES);
-                $languages = getLanguages($streams);
+                $movieId = $cw['Id'];
+                $movieName = htmlspecialchars($cw['Name'], ENT_QUOTES);
+                $languages = getLanguages($cw);
+
+                $playedPercent = 0;
+                if (isset($cw['UserData']['PlayedPercentage'])) {
+                    $playedPercent = round($cw['UserData']['PlayedPercentage']);
+                } elseif (isset($cw['UserData']['PlaybackPositionTicks']) && isset($cw['RunTimeTicks']) && $cw['RunTimeTicks'] > 0) {
+                    $playedPercent = round(($cw['UserData']['PlaybackPositionTicks'] / $cw['RunTimeTicks']) * 100);
+                }
 
                 echo '
                 <div class="movie-card-mobile">
@@ -517,6 +819,9 @@ $allowedGenres = [
                             </div>
                             <img src="'.$server.'/Items/'.$movieId.'/Images/Primary?Format=jpg&MaxWidth=300" class="poster-img" alt="'.$movieName.'">
                             <div class="lang-badge">'.$languages.'</div>
+                            <div class="progress-bar-bg">
+                                <div class="progress-bar-fill" style="width: '.$playedPercent.'%;"></div>
+                            </div>
                         </a>
                         <div style="padding: 6px 8px 8px 8px;">
                             <div class="movie-title-mobile" title="'.$movieName.'">'.$movieName.'</div>
@@ -525,174 +830,83 @@ $allowedGenres = [
                     </div>
                 </div>';
             }
-        }
-        ?>
+            ?>
+        </div>
     </div>
-</div>
+    <?php endif; ?>
 
-<!-- SECCIÓN: CONTINUAR VIENDO -->
-<?php if (!empty($continueWatching['Items'])): ?>
-<div class="panel-dark">
-    <div class="isp-title">Continuar viendo</div>
-    <div class="mobile-scroll-container">
-        <?php
-        foreach ($continueWatching['Items'] as $cw) {
-            $res = "HD";
-            $year = $cw['ProductionYear'] ?? '----';
-            $streams = $cw['MediaStreams'] ?? ($cw['MediaSources'][0]['MediaStreams'] ?? []);
-
-            if(!empty($streams)) {
-                foreach($streams as $s) {
-                    if(($s['Type'] ?? '') == 'Video') {
-                        $w = $s['Width'] ?? 0;
-                        $res = ($w >= 3840) ? '4K' : (($w >= 1920) ? '1080p' : '720p');
-                        break;
-                    }
-                }
-            }
-
-            $movieId = $cw['Id'];
-            $movieName = htmlspecialchars($cw['Name'], ENT_QUOTES);
-            $languages = getLanguages($streams);
-
-            $playedPercent = 0;
-            if (isset($cw['UserData']['PlayedPercentage'])) {
-                $playedPercent = round($cw['UserData']['PlayedPercentage']);
-            } elseif (isset($cw['UserData']['PlaybackPositionTicks']) && isset($cw['RunTimeTicks']) && $cw['RunTimeTicks'] > 0) {
-                $playedPercent = round(($cw['UserData']['PlaybackPositionTicks'] / $cw['RunTimeTicks']) * 100);
-            }
-
-            echo '
-            <div class="movie-card-mobile">
-
-                <div>
-                    <a href="index_sistema.php?id='.$movieId.'" class="poster-container" style="display:block;">
-                        <div class="watermark-badge">
-                            <img src="../images/empresa/logo.png" alt="Logo">
-                        </div>
-                        <img src="'.$server.'/Items/'.$movieId.'/Images/Primary?Format=jpg&MaxWidth=300" class="poster-img" alt="'.$movieName.'">
-                        <div class="lang-badge">'.$languages.'</div>
-                        <div class="progress-bar-bg">
-                            <div class="progress-bar-fill" style="width: '.$playedPercent.'%;"></div>
-                        </div>
-                    </a>
-                    <div style="padding: 6px 8px 8px 8px;">
-                        <div class="movie-title-mobile" title="'.$movieName.'">'.$movieName.'</div>
-                        <div class="movie-meta-mobile">'.$year.' • '.$res.'</div>
-                    </div>
-                </div>
-            </div>';
-        }
-        ?>
-    </div>
-</div>
-<?php endif; ?>
-
-<!-- SECCIÓN: BIBLIOTECA COMPLETA -->
-<div class="panel-dark">
-    <div class="isp-title">Biblioteca Completa</div>
-
-    <!-- Categorías de Librerías -->
-    <div class="categories-bar">
-        <a href="?" class="category-chip" style="background: <?= (empty($libraryId) && empty($genreFilter)) ? '#2563eb' : '#1f2937' ?>;">Todas</a>
-        <?php
-        if(isset($libraries['Items'])) {
-            foreach($libraries['Items'] as $lib) {
-                if (($lib['CollectionType'] ?? 'folder') === 'boxsets') continue;
-                $active = ($libraryId == $lib['Id']) ? 'background:#2563eb;' : 'background:#1f2937;';
-                echo '<a href="?library='.$lib['Id'].'" class="category-chip" style="'.$active.'">'.$lib['Name'].'</a>';
-            }
-        }
-        ?>
-    </div>
-
-    <!-- Géneros con recuento dinámico de películas -->
-    <div class="categories-bar">
-        <span style="font-size: 11px; color: #9ca3af; align-self: center; white-space: nowrap;">Género:</span>
-        <?php
-        $parentParam = !empty($libraryId) ? "&ParentId=".$libraryId : "";
-        foreach($allowedGenres as $gName) {
-            // Consulta ligera a la API para obtener únicamente la cantidad por género
-            $genreCountUrl = $server . "/Items?Recursive=true&IncludeItemTypes=Movie&Limit=0&Genres=" . urlencode($gName) . $parentParam;
-            $genreCountData = fetchJellyfin($genreCountUrl, $apikey);
-            $genreCount = $genreCountData['TotalRecordCount'] ?? 0;
-
-            $activeGenre = ($genreFilter === $gName) ? 'background:#ea580c;' : 'background:#374151;';
-            $libraryParam = !empty($libraryId) ? '&library='.$libraryId : '';
-            echo '<a href="?genre='.urlencode($gName).$libraryParam.'" class="category-chip" style="'.$activeGenre.'">'.$gName.' ('.$genreCount.')</a>';
-        }
-        ?>
-    </div>
-
-    <!-- Buscador -->
-    <form method="GET" class="search-form">
-        <?php 
-        if(!empty($libraryId)) echo '<input type="hidden" name="library" value="'.$libraryId.'">'; 
-        if(!empty($genreFilter)) echo '<input type="hidden" name="genre" value="'.htmlspecialchars($genreFilter).'">'; 
-        ?>
-        <input type="text" name="search" class="clientes-input" placeholder="Buscar película..." value="<?= htmlspecialchars($_GET['search'] ?? '') ?>">
-        <button type="submit" class="primary-btn">Buscar</button>
-    </form>
-
+    <!-- LÓGICA DE FILTRADO LOCAL Y PAGINACIÓN -->
     <?php
-    $baseUrlParams = "Recursive=true&Fields=MediaSources,MediaStreams,ProductionYear,Overview,Genres";
-    if(!empty($libraryId)) {
-        $baseUrlParams .= "&ParentId=".$libraryId."&IncludeItemTypes=Movie,Series";
+    $finalFilteredList = [];
+
+    if (!empty($langFilter)) {
+        foreach ($allMoviesList as $movieItem) {
+            if (hasLanguage($movieItem, $langFilter)) {
+                $finalFilteredList[] = $movieItem;
+            }
+        }
     } else {
-        $baseUrlParams .= "&IncludeItemTypes=Movie";
-    }
-    if(!empty($genreFilter)) {
-        $baseUrlParams .= "&Genres=".urlencode($genreFilter);
-    }
-    if(!empty($_GET['search'])) {
-        $baseUrlParams .= "&SearchTerm=".urlencode(trim($_GET['search']));
+        $finalFilteredList = $allMoviesList;
     }
 
-    $countUrl = $server."/Items?".$baseUrlParams."&Limit=0";
-    $countData = fetchJellyfin($countUrl, $apikey);
-    $totalRecords = isset($countData['TotalRecordCount']) ? intval($countData['TotalRecordCount']) : 0;
-
-    $pagedUrl = $server."/Items?".$baseUrlParams."&StartIndex=".$startIndex."&Limit=".$limitPerPage;
-    $bibData = fetchJellyfin($pagedUrl, $apikey);
-
-    $itemsList = $bibData['Items'] ?? [];
-    $currentShownCount = count($itemsList);
-    
-    if ($totalRecords === 0 && $currentShownCount > 0) {
-        $totalRecords = isset($bibData['TotalRecordCount']) ? intval($bibData['TotalRecordCount']) : $currentShownCount;
-    }
-
-    $endRecord = min($startIndex + $currentShownCount, $totalRecords);
-    $startRecord = $totalRecords > 0 ? $startIndex + 1 : 0;
-    
-    $hasMore = $endRecord < $totalRecords;
+    $totalRecords = count($finalFilteredList);
     $totalPages = max(1, ceil($totalRecords / $limitPerPage));
+    $page = min($page, $totalPages);
+
+    $startIndex = ($page - 1) * $limitPerPage;
+    $itemsList = array_slice($finalFilteredList, $startIndex, $limitPerPage);
+
+    $currentShownCount = count($itemsList);
+    $endRecord = min($startIndex + $limitPerPage, $totalRecords);
+    $startRecord = $totalRecords > 0 ? $startIndex + 1 : 0;
+
+    $queryParamsNav = [];
+    if(!empty($libraryId)) $queryParamsNav['library'] = $libraryId;
+    if(!empty($genreFilter)) $queryParamsNav['genre'] = $genreFilter;
+    if(!empty($langFilter)) $queryParamsNav['lang'] = $langFilter;
+    if(!empty($searchTerm)) $queryParamsNav['search'] = $searchTerm;
+    
+    $prevParams = $queryParamsNav;
+    $prevParams['page'] = $page - 1;
+    $prevUrl = '?' . http_build_query($prevParams);
+
+    $nextParams = $queryParamsNav;
+    $nextParams['page'] = $page + 1;
+    $nextUrl = '?' . http_build_query($nextParams);
     ?>
 
+    <!-- INFORMACIÓN DE REGISTROS -->
     <div class="pagination-info">
         <span>Mostrando registros <strong><?= $startRecord ?> - <?= $endRecord ?></strong> de un total de <strong><?= $totalRecords ?></strong></span>
-        <?php if($hasMore || $totalPages > 1): ?>
-            <span style="color: #3b82f6; font-weight: bold;">Hay más páginas disponibles ➔</span>
+        <?php if($page < $totalPages): ?>
+            <span style="color: #3b82f6; font-weight: bold;">Página <?= $page ?> de <?= $totalPages ?></span>
         <?php else: ?>
             <span style="color: #10b981;">Fin de los resultados</span>
         <?php endif; ?>
     </div>
 
-    <!-- LISTADO FLUIDO ADAPTATIVO CON CSS GRID -->
+    <!-- PAGINACIÓN SUPERIOR -->
+    <?php if($totalPages > 1): ?>
+    <div class="pagination-controls" style="margin-top: 5px; margin-bottom: 15px;">
+        <a href="<?= $prevUrl ?>" class="pagination-btn <?= ($page <= 1) ? 'disabled' : '' ?>">◀ Anterior</a>
+        <span style="font-size: 13px; color: #e5e7eb;">Página <?= $page ?> de <?= $totalPages ?></span>
+        <a href="<?= $nextUrl ?>" class="pagination-btn <?= ($page >= $totalPages) ? 'disabled' : '' ?>">Siguiente ➔</a>
+    </div>
+    <?php endif; ?>
+
+    <!-- GRID DE RESULTADOS -->
     <div class="movies-grid-container">
         <?php
         if($currentShownCount > 0) {
             foreach($itemsList as $m) {
                 $res = "SD";
-                $streams = $m['MediaSources'][0]['MediaStreams'] ?? ($m['MediaStreams'] ?? []);
+                $streams = extractStreams($m);
 
-                if(!empty($streams)) {
-                    foreach($streams as $stream) {
-                        if(($stream['Type'] ?? '') == 'Video') {
-                            $w = $stream['Width'] ?? 0;
-                            $res = ($w >= 3840) ? "4K" : (($w >= 1920) ? "1080p" : (($w >= 1280) ? "720p" : "SD"));
-                            break;
-                        }
+                foreach($streams as $stream) {
+                    if(($stream['Type'] ?? '') == 'Video') {
+                        $w = $stream['Width'] ?? 0;
+                        $res = ($w >= 3840) ? "4K" : (($w >= 1920) ? "1080p" : (($w >= 1280) ? "720p" : "SD"));
+                        break;
                     }
                 }
 
@@ -700,7 +914,7 @@ $allowedGenres = [
                 $movieName = htmlspecialchars($m['Name'], ENT_QUOTES);
                 $year = $m['ProductionYear'] ?? 'N/A';
                 $poster = $server."/Items/".$movieId."/Images/Primary?MaxWidth=300";
-                $languages = getLanguages($streams);
+                $languages = getLanguages($m);
 
                 echo '
                 <div class="movie-card-grid">
@@ -720,30 +934,16 @@ $allowedGenres = [
                 </div>';
             }
         } else {
-            echo '<div style="color:#9ca3af; text-align:center; padding:30px; grid-column: 1 / -1;">No se encontraron resultados.</div>';
+            echo '<div style="color:#9ca3af; text-align:center; padding:30px; grid-column: 1 / -1;">No se encontraron resultados para el filtro seleccionado.</div>';
         }
         ?>
     </div>
 
+    <!-- PAGINACIÓN INFERIOR -->
     <?php if($totalPages > 1): ?>
-    <div class="pagination-controls">
-        <?php 
-        $queryParams = [];
-        if(!empty($libraryId)) $queryParams['library'] = $libraryId;
-        if(!empty($genreFilter)) $queryParams['genre'] = $genreFilter;
-        if(!empty($_GET['search'])) $queryParams['search'] = $_GET['search'];
-        
-        $prevParams = $queryParams;
-        $prevParams['page'] = $page - 1;
-        $prevUrl = '?' . http_build_query($prevParams);
-
-        $nextParams = $queryParams;
-        $nextParams['page'] = $page + 1;
-        $nextUrl = '?' . http_build_query($nextParams);
-        ?>
-
+    <div class="pagination-controls" style="margin-top: 25px;">
         <a href="<?= $prevUrl ?>" class="pagination-btn <?= ($page <= 1) ? 'disabled' : '' ?>">◀ Anterior</a>
-        <span style="font-size: 13px; color: #e5e7eb;">Página <?= $page ?> de <?= $totalPages ?> (Total: <?= $totalRecords ?>)</span>
+        <span style="font-size: 13px; color: #e5e7eb;">Página <?= $page ?> de <?= $totalPages ?></span>
         <a href="<?= $nextUrl ?>" class="pagination-btn <?= ($page >= $totalPages) ? 'disabled' : '' ?>">Siguiente ➔</a>
     </div>
     <?php endif; ?>

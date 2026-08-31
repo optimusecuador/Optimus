@@ -443,7 +443,8 @@ function fetchJellyfin($url, $apiKey) {
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, ["X-Emby-Token: $apiKey"]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+    // Aumentamos el tiempo de espera a 60 o 120 segundos
+    curl_setopt($ch, CURLOPT_TIMEOUT, 90); 
     $response = curl_exec($ch);
     curl_close($ch);
     return json_decode($response, true);
@@ -451,20 +452,58 @@ function fetchJellyfin($url, $apiKey) {
 
 /* --- TRADUCCIÓN DE CÓDIGOS ISO --- */
 function getLanguageName($code) {
-    $c = strtolower(trim($code));
+    // Usamos mb_strtolower para convertir todo a minúsculas de forma segura, respetando tildes y eñes
+    $c = mb_strtolower(trim($code), 'UTF-8');
+    
     $map = [
-        'spa' => 'Español', 'es' => 'Español', 'spanish' => 'Español', 'castellano' => 'Español', 'Lat' => 'Español',
-        'eng' => 'Inglés', 'en' => 'Inglés', 'english' => 'Inglés', 'English' => 'Inglés',
-        'fra' => 'Francés', 'fre' => 'Francés', 'fr' => 'Francés', 'french' => 'Francés',
-        'ger' => 'Alemán', 'deu' => 'Alemán', 'de' => 'Alemán', 'german' => 'Alemán',
-        'ita' => 'Italiano', 'it' => 'Italiano', 'italian' => 'Italiano',
-        'por' => 'Portugués', 'pt' => 'Portugués', 'portuguese' => 'Portugués',
-        'jpn' => 'Japonés', 'ja' => 'Japonés', 'japanese' => 'Japonés',
-        'zho' => 'Chino', 'chi' => 'Chino', 'zh' => 'Chino', 'chinese' => 'Chino',
-        'rus' => 'Ruso', 'ru' => 'Ruso', 'russian' => 'Ruso',
-        'kor' => 'Coreano', 'ko' => 'Coreano', 'korean' => 'Coreano',
-        'cat' => 'Catalán', 'ca' => 'Catalán', 'catalan' => 'Catalán'
+        // Español (variantes, con y sin tilde)
+        'es' => 'Español', 'spa' => 'Español', 'spanish' => 'Español', 
+        'español' => 'Español', 'espanol' => 'Español', 
+        'castellano' => 'Español', 'lat' => 'Español', 'latam' => 'Español', 
+        'mx' => 'Español', 'es-es' => 'Español', 'es-mx' => 'Español', 'es-la' => 'Español',
+
+        // Inglés (con y sin tilde)
+        'en' => 'Inglés', 'eng' => 'Inglés', 'english' => 'Inglés', 
+        'inglés' => 'Inglés', 'ingles' => 'Inglés', 
+        'en-us' => 'Inglés', 'en-gb' => 'Inglés', 'en-uk' => 'Inglés',
+
+        // Francés (con y sin tilde / cedilla)
+        'fr' => 'Francés', 'fra' => 'Francés', 'fre' => 'Francés', 'french' => 'Francés', 
+        'francés' => 'Francés', 'frances' => 'Francés', 
+        'français' => 'Francés', 'francais' => 'Francés', 
+        'vf' => 'Francés', 'fr-fr' => 'Francés', 'fr-ca' => 'Francés', 'French' => 'Francés',
+
+        // Alemán (con y sin tilde)
+        'de' => 'Alemán', 'deu' => 'Alemán', 'ger' => 'Alemán', 'german' => 'Alemán', 
+        'alemán' => 'Alemán', 'aleman' => 'Alemán', 'deutsch' => 'Alemán', 'de-de' => 'Alemán',
+
+        // Italiano
+        'it' => 'Italiano', 'ita' => 'Italiano', 'italian' => 'Italiano', 'italiano' => 'Italiano', 'it-it' => 'Italiano',
+
+        // Portugués (con y sin tilde)
+        'pt' => 'Portugués', 'por' => 'Portugués', 'portuguese' => 'Portugués', 
+        'portugués' => 'Portugués', 'portugues' => 'Portugués', 
+        'pt-br' => 'Portugués', 'pt-pt' => 'Portugués', 'brasileiro' => 'Portugués', 'brasil' => 'Portugués',
+
+        // Japonés (con y sin tilde)
+        'ja' => 'Japonés', 'jpn' => 'Japonés', 'japanese' => 'Japonés', 
+        'japonés' => 'Japonés', 'japones' => 'Japonés', 'nihongo' => 'Japonés',
+
+        // Chino
+        'zh' => 'Chino', 'zho' => 'Chino', 'chi' => 'Chino', 'chinese' => 'Chino', 
+        'chino' => 'Chino', 'mandarin' => 'Chino', 'cantonese' => 'Chino', 
+        'zh-cn' => 'Chino', 'zh-tw' => 'Chino', 'zh-hk' => 'Chino', 'hans' => 'Chino', 'hant' => 'Chino',
+
+        // Ruso
+        'ru' => 'Ruso', 'rus' => 'Ruso', 'russian' => 'Ruso', 'ruso' => 'Ruso', 'russkiy' => 'Ruso', 'ru-ru' => 'Ruso',
+
+        // Coreano
+        'ko' => 'Coreano', 'kor' => 'Coreano', 'korean' => 'Coreano', 'coreano' => 'Coreano', 'hangul' => 'Coreano', 'ko-kr' => 'Coreano',
+
+        // Catalán (con y sin tilde)
+        'ca' => 'Catalán', 'cat' => 'Catalán', 'catalan' => 'Catalán', 'catalán' => 'Catalán'
     ];
+    
     return $map[$c] ?? strtoupper($c);
 }
 
@@ -602,7 +641,7 @@ $queryParams = [
     'Recursive' => 'true',
     'IncludeItemTypes' => 'Movie',
     'Fields' => 'MediaSources,MediaStreams,ProductionYear,Overview,Genres',
-    'Limit' => 5000 // Forzar a recuperar todas las películas registradas
+    'Limit' => 10000 // Forzar a recuperar todas las películas registradas
 ];
 
 if (!empty($libraryId)) {

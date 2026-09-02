@@ -132,10 +132,11 @@ $limitPerBatch = 500;
 $totalRecordsFromAPI = 0;
 
 do {
+    // Incluimos UserData para obtener PlaybackPositionTicks de las reproducciones
     $queryParams = [
         'Recursive' => 'true',
         'IncludeItemTypes' => 'Movie',
-        'Fields' => 'MediaSources,MediaStreams,ProductionYear,Overview,Genres',
+        'Fields' => 'MediaSources,MediaStreams,ProductionYear,Overview,Genres,UserData',
         'StartIndex' => $startIndex,
         'Limit' => $limitPerBatch
     ];
@@ -144,7 +145,9 @@ do {
         $queryParams['ParentId'] = $libraryId;
     }
 
-    $batchUrl = $server . "/Items?" . http_build_query($queryParams);
+    // Si disponemos de un UserId, enviamos la petición vinculada al usuario para consultar sus estados de reproducción
+    $endpoint = !empty($userId) ? "$server/Users/$userId/Items" : "$server/Items";
+    $batchUrl = $endpoint . "?" . http_build_query($queryParams);
     $batchData = fetchJellyfin($batchUrl, $apikey);
     
     $items = $batchData['Items'] ?? [];
@@ -195,7 +198,12 @@ if (!empty($allMoviesList)) {
             $portadaUrl = $server . "/Items/" . $idPel . "/Images/Primary?Format=jpg&MaxWidth=300";
             
             $audioLangs = getLanguages($m);
-            $reproduccion = '0';
+
+            // EXTRAER TIEMPO DE REPRODUCCIÓN (SEGUNDOS DE DÓNDE QUEDÓ A MEDIAS)
+            $playbackTicks = $m['UserData']['PlaybackPositionTicks'] ?? 0;
+            // 1 segundo equivale a 10,000,000 de Ticks en Jellyfin
+            $reproduccionSegundos = intval($playbackTicks / 10000000);
+            $reproduccion = (string) $reproduccionSegundos;
 
             $stmt->bind_param(
                 "sssssssssss", 
@@ -242,6 +250,7 @@ if (!empty($allMoviesList)) {
                 <th>Nombre</th>
                 <th>Año</th>
                 <th>Audio</th>
+                <th>Posición (seg)</th>
             </tr>
         </thead>
         <tbody>
@@ -249,11 +258,14 @@ if (!empty($allMoviesList)) {
             // Muestra los últimos 20 registros procesados en una tabla limpia al finalizar
             $previewItems = array_slice($allMoviesList, -20);
             foreach ($previewItems as $m) {
+                $playbackTicks = $m['UserData']['PlaybackPositionTicks'] ?? 0;
+                $segundos = intval($playbackTicks / 10000000);
                 echo '<tr>';
                 echo '<td>' . htmlspecialchars($m['Id'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($m['Name'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($m['ProductionYear'] ?? 'N/A') . '</td>';
                 echo '<td>' . htmlspecialchars(getLanguages($m)) . '</td>';
+                echo '<td>' . $segundos . 's</td>';
                 echo '</tr>';
             }
             ?>

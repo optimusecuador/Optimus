@@ -19,6 +19,8 @@
         --text-muted: #9ca3af;
         --primary-color: #2563eb;
         --primary-hover: #1d4ed8;
+        --secondary-color: #374151;
+        --secondary-hover: #4b5563;
         --border-color: #374151;
     }
 
@@ -102,7 +104,7 @@
         position: absolute;
         top: 10px;
         right: 10px;
-        background: rgba(17, 24, 39, 0.65);
+        background: rgba(0, 0, 0, 0.75);
         backdrop-filter: blur(5px);
         -webkit-backdrop-filter: blur(5px);
         border-radius: 8px;
@@ -199,6 +201,13 @@
         border-color: var(--primary-color);
     }
 
+    .playback-buttons-container {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 10px;
+    }
+
     .btn-play-big {
         width: 100%;
         background: var(--primary-color);
@@ -207,7 +216,7 @@
         padding: 14px;
         border-radius: 10px;
         font-weight: 700;
-        font-size: 16px;
+        font-size: 15px;
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -222,8 +231,25 @@
         box-shadow: 0 6px 15px rgba(37, 99, 235, 0.4);
     }
 
-    .btn-play-big:active {
-        transform: scale(0.98);
+    .btn-play-secondary {
+        width: 100%;
+        background: var(--secondary-color);
+        color: var(--text-main);
+        border: 1px solid var(--border-color);
+        padding: 12px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: all 0.2s ease;
+    }
+
+    .btn-play-secondary:hover {
+        background: var(--secondary-hover);
     }
 
     @keyframes fadeIn {
@@ -276,11 +302,12 @@
         object-fit: contain;
         opacity: 0.6;
         pointer-events: none;
-        z-index: 1000001;
+        z-index: 2147483647;
         filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.5));
     }
     
     .shaka-video-container {
+        position: relative;
         width: 100%;
         height: 100%;
     }
@@ -291,6 +318,14 @@
 <?php
 require('../conectar.php');
 
+$movieId = trim($_GET['id'] ?? '');
+
+if (empty($movieId)) {
+    echo '<script>alert("No se especificó ninguna película."); window.location.href="index.php";</script>';
+    exit;
+}
+
+/* --- 1. CONFIGURACIÓN DE JELLYFIN --- */
 $resultado = $conexion->query("SELECT api, ip FROM jellyfin LIMIT 1");
 
 if ($resultado && $fila = $resultado->fetch_assoc()) {
@@ -339,15 +374,29 @@ function getLanguages($streams) {
     return !empty($langs) ? implode(' • ', $langs) : 'UND';
 }
 
-$movieId = trim($_GET['id'] ?? '');
-
-if (empty($movieId)) {
-    echo '<script>alert("No se especificó ninguna película."); window.location.href="index.php";</script>';
-    exit;
+/* --- 2. OBTENER TIEMPO GUARDADO DE REPRODUCCIÓN (MYSQL / JELLYFIN) --- */
+$resumeTimeSeconds = 0;
+$stmtPlayback = $conexion->prepare("SELECT reproduccion FROM peliculas WHERE id_peliculas = ? LIMIT 1");
+if ($stmtPlayback) {
+    $stmtPlayback->bind_param("s", $movieId);
+    $stmtPlayback->execute();
+    $resPlayback = $stmtPlayback->get_result();
+    if ($rowDb = $resPlayback->fetch_assoc()) {
+        $resumeTimeSeconds = intval($rowDb['reproduccion'] ?? 0);
+    }
+    $stmtPlayback->close();
 }
 
 $userData = fetchJellyfin("$server/Users", $apikey);
 $userId = $userData[0]['Id'] ?? '';
+
+if ($resumeTimeSeconds <= 0 && !empty($userId)) {
+    $itemUser = fetchJellyfin("$server/Users/$userId/Items/$movieId", $apikey);
+    $savedTicks = $itemUser['UserData']['PlaybackPositionTicks'] ?? 0;
+    if ($savedTicks > 0) {
+        $resumeTimeSeconds = floor($savedTicks / 10000000);
+    }
+}
 
 $movieUrl = !empty($userId) 
     ? "$server/Users/$userId/Items/$movieId" 
@@ -407,6 +456,10 @@ if (!empty($mediaStreams)) {
         }
     }
 }
+
+$resumeMinutes = floor($resumeTimeSeconds / 60);
+$resumeSecs = $resumeTimeSeconds % 60;
+$formattedResumeTime = sprintf("%02d:%02d", $resumeMinutes, $resumeSecs);
 ?>
 
 <div class="app-header">
@@ -448,10 +501,23 @@ if (!empty($mediaStreams)) {
         <?php endforeach; ?>
     </select>
 
-    <button onclick="startPlayback()" class="btn-play-big">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-        Reproducir Película
-    </button>
+    <div class="playback-buttons-container">
+        <?php if ($resumeTimeSeconds > 0): ?>
+            <button onclick="startPlayback(true)" class="btn-play-big">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                Continuar Reproducción (<?= $formattedResumeTime ?>)
+            </button>
+            <button onclick="startPlayback(false)" class="btn-play-secondary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"></path><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+                Reiniciar Película desde el Inicio
+            </button>
+        <?php else: ?>
+            <button onclick="startPlayback(false)" class="btn-play-big">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                Reproducir Película
+            </button>
+        <?php endif; ?>
+    </div>
 </div>
 
 <!-- REPRODUCTOR DE VIDEO MODAL -->
@@ -464,8 +530,8 @@ if (!empty($mediaStreams)) {
     <div style="position:relative; width:100%; height:100%; display:flex; justify-content:center; align-items:center; overflow:hidden;">
         <div id="shaka-container" class="shaka-video-container">
             <video id="moviePlayer" controls playsinline autoplay style="width:100%; height:100%; background:black; outline:none;"></video>
+            <img src="../images/empresa/logo.png" alt="Watermark" class="video-watermark">
         </div>
-        <img src="../images/empresa/logo.png" alt="Watermark" class="video-watermark">
     </div>
 </div>
 
@@ -474,10 +540,14 @@ const currentMovieId = '<?= $movieId ?>';
 const mediaSourceId = '<?= $mediaSourceId ?>';
 const serverUrl = '<?= $server ?>';
 const apiKey = '<?= $apikey ?>';
+const userId = '<?= $userId ?>';
+let savedResumeTime = <?= $resumeTimeSeconds ?>;
+let activeTargetTime = 0;
 
 let shakaPlayer = null;
 let shakaUI = null;
 let isPlayingIntro = false;
+let progressInterval = null;
 
 function resetVideoElement(video) {
     video.pause();
@@ -485,9 +555,33 @@ function resetVideoElement(video) {
     video.load();
 }
 
-function startPlayback() {
+function saveProgress(positionSeconds) {
+    if (!userId || isPlayingIntro) return;
+    const ticks = Math.floor(positionSeconds * 10000000);
+    const progressUrl = `${serverUrl}/Users/${userId}/PlayingItems/${currentMovieId}/Progress?PositionTicks=${ticks}&api_key=${apiKey}`;
+    
+    fetch(progressUrl, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' }
+    }).catch(err => console.warn("Error guardando progreso en Jellyfin:", err));
+}
+
+function startPlayback(shouldResume = false) {
+    activeTargetTime = shouldResume ? savedResumeTime : 0;
+    
     document.getElementById('moviePlayerModal').style.display = 'block';
     const video = document.getElementById('moviePlayer');
+    const container = document.getElementById('shaka-container');
+    
+    if (container.requestFullscreen) {
+        container.requestFullscreen().catch(err => console.warn("Fullscreen no permitido automáticamente:", err));
+    } else if (container.webkitRequestFullscreen) {
+        container.webkitRequestFullscreen();
+    } else if (container.msRequestFullscreen) {
+        container.msRequestFullscreen();
+    } else if (video.webkitEnterFullscreen) {
+        video.webkitEnterFullscreen();
+    }
 
     if (shakaPlayer) {
         shakaPlayer.destroy().then(() => {
@@ -534,11 +628,10 @@ async function initShakaPlayer() {
     shakaPlayer = new shaka.Player(video);
     shakaUI = new shaka.ui.Overlay(shakaPlayer, videoContainer, video);
 
-    // AJUSTE RÁPIDO DE BÚFER PARA ELIMINAR EL CÍRCULO DE CARGA PERMANENTE
     shakaPlayer.configure({
         streaming: {
-            rebufferingGoal: 2,           // Inicia con apenas 2s en buffer
-            bufferingGoal: 8,             // Colchón liviano de 8s
+            rebufferingGoal: 2,           
+            bufferingGoal: 8,             
             bufferBehind: 10,
             retryParameters: {
                 maxAttempts: 3,
@@ -555,7 +648,6 @@ async function initShakaPlayer() {
         }
     });
 
-    // Forzar el ocultamiento del spinner al detectar reproducción
     video.addEventListener('timeupdate', () => {
         if (shakaUI && video.currentTime > 0 && !video.paused) {
             const spinner = videoContainer.querySelector('.shaka-spinner-container');
@@ -594,19 +686,41 @@ async function playMainMovie() {
     await initShakaPlayer();
 
     try {
-        await shakaPlayer.load(hlsUrl);
+        // Cargar manifest indicando a Shaka la posición inicial exacta
+        const startTime = (activeTargetTime > 0) ? activeTargetTime : null;
+        await shakaPlayer.load(hlsUrl, startTime);
+        
         await video.play();
     } catch (e) {
         console.warn("Fallo en HLS. Ejecutando fallback MP4...", e);
         
         const directStreamUrl = `${serverUrl}/Videos/${currentMovieId}/stream.mp4?${streamParams.toString()}`;
         video.src = directStreamUrl;
+        
+        // Asignar tiempo únicamente cuando los datos de frame estén cargados
+        video.addEventListener('loadeddata', () => {
+            if (activeTargetTime > 0) {
+                video.currentTime = activeTargetTime;
+            }
+        }, { once: true });
+
         video.load();
         video.play().catch(err => {
             console.error("Error crítico:", err);
             alert("Error al reproducir la película.");
         });
     }
+
+    if (progressInterval) clearInterval(progressInterval);
+    progressInterval = setInterval(() => {
+        if (!video.paused && !isPlayingIntro) {
+            saveProgress(video.currentTime);
+        }
+    }, 10000);
+
+    video.onpause = () => {
+        if (!isPlayingIntro) saveProgress(video.currentTime);
+    };
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -617,8 +731,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function closeMoviePlayer() {
     const video = document.getElementById('moviePlayer');
+    
+    if (!isPlayingIntro && video.currentTime > 0) {
+        saveProgress(video.currentTime);
+        savedResumeTime = Math.floor(video.currentTime);
+    }
+
+    if (progressInterval) clearInterval(progressInterval);
+
+    if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) {
+        if (document.exitFullscreen) {
+            document.exitFullscreen().catch(err => console.warn(err));
+        } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) {
+            document.msExitFullscreen();
+        }
+    }
+
     resetVideoElement(video);
     video.onended = null;
+    video.onpause = null;
     
     if (shakaPlayer) {
         shakaPlayer.destroy().then(() => {

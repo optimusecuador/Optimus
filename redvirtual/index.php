@@ -1,6 +1,5 @@
 <?php
-$conn = new mysqli("localhost", "root", "", "optimus_global_telecom");
-if ($conn->connect_error) { die("Error de conexión: " . $conn->connect_error); }
+require('../conectar.php');
 
 if (isset($_GET['buscar'])) {
     $busqueda = $conn->real_escape_string($_GET['buscar']);

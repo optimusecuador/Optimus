@@ -105,12 +105,14 @@
         overflow: hidden;
     }
 
+    /* MODIFICADO: Fondo negro semitransparente y borde suave */
     .watermark-badge {
         position: absolute;
         top: 6px;
         right: 6px;
-        background-color: rgba(255, 255, 255, 0.4);
+        background-color: rgba(0, 0, 0, 0.75);
         backdrop-filter: blur(2px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 6px;
         padding: 6px 10px;
         display: flex;
@@ -426,7 +428,16 @@ if (!empty($searchTerm)) {
 
 $sqlWhereString = implode(" AND ", $whereClauses);
 
-/* --- 4. OBTENER PELÍCULAS RECIENTES DE FORMA ALEATORIA --- */
+/* --- 4. OBTENER PELÍCULAS PARA SEGUIR VIENDO (REPRODUCCIÓN > 0) --- */
+$continueWatchingMovies = [];
+$resContinue = $conexion->query("SELECT * FROM peliculas WHERE CAST(reproduccion AS UNSIGNED) > 0 ORDER BY CAST(reproduccion AS UNSIGNED) DESC LIMIT 20");
+if ($resContinue) {
+    while ($rowC = $resContinue->fetch_assoc()) {
+        $continueWatchingMovies[] = $rowC;
+    }
+}
+
+/* --- 5. OBTENER PELÍCULAS RECIENTES DE FORMA ALEATORIA --- */
 $recentMovies = [];
 $resRecent = $conexion->query("SELECT * FROM peliculas ORDER BY RAND() LIMIT 20");
 if ($resRecent) {
@@ -435,7 +446,7 @@ if ($resRecent) {
     }
 }
 
-/* --- 5. CONTAR TOTAL DE REGISTROS PARA PAGINACIÓN --- */
+/* --- 6. CONTAR TOTAL DE REGISTROS PARA PAGINACIÓN --- */
 $countSql = "SELECT COUNT(*) as total FROM peliculas WHERE " . $sqlWhereString;
 $stmtCount = $conexion->prepare($countSql);
 if (!empty($params)) {
@@ -449,7 +460,7 @@ $totalPages = max(1, ceil($totalRecords / $limitPerPage));
 $page = min($page, $totalPages);
 $startIndex = ($page - 1) * $limitPerPage;
 
-/* --- 6. OBTENER LISTADO PAGINADO DE LA BIBLIOTECA DE FORMA ALEATORIA --- */
+/* --- 7. OBTENER LISTADO PAGINADO DE LA BIBLIOTECA DE FORMA ALEATORIA --- */
 $dataSql = "SELECT * FROM peliculas WHERE " . $sqlWhereString . " ORDER BY RAND() LIMIT ?, ?";
 $stmtData = $conexion->prepare($dataSql);
 
@@ -557,7 +568,42 @@ $nextUrl = '?' . http_build_query($nextParams);
         <button type="submit" class="primary-btn">Buscar</button>
     </form>
 
-    <!-- 1. SUB-SECCIÓN: ÚLTIMAS PELÍCULAS -->
+    <!-- SUB-SECCIÓN: SEGUIR VIENDO -->
+    <?php if (!empty($continueWatchingMovies)): ?>
+    <div class="panel-sub">
+        <div class="isp-subtitle">Seguir viendo</div>
+        <div class="mobile-scroll-container">
+            <?php
+            foreach($continueWatchingMovies as $m) {
+                $movieId = htmlspecialchars($m['id_peliculas'], ENT_QUOTES);
+                $movieName = htmlspecialchars($m['nombre'], ENT_QUOTES);
+                $year = htmlspecialchars($m['fecha'] ?: '----', ENT_QUOTES);
+                $poster = htmlspecialchars($m['portada_url'], ENT_QUOTES);
+                $languages = htmlspecialchars($m['audio'] ?: 'Desconocido', ENT_QUOTES);
+
+                echo '
+                <div class="movie-card-mobile">
+                    <div>
+                        <a href="index_sistema.php?id='.$movieId.'" class="poster-container" style="display:block;">
+                            <div class="watermark-badge">
+                                <img src="../images/empresa/logo.png" alt="Logo">
+                            </div>
+                            <img src="'.$poster.'" class="poster-img" alt="'.$movieName.'">
+                            <div class="lang-badge">'.$languages.'</div>
+                        </a>
+                        <div style="padding: 6px 8px 8px 8px;">
+                            <div class="movie-title-mobile" title="'.$movieName.'">'.$movieName.'</div>
+                            <div class="movie-meta-mobile">'.$year.'</div>
+                        </div>
+                    </div>
+                </div>';
+            }
+            ?>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- SUB-SECCIÓN: ÚLTIMAS PELÍCULAS -->
     <div class="panel-sub">
         <div class="isp-subtitle">Últimas películas</div>
         <div class="mobile-scroll-container">

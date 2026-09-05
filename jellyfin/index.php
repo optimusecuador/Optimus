@@ -105,7 +105,6 @@
         overflow: hidden;
     }
 
-    /* MODIFICADO: Fondo negro semitransparente y borde suave */
     .watermark-badge {
         position: absolute;
         top: 6px;
@@ -380,6 +379,34 @@
 <?php
 require('../conectar.php');
 
+/* --- FUNCIÓN DEFINITIVA PARA RUTAS DE IMÁGENES MANTENIENDO EL PUERTO ORIGINAL --- */
+function fixImageUrl($url) {
+    if (empty($url)) return $url;
+    
+    // Obtener la IP o Dominio del cliente, descartando el puerto si viniera pegado a $_SERVER['HTTP_HOST']
+    $clientHost = $_SERVER['HTTP_HOST'];
+    if (strpos($clientHost, ':') !== false) {
+        $clientHost = explode(':', $clientHost)[0];
+    }
+    
+    // Analizar la URL guardada en la base de datos (portada_url)
+    $parsed = parse_url($url);
+    if (!$parsed || !isset($parsed['host'])) {
+        return $url; // Devuelve original si no tiene formato válido
+    }
+    
+    $scheme = isset($parsed['scheme']) ? $parsed['scheme'] . '://' : 'http://';
+    
+    // AQUÍ ESTABA EL ERROR: Necesitamos mantener el puerto original guardado en BD (ej: :30013 o :8096)
+    $port = isset($parsed['port']) ? ':' . $parsed['port'] : '';
+    
+    $path = isset($parsed['path']) ? $parsed['path'] : '';
+    $query = isset($parsed['query']) ? '?' . $parsed['query'] : '';
+    
+    // Ensamblar la URL combinando: Protocolo + IP_DEL_CLIENTE + PUERTO_DE_LA_BD + RUTA
+    return $scheme . $clientHost . $port . $path . $query;
+}
+
 /* --- 1. CAPTURA DE FILTROS DE URL --- */
 $libraryId = $_GET['library'] ?? '';
 $genreFilter = $_GET['genre'] ?? '';
@@ -578,7 +605,7 @@ $nextUrl = '?' . http_build_query($nextParams);
                 $movieId = htmlspecialchars($m['id_peliculas'], ENT_QUOTES);
                 $movieName = htmlspecialchars($m['nombre'], ENT_QUOTES);
                 $year = htmlspecialchars($m['fecha'] ?: '----', ENT_QUOTES);
-                $poster = htmlspecialchars($m['portada_url'], ENT_QUOTES);
+                $poster = htmlspecialchars(fixImageUrl($m['portada_url']), ENT_QUOTES);
                 $languages = htmlspecialchars($m['audio'] ?: 'Desconocido', ENT_QUOTES);
 
                 echo '
@@ -612,7 +639,7 @@ $nextUrl = '?' . http_build_query($nextParams);
                 $movieId = htmlspecialchars($m['id_peliculas'], ENT_QUOTES);
                 $movieName = htmlspecialchars($m['nombre'], ENT_QUOTES);
                 $year = htmlspecialchars($m['fecha'] ?: '----', ENT_QUOTES);
-                $poster = htmlspecialchars($m['portada_url'], ENT_QUOTES);
+                $poster = htmlspecialchars(fixImageUrl($m['portada_url']), ENT_QUOTES);
                 $languages = htmlspecialchars($m['audio'] ?: 'Desconocido', ENT_QUOTES);
 
                 echo '
@@ -663,7 +690,7 @@ $nextUrl = '?' . http_build_query($nextParams);
                 $movieId = htmlspecialchars($m['id_peliculas'], ENT_QUOTES);
                 $movieName = htmlspecialchars($m['nombre'], ENT_QUOTES);
                 $year = htmlspecialchars($m['fecha'] ?: 'N/A', ENT_QUOTES);
-                $poster = htmlspecialchars($m['portada_url'], ENT_QUOTES);
+                $poster = htmlspecialchars(fixImageUrl($m['portada_url']), ENT_QUOTES);
                 $languages = htmlspecialchars($m['audio'] ?: 'Desconocido', ENT_QUOTES);
 
                 echo '

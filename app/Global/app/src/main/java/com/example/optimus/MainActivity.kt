@@ -1,4 +1,4 @@
-package com.example.global // Mantén tu package original
+package com.example.global
 
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
@@ -7,14 +7,22 @@ import android.view.View
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.example.global.R
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var myWebView: WebView
+    private lateinit var layoutErrorNetbird: LinearLayout
+    private lateinit var btnRedLocal: Button
 
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
@@ -24,12 +32,15 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // Enlazar vistas
         myWebView = findViewById(R.id.miWebView)
+        layoutErrorNetbird = findViewById(R.id.layoutErrorNetbird)
+        btnRedLocal = findViewById(R.id.btnRedLocal)
 
+        // Configuración de WebView
         myWebView.settings.javaScriptEnabled = true
         myWebView.settings.domStorageEnabled = true
         myWebView.settings.mediaPlaybackRequiresUserGesture = false
-
         myWebView.webViewClient = WebViewClient()
 
         customChromeClient = object : WebChromeClient() {
@@ -54,7 +65,6 @@ class MainActivity : AppCompatActivity() {
                         or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                         or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
 
-                // 🔥 NUEVO: Forzar la pantalla a posición horizontal (Landscape)
                 requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             }
 
@@ -68,10 +78,7 @@ class MainActivity : AppCompatActivity() {
                 customViewCallback?.onCustomViewHidden()
                 customViewCallback = null
 
-                // 🔥 NUEVO: Regresar la pantalla a posición normal (Vertical)
                 requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                // Si quieres que tu app sea 100% vertical siempre excepto en video,
-                // usa esto en su lugar: requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             }
         }
 
@@ -81,7 +88,7 @@ class MainActivity : AppCompatActivity() {
             override fun handleOnBackPressed() {
                 if (customView != null) {
                     customChromeClient?.onHideCustomView()
-                } else if (myWebView.canGoBack()) {
+                } else if (myWebView.visibility == View.VISIBLE && myWebView.canGoBack()) {
                     myWebView.goBack()
                 } else {
                     finish()
@@ -89,8 +96,45 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        // CAMBIA ESTA URL POR LA TUYA
-        myWebView.loadUrl("http://100.117.94.55/optimus/peliculas/index.php")
+        // Configurar acción del botón "Continuar con Red Local"
+        btnRedLocal.setOnClickListener {
+            layoutErrorNetbird.visibility = View.GONE
+            myWebView.visibility = View.VISIBLE
+            myWebView.loadUrl("http://10.9.0.250/optimus/jellyfin/index.php")
+        }
+
+        // Ejecutar Ping al iniciar
+        checkServerAndLoad()
+    }
+
+    private fun checkServerAndLoad() {
+        // Lanzar tarea en hilo secundario (IO)
+        lifecycleScope.launch(Dispatchers.IO) {
+            val ipPrincipal = "100.117.94.55"
+            val isReachable = try {
+                // Ejecuta un ping nativo en el sistema (1 paquete, maximo 2 segundos de espera)
+                val process = Runtime.getRuntime().exec("/system/bin/ping -c 1 -W 2 $ipPrincipal")
+                val status = process.waitFor()
+                status == 0 // Si el status es 0, el ping fue exitoso
+            } catch (e: Exception) {
+                e.printStackTrace()
+                false
+            }
+
+            // Volver al hilo principal para actualizar la UI
+            withContext(Dispatchers.Main) {
+                if (isReachable) {
+                    // Ping exitoso: mostrar WebView y cargar IP remota
+                    layoutErrorNetbird.visibility = View.GONE
+                    myWebView.visibility = View.VISIBLE
+                    myWebView.loadUrl("http://100.117.94.55/optimus/peliculas/index.php")
+                } else {
+                    // Ping fallido: mostrar pantalla de Netbird
+                    myWebView.visibility = View.GONE
+                    layoutErrorNetbird.visibility = View.VISIBLE
+                }
+            }
+        }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

@@ -1,3 +1,157 @@
+<?php
+require('../conectar.php');
+
+$resultado = $conexion->query("SELECT api, ip FROM jellyfin LIMIT 1");
+
+if ($resultado && $fila = $resultado->fetch_assoc()) {
+    $apikey = trim($fila['api']);
+    $ip_db = trim($fila['ip']);
+} else {
+    echo '<script>alert("No se encontró configuración de Jellyfin."); window.location.href="index.php";</script>';
+    exit;
+}
+
+// Obtener el host actual desde donde navega el usuario
+$clientHost = $_SERVER['HTTP_HOST'];
+if (strpos($clientHost, ':') !== false) {
+    $clientHost = explode(':', $clientHost)[0];
+}
+
+// Detectar si el acceso es público o local
+$es_publico = (
+    $clientHost === '100.117.94.55' || 
+    (!preg_match('/^(10\.|192\.168\.|127\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/', $clientHost) && $clientHost !== 'localhost')
+);
+
+if ($es_publico) {
+    // IP y puerto público específico de Jellyfin proporcionado
+    $server = "http://100.117.35.226:30013";
+} else {
+    // Usar la IP local guardada en la base de datos para la red interna
+    $host_limpio = preg_replace('#^https?://#', '', $ip_db);
+    if (strpos($host_limpio, ':') !== false) {
+        $partes = explode(':', $host_limpio);
+        $host_limpio = $partes[0];
+    }
+    $host_limpio = trim(rtrim($host_limpio, '/'));
+    if (empty($host_limpio)) { $host_limpio = "10.9.0.250"; }
+
+    $server = "http://" . $host_limpio . ":30013";
+}
+
+function fetchJellyfin($url, $apiKey) {
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        "X-Emby-Token: $apiKey",
+        "Accept: application/json"
+    ]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    return json_decode($response, true);
+}
+
+function getLanguages($streams) {
+    $langs = [];
+    if(is_array($streams)) {
+        foreach($streams as $s) {
+            if(($s['Type'] ?? '') === 'Audio' && !empty($s['Language'])) {
+                $lang = strtoupper(substr($s['Language'], 0, 3));
+                if(!in_array($lang, $langs)) {
+                    $langs[] = $lang;
+                }
+            }
+        }
+    }
+    return !empty($langs) ? implode(' • ', $langs) : 'UND';
+}
+
+$idLocal = trim($_GET['id'] ?? '');
+
+if (empty($idLocal)) {
+    echo '<script>alert("No se especificó ninguna película."); window.location.href="index.php";</script>';
+    exit;
+}
+
+// RECUPERAR DATOS DE LA PELÍCULA DESDE LA BASE DE DATOS LOCAL
+$stmt_db = $conexion->prepare("SELECT * FROM peliculas WHERE id_peliculas = ? LIMIT 1");
+$stmt_db->bind_param("s", $idLocal);
+$stmt_db->execute();
+$res_db = $stmt_db->get_result();
+$pelicula_db = $res_db->fetch_assoc();
+$stmt_db->close();
+
+if (!$pelicula_db) {
+    echo '<script>alert("La película no existe en la base de datos local."); window.location.href="index.php";</script>';
+    exit;
+}
+
+$movieId = $pelicula_db['jellyfin_id'] ?? $pelicula_db['id_jellyfin'] ?? $idLocal;
+
+$poster = !empty($pelicula_db['portada_url']) ? $pelicula_db['portada_url'] : "$server/Items/$movieId/Images/Primary?MaxWidth=400";
+
+$userData = fetchJellyfin("$server/Users", $apikey);
+$userId = $userData[0]['Id'] ?? '';
+
+$movieUrl = !empty($userId) 
+    ? "$server/Users/$userId/Items/$movieId" 
+    : "$server/Items/$movieId?Fields=MediaSources,MediaStreams,ProductionYear,Overview,Genres";
+
+$movieData = fetchJellyfin($movieUrl, $apikey);
+
+if (!$movieData || !isset($movieData['Id'])) {
+    $movieData = fetchJellyfin("$server/Items/$movieId", $apikey);
+}
+
+if (!$movieData || !isset($movieData['Id'])) {
+    echo '
+    <div style="text-align:center; padding: 40px 20px; background: #111827; border-radius: 12px; max-width: 500px; margin: 50px auto; border: 1px solid #374151;">
+        <h3 style="color: #ef4444; margin-bottom: 10px;">Error al cargar la película</h3>
+        <p style="color: #9ca3af; font-size: 13px;">No se pudo conectar con Jellyfin o el ID de la película no existe.</p>
+        <p style="font-size:11px; color:#6b7280; background:#1f2937; padding:8px; border-radius:6px; word-break:break-all;">ID intentado: '.htmlspecialchars($movieId).'</p>
+        <a href="index.php" class="btn-back" style="display:inline-block; margin-top:15px; justify-content:center;">◀ Volver al catálogo</a>
+    </div>';
+    exit;
+}
+
+$movieName = htmlspecialchars($movieData['Name'], ENT_QUOTES);
+$movieOverview = htmlspecialchars($movieData['Overview'] ?? 'Sin resumen disponible.', ENT_QUOTES);
+$year = $movieData['ProductionYear'] ?? '----';
+
+$audioStreams = [];
+$subtitleStreams = [];
+
+$mediaSources = $movieData['MediaSources'] ?? [];
+$mediaStreams = $mediaSources[0]['MediaStreams'] ?? $movieData['MediaStreams'] ?? [];
+$mediaSourceId = $mediaSources[0]['Id'] ?? $movieId;
+
+foreach ($mediaStreams as $stream) {
+    $sType = $stream['Type'] ?? '';
+    $sIndex = $stream['Index'] ?? 0;
+    $sLang = $stream['Language'] ?? $stream['DisplayTitle'] ?? 'Idioma';
+    $sCodec = isset($stream['Codec']) ? strtoupper($stream['Codec']) : '';
+
+    if ($sType === 'Audio') {
+        $audioStreams[] = ['index' => $sIndex, 'label' => "$sLang ($sCodec)"];
+    } else if ($sType === 'Subtitle') {
+        $subtitleStreams[] = ['index' => $sIndex, 'label' => $sLang];
+    }
+}
+
+$languages = getLanguages($mediaStreams);
+
+$res = "HD";
+if (!empty($mediaStreams)) {
+    foreach ($mediaStreams as $s) {
+        if (($s['Type'] ?? '') == 'Video') {
+            $w = $s['Width'] ?? 0;
+            $res = ($w >= 3840) ? '4K' : (($w >= 1920) ? '1080p' : (($w >= 1280) ? '720p' : 'SD'));
+            break;
+        }
+    }
+}
+?>
 <!doctype html>
 <html>
 <head>
@@ -288,131 +442,9 @@
 </head>
 <body>
 
-<?php
-require('../conectar.php');
-
-$resultado = $conexion->query("SELECT api, ip FROM jellyfin LIMIT 1");
-
-if ($resultado && $fila = $resultado->fetch_assoc()) {
-    $apikey = trim($fila['api']);
-    $ip_db = trim($fila['ip']);
-
-    $host_limpio = preg_replace('#^https?://#', '', $ip_db);
-    if (strpos($host_limpio, ':') !== false) {
-        $partes = explode(':', $host_limpio);
-        $host_limpio = $partes[0];
-    }
-    $host_limpio = trim(rtrim($host_limpio, '/'));
-    if (empty($host_limpio)) { $host_limpio = "127.0.0.1"; }
-
-    $server = "http://" . $host_limpio . ":30013";
-} else {
-    echo '<script>alert("No se encontró configuración de Jellyfin."); window.location.href="index.php";</script>';
-    exit;
-}
-
-function fetchJellyfin($url, $apiKey) {
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        "X-Emby-Token: $apiKey",
-        "Accept: application/json"
-    ]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    $response = curl_exec($ch);
-    curl_close($ch);
-    return json_decode($response, true);
-}
-
-function getLanguages($streams) {
-    $langs = [];
-    if(is_array($streams)) {
-        foreach($streams as $s) {
-            if(($s['Type'] ?? '') === 'Audio' && !empty($s['Language'])) {
-                $lang = strtoupper(substr($s['Language'], 0, 3));
-                if(!in_array($lang, $langs)) {
-                    $langs[] = $lang;
-                }
-            }
-        }
-    }
-    return !empty($langs) ? implode(' • ', $langs) : 'UND';
-}
-
-$movieId = trim($_GET['id'] ?? '');
-
-if (empty($movieId)) {
-    echo '<script>alert("No se especificó ninguna película."); window.location.href="index.php";</script>';
-    exit;
-}
-
-$userData = fetchJellyfin("$server/Users", $apikey);
-$userId = $userData[0]['Id'] ?? '';
-
-$movieUrl = !empty($userId) 
-    ? "$server/Users/$userId/Items/$movieId" 
-    : "$server/Items/$movieId?Fields=MediaSources,MediaStreams,ProductionYear,Overview,Genres";
-
-$movieData = fetchJellyfin($movieUrl, $apikey);
-
-if (!$movieData || !isset($movieData['Id'])) {
-    $movieData = fetchJellyfin("$server/Items/$movieId", $apikey);
-}
-
-if (!$movieData || !isset($movieData['Id'])) {
-    echo '
-    <div style="text-align:center; padding: 40px 20px; background: #111827; border-radius: 12px; max-width: 500px; margin: 50px auto; border: 1px solid #374151;">
-        <h3 style="color: #ef4444; margin-bottom: 10px;">Error al cargar la película</h3>
-        <p style="color: #9ca3af; font-size: 13px;">No se pudo conectar con Jellyfin o el ID de la película no existe.</p>
-        <p style="font-size:11px; color:#6b7280; background:#1f2937; padding:8px; border-radius:6px; word-break:break-all;">ID intentado: '.htmlspecialchars($movieId).'</p>
-        <a href="index.php" class="btn-back" style="display:inline-block; margin-top:15px; justify-content:center;">◀ Volver al catálogo</a>
-    </div>';
-    exit;
-}
-
-$movieName = htmlspecialchars($movieData['Name'], ENT_QUOTES);
-$movieOverview = htmlspecialchars($movieData['Overview'] ?? 'Sin resumen disponible.', ENT_QUOTES);
-$year = $movieData['ProductionYear'] ?? '----';
-$poster = "$server/Items/$movieId/Images/Primary?MaxWidth=400";
-
-$audioStreams = [];
-$subtitleStreams = [];
-
-$mediaSources = $movieData['MediaSources'] ?? [];
-$mediaStreams = $mediaSources[0]['MediaStreams'] ?? $movieData['MediaStreams'] ?? [];
-$mediaSourceId = $mediaSources[0]['Id'] ?? $movieId;
-
-foreach ($mediaStreams as $stream) {
-    $sType = $stream['Type'] ?? '';
-    $sIndex = $stream['Index'] ?? 0;
-    $sLang = $stream['Language'] ?? $stream['DisplayTitle'] ?? 'Idioma';
-    $sCodec = isset($stream['Codec']) ? strtoupper($stream['Codec']) : '';
-
-    if ($sType === 'Audio') {
-        $audioStreams[] = ['index' => $sIndex, 'label' => "$sLang ($sCodec)"];
-    } else if ($sType === 'Subtitle') {
-        $subtitleStreams[] = ['index' => $sIndex, 'label' => $sLang];
-    }
-}
-
-$languages = getLanguages($mediaStreams);
-
-$res = "HD";
-if (!empty($mediaStreams)) {
-    foreach ($mediaStreams as $s) {
-        if (($s['Type'] ?? '') == 'Video') {
-            $w = $s['Width'] ?? 0;
-            $res = ($w >= 3840) ? '4K' : (($w >= 1920) ? '1080p' : (($w >= 1280) ? '720p' : 'SD'));
-            break;
-        }
-    }
-}
-?>
-
 <div class="app-header">
     <img src="../images/empresa/logo.png" alt="Logo Empresa" class="app-logo">
     <a href="index.php" class="btn-back">
-
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
         Volver
     </a>
@@ -480,13 +512,20 @@ let shakaPlayer = null;
 let shakaUI = null;
 let isPlayingIntro = false;
 
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
 function resetVideoElement(video) {
     video.pause();
     video.removeAttribute('src');
     video.load();
 }
 
-function requestFullScreen(element) {
+function requestFullScreen(element, videoElement) {
+    if (isIOS && videoElement && videoElement.webkitEnterFullscreen) {
+        videoElement.webkitEnterFullscreen();
+        return;
+    }
+
     if (element.requestFullscreen) {
         element.requestFullscreen().catch(err => console.warn("Fullscreen no permitido:", err));
     } else if (element.webkitRequestFullscreen) {
@@ -518,9 +557,7 @@ function startPlayback() {
     const video = document.getElementById('moviePlayer');
 
     modal.style.display = 'block';
-
-    // Activar pantalla completa al hacer clic en reproducir
-    requestFullScreen(wrapper);
+    requestFullScreen(wrapper, video);
 
     if (shakaPlayer) {
         shakaPlayer.destroy().then(() => {
@@ -622,21 +659,36 @@ async function playMainMovie() {
 
     const hlsUrl = `${serverUrl}/Videos/${currentMovieId}/master.m3u8?${streamParams.toString()}`;
 
-    await initShakaPlayer();
-
-    try {
-        await shakaPlayer.load(hlsUrl);
-        await video.play();
-    } catch (e) {
-        console.warn("Fallo en HLS. Ejecutando fallback MP4...", e);
-        
-        const directStreamUrl = `${serverUrl}/Videos/${currentMovieId}/stream.mp4?${streamParams.toString()}`;
-        video.src = directStreamUrl;
+    if (isIOS || video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = hlsUrl;
         video.load();
-        video.play().catch(err => {
-            console.error("Error crítico:", err);
-            alert("Error al reproducir la película.");
+        video.play().catch(e => {
+            console.warn("Fallo HLS nativo en iOS, intentando MP4 directo...", e);
+            const directStreamUrl = `${serverUrl}/Videos/${currentMovieId}/stream.mp4?${streamParams.toString()}`;
+            video.src = directStreamUrl;
+            video.load();
+            video.play().catch(err => {
+                console.error("Error crítico en iOS:", err);
+                alert("Error al reproducir la película en iOS.");
+            });
         });
+    } else {
+        await initShakaPlayer();
+
+        try {
+            await shakaPlayer.load(hlsUrl);
+            await video.play();
+        } catch (e) {
+            console.warn("Fallo en HLS con Shaka. Ejecutando fallback MP4...", e);
+            
+            const directStreamUrl = `${serverUrl}/Videos/${currentMovieId}/stream.mp4?${streamParams.toString()}`;
+            video.src = directStreamUrl;
+            video.load();
+            video.play().catch(err => {
+                console.error("Error crítico:", err);
+                alert("Error al reproducir la película.");
+            });
+        }
     }
 }
 
@@ -649,7 +701,6 @@ document.addEventListener('DOMContentLoaded', () => {
 function closeMoviePlayer() {
     const video = document.getElementById('moviePlayer');
 
-    // Salir del modo pantalla completa al cerrar el reproductor
     exitFullScreen();
 
     resetVideoElement(video);

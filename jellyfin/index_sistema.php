@@ -1,52 +1,39 @@
 <?php
 require('../conectar.php');
 
+/* --- 1. CONFIGURACIÓN E INICIALIZACIÓN RÁPIDA --- */
 $resultado = $conexion->query("SELECT api, ip FROM jellyfin LIMIT 1");
 
 if ($resultado && $fila = $resultado->fetch_assoc()) {
     $apikey = trim($fila['api']);
-    $ip_db = trim($fila['ip']);
 } else {
     echo '<script>alert("No se encontró configuración de Jellyfin."); window.location.href="index.php";</script>';
     exit;
 }
 
-// Obtener el host actual desde donde navega el usuario
+// Obtener el host actual desde donde navega el usuario de forma optimizada
 $clientHost = $_SERVER['HTTP_HOST'];
-if (strpos($clientHost, ':') !== false) {
-    $clientHost = explode(':', $clientHost)[0];
+if (($pos = strpos($clientHost, ':')) !== false) {
+    $clientHost = substr($clientHost, 0, $pos);
 }
 
-// Detectar si el acceso es público o local
+// Detectar si el acceso es público o local (evaluación estricta de subredes)
 $es_publico = (
     $clientHost === '100.117.94.55' || 
     (!preg_match('/^(10\.|192\.168\.|127\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/', $clientHost) && $clientHost !== 'localhost')
 );
 
-if ($es_publico) {
-    // IP y puerto público específico de Jellyfin proporcionado
-    $server = "http://100.117.35.226:30013";
-} else {
-    // Usar la IP local guardada en la base de datos para la red interna
-    $host_limpio = preg_replace('#^https?://#', '', $ip_db);
-    if (strpos($host_limpio, ':') !== false) {
-        $partes = explode(':', $host_limpio);
-        $host_limpio = $partes[0];
-    }
-    $host_limpio = trim(rtrim($host_limpio, '/'));
-    if (empty($host_limpio)) { $host_limpio = "10.9.0.250"; }
-
-    $server = "http://" . $host_limpio . ":30013";
-}
+// Servidor base dinámico para llamadas auxiliares a la API de Jellyfin (Metadatos/Imágenes)
+$server = $es_publico ? "http://100.117.35.226:30013" : "http://" . (trim(preg_replace('#^https?://|:\d+.*#', '', $fila['ip'])) ?: "10.9.0.250") . ":30013";
 
 function fetchJellyfin($url, $apiKey) {
     $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        "X-Emby-Token: $apiKey",
-        "Accept: application/json"
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ["X-Emby-Token: $apiKey", "Accept: application/json"],
+        CURLOPT_TIMEOUT => 8,
+        CURLOPT_CONNECTTIMEOUT => 3
     ]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
     $response = curl_exec($ch);
     curl_close($ch);
     return json_decode($response, true);
@@ -54,13 +41,11 @@ function fetchJellyfin($url, $apiKey) {
 
 function getLanguages($streams) {
     $langs = [];
-    if(is_array($streams)) {
-        foreach($streams as $s) {
-            if(($s['Type'] ?? '') === 'Audio' && !empty($s['Language'])) {
+    if (is_array($streams)) {
+        foreach ($streams as $s) {
+            if (($s['Type'] ?? '') === 'Audio' && !empty($s['Language'])) {
                 $lang = strtoupper(substr($s['Language'], 0, 3));
-                if(!in_array($lang, $langs)) {
-                    $langs[] = $lang;
-                }
+                if (!in_array($lang, $langs)) $langs[] = $lang;
             }
         }
     }
@@ -74,12 +59,11 @@ if (empty($idLocal)) {
     exit;
 }
 
-// RECUPERAR DATOS DE LA PELÍCULA DESDE LA BASE DE DATOS LOCAL
+/* --- 2. RECUPERAR DATOS DE LA PELÍCULA DESDE LA BASE DE DATOS LOCAL --- */
 $stmt_db = $conexion->prepare("SELECT * FROM peliculas WHERE id_peliculas = ? LIMIT 1");
 $stmt_db->bind_param("s", $idLocal);
 $stmt_db->execute();
-$res_db = $stmt_db->get_result();
-$pelicula_db = $res_db->fetch_assoc();
+$pelicula_db = $stmt_db->get_result()->fetch_assoc();
 $stmt_db->close();
 
 if (!$pelicula_db) {
@@ -87,10 +71,13 @@ if (!$pelicula_db) {
     exit;
 }
 
-$movieId = $pelicula_db['jellyfin_id'] ?? $pelicula_db['id_jellyfin'] ?? $idLocal;
-
+$movieId = $pelicula_db['id_peliculas'] ?? $idLocal;
 $poster = !empty($pelicula_db['portada_url']) ? $pelicula_db['portada_url'] : "$server/Items/$movieId/Images/Primary?MaxWidth=400";
 
+// Seleccionar la URL de reproducción óptima según el tipo de red (Local vs Público)[cite: 4]
+$streamUrlConfigurada = $es_publico ? ($pelicula_db['pelicula_url_publico'] ?? '') : ($pelicula_db['pelicula_url'] ?? '');
+
+// Consulta optimizada a Jellyfin solo para metadatos complementarios en vista de detalles
 $userData = fetchJellyfin("$server/Users", $apikey);
 $userId = $userData[0]['Id'] ?? '';
 
@@ -99,7 +86,6 @@ $movieUrl = !empty($userId)
     : "$server/Items/$movieId?Fields=MediaSources,MediaStreams,ProductionYear,Overview,Genres";
 
 $movieData = fetchJellyfin($movieUrl, $apikey);
-
 if (!$movieData || !isset($movieData['Id'])) {
     $movieData = fetchJellyfin("$server/Items/$movieId", $apikey);
 }
@@ -121,7 +107,6 @@ $year = $movieData['ProductionYear'] ?? '----';
 
 $audioStreams = [];
 $subtitleStreams = [];
-
 $mediaSources = $movieData['MediaSources'] ?? [];
 $mediaStreams = $mediaSources[0]['MediaStreams'] ?? $movieData['MediaStreams'] ?? [];
 $mediaSourceId = $mediaSources[0]['Id'] ?? $movieId;
@@ -140,29 +125,24 @@ foreach ($mediaStreams as $stream) {
 }
 
 $languages = getLanguages($mediaStreams);
-
 $res = "HD";
-if (!empty($mediaStreams)) {
-    foreach ($mediaStreams as $s) {
-        if (($s['Type'] ?? '') == 'Video') {
-            $w = $s['Width'] ?? 0;
-            $res = ($w >= 3840) ? '4K' : (($w >= 1920) ? '1080p' : (($w >= 1280) ? '720p' : 'SD'));
-            break;
-        }
+foreach ($mediaStreams as $s) {
+    if (($s['Type'] ?? '') == 'Video') {
+        $w = $s['Width'] ?? 0;
+        $res = ($w >= 3840) ? '4K' : (($w >= 1920) ? '1080p' : (($w >= 1280) ? '720p' : 'SD'));
+        break;
     }
 }
 ?>
 <!doctype html>
-<html>
+<html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Detalles de la Película</title>
 <link rel="stylesheet" href="../css/styles.css" />
-
-<!-- Shaka Player CSS & JS -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/controls.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/shaka-player.ui.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/shaka-player.ui.min.js" defer></script>
 
 <style>
     :root {
@@ -175,269 +155,69 @@ if (!empty($mediaStreams)) {
         --primary-hover: #1d4ed8;
         --border-color: #374151;
     }
-
     * { box-sizing: border-box; }
-
     body {
         background-color: var(--bg-main);
         color: var(--text-main);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        margin: 0;
-        padding: 20px 15px;
-        line-height: 1.5;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        margin: 0; padding: 20px 15px; line-height: 1.5;
     }
-
-    .app-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding-bottom: 20px;
-        max-width: 600px;
-        margin: 0 auto;
-    }
-
-    .app-logo {
-        height: 40px;
-        width: auto;
-        object-fit: contain;
-    }
-
+    .app-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 20px; max-width: 600px; margin: 0 auto; }
+    .app-logo { height: 40px; width: auto; object-fit: contain; }
     .btn-back {
-        background: var(--bg-input);
-        color: var(--text-main);
-        text-decoration: none;
-        padding: 8px 16px;
-        border-radius: 8px;
-        font-size: 14px;
-        font-weight: 600;
-        border: 1px solid var(--border-color);
-        transition: all 0.2s ease;
-        display: flex;
-        align-items: center;
-        gap: 6px;
+        background: var(--bg-input); color: var(--text-main); text-decoration: none; padding: 8px 16px;
+        border-radius: 8px; font-size: 14px; font-weight: 600; border: 1px solid var(--border-color);
+        display: flex; align-items: center; gap: 6px; transition: background 0.2s;
     }
-
-    .btn-back:hover {
-        background: #374151;
-        transform: translateX(-2px);
-    }
-
+    .btn-back:hover { background: #374151; }
     .movie-detail-card {
-        background: var(--bg-card);
-        border-radius: 16px;
-        padding: 25px;
-        border: 1px solid var(--border-color);
-        max-width: 600px;
-        margin: 0 auto;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        background: var(--bg-card); border-radius: 16px; padding: 25px; border: 1px solid var(--border-color);
+        max-width: 600px; margin: 0 auto; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
     }
-
-    .poster-container {
-        position: relative;
-        text-align: center;
-        margin: 0 auto 20px auto;
-        max-width: 260px;
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.6);
-    }
-
-    .poster-container img.poster-img {
-        width: 100%;
-        display: block;
-        transition: transform 0.3s ease;
-    }
-
-    .poster-container:hover img.poster-img {
-        transform: scale(1.02);
-    }
-
+    .poster-container { position: relative; text-align: center; margin: 0 auto 20px auto; max-width: 260px; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 20px rgba(0,0,0,0.6); }
+    .poster-container img.poster-img { width: 100%; display: block; }
     .watermark-badge {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        background: rgba(17, 24, 39, 0.65);
-        backdrop-filter: blur(5px);
-        -webkit-backdrop-filter: blur(5px);
-        border-radius: 8px;
-        padding: 6px 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 2;
-        pointer-events: none;
+        position: absolute; top: 10px; right: 10px; background: rgba(17, 24, 39, 0.65);
+        backdrop-filter: blur(5px); border-radius: 8px; padding: 6px 12px; z-index: 2; pointer-events: none;
         border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
     }
-
-    .watermark-badge img {
-        height: 24px;
-        width: auto;
-        object-fit: contain;
-        opacity: 0.9;
-    }
-
+    .watermark-badge img { height: 24px; width: auto; object-fit: contain; opacity: 0.9; }
     .lang-badge {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 100%;
+        position: absolute; bottom: 0; left: 0; width: 100%;
         background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0) 100%);
-        padding: 20px 10px 10px 10px;
-        font-size: 11px;
-        font-weight: 700;
-        color: #38bdf8;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        text-align: center;
-        z-index: 2;
-        pointer-events: none;
+        padding: 20px 10px 10px 10px; font-size: 11px; font-weight: 700; color: #38bdf8;
+        text-transform: uppercase; text-align: center; z-index: 2; pointer-events: none;
     }
-
-    .movie-title {
-        font-size: 24px;
-        font-weight: 800;
-        margin-bottom: 6px;
-        color: var(--text-main);
-        text-align: center;
-        letter-spacing: -0.5px;
-    }
-
-    .movie-meta {
-        font-size: 13px;
-        color: var(--text-muted);
-        text-align: center;
-        margin-bottom: 20px;
-        font-weight: 500;
-    }
-
-    .detail-label {
-        font-size: 13px;
-        font-weight: 600;
-        color: #e5e7eb;
-        margin-bottom: 8px;
-        display: block;
-    }
-
-    .detail-overview {
-        font-size: 14px;
-        color: #d1d5db;
-        margin-bottom: 20px;
-        background: var(--bg-input);
-        padding: 15px;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,0.05);
-    }
-
+    .movie-title { font-size: 24px; font-weight: 800; margin-bottom: 6px; text-align: center; letter-spacing: -0.5px; }
+    .movie-meta { font-size: 13px; color: var(--text-muted); text-align: center; margin-bottom: 20px; font-weight: 500; }
+    .detail-label { font-size: 13px; font-weight: 600; color: #e5e7eb; margin-bottom: 8px; display: block; }
+    .detail-overview { font-size: 14px; color: #d1d5db; margin-bottom: 20px; background: var(--bg-input); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
     .detail-select {
-        width: 100%;
-        background: var(--bg-input);
-        border: 1px solid var(--border-color);
-        color: white;
-        padding: 12px 15px;
-        border-radius: 10px;
-        font-size: 14px;
-        margin-bottom: 20px;
-        outline: none;
-        cursor: pointer;
-        appearance: none;
-        -webkit-appearance: none;
-        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-        background-repeat: no-repeat;
-        background-position: right 15px center;
-        background-size: 16px;
-        transition: border-color 0.2s;
+        width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: white;
+        padding: 12px 15px; border-radius: 10px; font-size: 14px; margin-bottom: 20px; outline: none; cursor: pointer;
     }
-
-    .detail-select:focus {
-        border-color: var(--primary-color);
-    }
-
     .btn-play-big {
-        width: 100%;
-        background: var(--primary-color);
-        color: white;
-        border: none;
-        padding: 14px;
-        border-radius: 10px;
-        font-weight: 700;
-        font-size: 16px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        transition: all 0.2s ease;
-        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        width: 100%; background: var(--primary-color); color: white; border: none; padding: 14px;
+        border-radius: 10px; font-weight: 700; font-size: 16px; cursor: pointer; display: flex;
+        align-items: center; justify-content: center; gap: 10px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
     }
-
-    .btn-play-big:hover {
-        background: var(--primary-hover);
-        box-shadow: 0 6px 15px rgba(37, 99, 235, 0.4);
-    }
-
-    .btn-play-big:active {
-        transform: scale(0.98);
-    }
-
-    @keyframes fadeIn {
-        from { opacity: 0; backdrop-filter: blur(0px); }
-        to { opacity: 1; backdrop-filter: blur(10px); }
-    }
-
+    .btn-play-big:hover { background: var(--primary-hover); }
     #moviePlayerModal {
-        display: none; 
-        position: fixed; 
-        top: 0; left: 0; 
-        width: 100%; height: 100%; 
-        background: rgba(0,0,0,0.98); 
-        z-index: 999999;
-        animation: fadeIn 0.3s ease-out forwards;
+        display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+        background: rgba(0,0,0,0.98); z-index: 999999;
     }
-
     .btn-close-modal {
-        position: absolute; 
-        top: 20px; 
-        right: 20px; 
-        background: rgba(31, 41, 55, 0.7); 
-        backdrop-filter: blur(4px);
-        color: white; 
-        border: 1px solid rgba(255,255,255,0.2); 
-        padding: 10px 16px; 
-        cursor: pointer; 
-        border-radius: 8px; 
-        z-index: 1000000; 
-        font-weight: 600;
-        font-size: 14px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        transition: all 0.2s ease;
+        position: absolute; top: 20px; right: 20px; background: rgba(31, 41, 55, 0.7); 
+        backdrop-filter: blur(4px); color: white; border: 1px solid rgba(255,255,255,0.2); 
+        padding: 10px 16px; cursor: pointer; border-radius: 8px; z-index: 1000000; font-weight: 600;
+        display: flex; align-items: center; gap: 6px;
     }
-
-    .btn-close-modal:hover {
-        background: rgba(220, 38, 38, 0.9);
-        border-color: rgba(220, 38, 38, 1);
-        transform: scale(1.05);
-    }
-
+    .btn-close-modal:hover { background: rgba(220, 38, 38, 0.9); }
     .video-watermark {
-        position: absolute;
-        bottom: 60px;
-        right: 35px;
-        height: 100px;
-        width: auto;
-        object-fit: contain;
-        opacity: 0.6;
-        pointer-events: none;
-        z-index: 1000001;
-        filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.5));
+        position: absolute; bottom: 60px; right: 35px; height: 100px; width: auto; 
+        opacity: 0.6; pointer-events: none; z-index: 1000001;
     }
-    
-    .shaka-video-container {
-        width: 100%;
-        height: 100%;
-    }
+    .shaka-video-container { width: 100%; height: 100%; }
 </style>
 </head>
 <body>
@@ -445,16 +225,14 @@ if (!empty($mediaStreams)) {
 <div class="app-header">
     <img src="../images/empresa/logo.png" alt="Logo Empresa" class="app-logo">
     <a href="index.php" class="btn-back">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
         Volver
     </a>
 </div>
 
 <div class="movie-detail-card">
     <div class="poster-container">
-        <div class="watermark-badge">
-            <img src="../images/empresa/logo.png" alt="Logo">
-        </div>
+        <div class="watermark-badge"><img src="../images/empresa/logo.png" alt="Logo"></div>
         <img src="<?= $poster ?>" alt="<?= $movieName ?>" class="poster-img">
         <div class="lang-badge"><?= $languages ?></div>
     </div>
@@ -490,7 +268,7 @@ if (!empty($mediaStreams)) {
 <!-- REPRODUCTOR DE VIDEO MODAL -->
 <div id="moviePlayerModal">
     <button onclick="closeMoviePlayer()" class="btn-close-modal">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         Cerrar
     </button>
     
@@ -503,16 +281,13 @@ if (!empty($mediaStreams)) {
 </div>
 
 <script>
-const currentMovieId = '<?= $movieId ?>';
-const mediaSourceId = '<?= $mediaSourceId ?>';
-const serverUrl = '<?= $server ?>';
-const apiKey = '<?= $apikey ?>';
+// URL base de streaming obtenida de la base de datos local (Local o Pública según la conexión detectada)
+const baseStreamUrl = '<?= $streamUrlConfigurada ?>';
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 let shakaPlayer = null;
 let shakaUI = null;
 let isPlayingIntro = false;
-
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 function resetVideoElement(video) {
     video.pause();
@@ -521,33 +296,18 @@ function resetVideoElement(video) {
 }
 
 function requestFullScreen(element, videoElement) {
-    if (isIOS && videoElement && videoElement.webkitEnterFullscreen) {
+    if (isIOS && videoElement?.webkitEnterFullscreen) {
         videoElement.webkitEnterFullscreen();
         return;
     }
-
-    if (element.requestFullscreen) {
-        element.requestFullscreen().catch(err => console.warn("Fullscreen no permitido:", err));
-    } else if (element.webkitRequestFullscreen) {
-        element.webkitRequestFullscreen();
-    } else if (element.mozRequestFullScreen) {
-        element.mozRequestFullScreen();
-    } else if (element.msRequestFullscreen) {
-        element.msRequestFullscreen();
-    }
+    const requestFn = element.requestFullscreen || element.webkitRequestFullscreen || element.mozRequestFullScreen || element.msRequestFullscreen;
+    if (requestFn) requestFn.call(element).catch(err => console.warn("Fullscreen no permitido:", err));
 }
 
 function exitFullScreen() {
     if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) {
-        if (document.exitFullscreen) {
-            document.exitFullscreen().catch(err => console.warn("Error al salir de Fullscreen:", err));
-        } else if (document.webkitExitFullscreen) {
-            document.webkitExitFullscreen();
-        } else if (document.mozCancelFullScreen) {
-            document.mozCancelFullScreen();
-        } else if (document.msExitFullscreen) {
-            document.msExitFullscreen();
-        }
+        const exitFn = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+        if (exitFn) exitFn.call(document).catch(err => console.warn("Error al salir de Fullscreen:", err));
     }
 }
 
@@ -576,24 +336,20 @@ function startPlayback() {
 function playIntroFile(video) {
     isPlayingIntro = true;
     resetVideoElement(video);
-    
     video.src = '../descripcion/intro.mp4';
     
-    video.onended = function() {
+    video.onended = () => {
         if (isPlayingIntro) {
             isPlayingIntro = false;
             playMainMovie();
         }
     };
 
-    let playPromise = video.play();
-    if (playPromise !== undefined) {
-        playPromise.catch(error => {
-            console.warn("No se pudo reproducir la intro, saltando a la película...", error);
-            isPlayingIntro = false;
-            playMainMovie();
-        });
-    }
+    video.play().catch(error => {
+        console.warn("No se pudo reproducir la intro, saltando...", error);
+        isPlayingIntro = false;
+        playMainMovie();
+    });
 }
 
 async function initShakaPlayer() {
@@ -605,34 +361,7 @@ async function initShakaPlayer() {
     shakaUI = new shaka.ui.Overlay(shakaPlayer, videoContainer, video);
 
     shakaPlayer.configure({
-        streaming: {
-            rebufferingGoal: 2,           
-            bufferingGoal: 8,             
-            bufferBehind: 10,
-            retryParameters: {
-                maxAttempts: 3,
-                baseDelay: 1000,
-                backoffFactor: 1.5
-            },
-            jumpLargeGaps: true,
-            stallEnabled: true
-        },
-        manifest: {
-            retryParameters: {
-                maxAttempts: 3
-            }
-        }
-    });
-
-    video.addEventListener('timeupdate', () => {
-        if (shakaUI && video.currentTime > 0 && !video.paused) {
-            const spinner = videoContainer.querySelector('.shaka-spinner-container');
-            if (spinner) spinner.classList.remove('shaka-spinner-container-active');
-        }
-    });
-
-    shakaPlayer.addEventListener('error', (event) => {
-        console.error('Error de Shaka Player:', event.detail);
+        streaming: { rebufferingGoal: 2, bufferingGoal: 8, bufferBehind: 10, jumpLargeGaps: true, stallEnabled: true }
     });
 }
 
@@ -643,66 +372,44 @@ async function playMainMovie() {
 
     const audioIndex = document.getElementById('audioStreamSelect').value;
     const subIndex = document.getElementById('subtitleStreamSelect').value;
-    const sessionId = Math.random().toString(36).substring(2, 15);
-
-    const streamParams = new URLSearchParams({
-        'api_key': apiKey,
-        'PlaySessionId': sessionId,
-        'MediaSourceId': mediaSourceId,
-        'VideoCodec': 'h264',
-        'AudioCodec': 'aac',
-        'maxStreamingBitrate': '6000000'
-    });
-
+    
+    // Construir los parámetros adicionales limpios sobre la URL obtenida de la base de datos
+    let streamParams = new URLSearchParams();
     if (audioIndex !== "") streamParams.append('AudioStreamIndex', audioIndex);
     if (subIndex !== "-1") streamParams.append('SubtitleStreamIndex', subIndex);
 
-    const hlsUrl = `${serverUrl}/Videos/${currentMovieId}/master.m3u8?${streamParams.toString()}`;
+    let finalVideoUrl = baseStreamUrl;
+    const queryString = streamParams.toString();
+    if (queryString) {
+        finalVideoUrl += (baseStreamUrl.includes('?') ? '&' : '?') + queryString;
+    }
 
     if (isIOS || video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = hlsUrl;
+        video.src = finalVideoUrl;
         video.load();
         video.play().catch(e => {
-            console.warn("Fallo HLS nativo en iOS, intentando MP4 directo...", e);
-            const directStreamUrl = `${serverUrl}/Videos/${currentMovieId}/stream.mp4?${streamParams.toString()}`;
-            video.src = directStreamUrl;
-            video.load();
-            video.play().catch(err => {
-                console.error("Error crítico en iOS:", err);
-                alert("Error al reproducir la película en iOS.");
-            });
+            console.error("Error crítico en reproducción:", e);
+            alert("Error al reproducir la película.");
         });
     } else {
         await initShakaPlayer();
-
         try {
-            await shakaPlayer.load(hlsUrl);
+            await shakaPlayer.load(finalVideoUrl);
             await video.play();
         } catch (e) {
-            console.warn("Fallo en HLS con Shaka. Ejecutando fallback MP4...", e);
-            
-            const directStreamUrl = `${serverUrl}/Videos/${currentMovieId}/stream.mp4?${streamParams.toString()}`;
-            video.src = directStreamUrl;
-            video.load();
-            video.play().catch(err => {
-                console.error("Error crítico:", err);
-                alert("Error al reproducir la película.");
-            });
+            console.error("Error crítico con Shaka Player:", e);
+            alert("Error al reproducir la película.");
         }
     }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    if (window.shaka) {
-        shaka.polyfill.installAll();
-    }
+    if (window.shaka) shaka.polyfill.installAll();
 });
 
 function closeMoviePlayer() {
     const video = document.getElementById('moviePlayer');
-
     exitFullScreen();
-
     resetVideoElement(video);
     video.onended = null;
     

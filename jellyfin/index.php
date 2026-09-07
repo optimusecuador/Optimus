@@ -149,6 +149,27 @@
         border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
+    /* CÍRCULO EN LA PARTE INFERIOR IZQUIERDA PARA CONTEO DE PELÍCULAS */
+    .count-badge {
+        position: absolute;
+        bottom: 28px;
+        left: 6px;
+        background-color: #ef4444;
+        color: #ffffff;
+        font-size: 11px;
+        font-weight: bold;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 3;
+        pointer-events: none;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+        border: 1.5px solid #ffffff;
+    }
+
     /* --- TARJETAS MÓVILES / RECIENTES --- */
     .movie-card-mobile {
         flex: 0 0 130px;
@@ -407,6 +428,23 @@ function fixImageUrl($url) {
     return $scheme . $clientHost . $port . $path . $query;
 }
 
+/* --- FUNCIÓN PARA AGRUPAR PELÍCULAS DUPLICADAS POR NOMBRE --- */
+function groupMoviesByName($moviesArray) {
+    $grouped = [];
+    foreach ($moviesArray as $movie) {
+        $key = mb_strtolower(trim($movie['nombre']));
+        if (!isset($grouped[$key])) {
+            $grouped[$key] = [
+                'main' => $movie,
+                'items' => [$movie]
+            ];
+        } else {
+            $grouped[$key]['items'][] = $movie;
+        }
+    }
+    return $grouped;
+}
+
 /* --- 1. CAPTURA DE FILTROS DE URL --- */
 $libraryId = $_GET['library'] ?? '';
 $genreFilter = $_GET['genre'] ?? '';
@@ -601,21 +639,34 @@ $nextUrl = '?' . http_build_query($nextParams);
         <div class="isp-subtitle">Seguir viendo</div>
         <div class="mobile-scroll-container">
             <?php
-            foreach($continueWatchingMovies as $m) {
+            $groupedContinue = groupMoviesByName($continueWatchingMovies);
+            foreach($groupedContinue as $group) {
+                $m = $group['main'];
+                $count = count($group['items']);
+                $allIds = implode(',', array_column($group['items'], 'id_peliculas'));
+                
                 $movieId = htmlspecialchars($m['id_peliculas'], ENT_QUOTES);
                 $movieName = htmlspecialchars($m['nombre'], ENT_QUOTES);
                 $year = htmlspecialchars($m['fecha'] ?: '----', ENT_QUOTES);
                 $poster = htmlspecialchars(fixImageUrl($m['portada_url']), ENT_QUOTES);
                 $languages = htmlspecialchars($m['audio'] ?: 'Desconocido', ENT_QUOTES);
 
+                $urlParams = 'id='.$movieId;
+                if ($count > 1) {
+                    $urlParams .= '&ids='.urlencode($allIds);
+                }
+
+                $countBadgeHtml = ($count > 1) ? '<div class="count-badge">'.$count.'</div>' : '';
+
                 echo '
                 <div class="movie-card-mobile">
                     <div>
-                        <a href="index_sistema.php?id='.$movieId.'" class="poster-container" style="display:block;">
+                        <a href="index_sistema.php?'.$urlParams.'" class="poster-container" style="display:block;">
                             <div class="watermark-badge">
                                 <img src="../images/empresa/logo.png" alt="Logo">
                             </div>
                             <img src="'.$poster.'" class="poster-img" alt="'.$movieName.'">
+                            '.$countBadgeHtml.'
                             <div class="lang-badge">'.$languages.'</div>
                         </a>
                         <div style="padding: 6px 8px 8px 8px;">
@@ -635,21 +686,34 @@ $nextUrl = '?' . http_build_query($nextParams);
         <div class="isp-subtitle">Últimas películas</div>
         <div class="mobile-scroll-container">
             <?php
-            foreach($recentMovies as $m) {
+            $groupedRecent = groupMoviesByName($recentMovies);
+            foreach($groupedRecent as $group) {
+                $m = $group['main'];
+                $count = count($group['items']);
+                $allIds = implode(',', array_column($group['items'], 'id_peliculas'));
+
                 $movieId = htmlspecialchars($m['id_peliculas'], ENT_QUOTES);
                 $movieName = htmlspecialchars($m['nombre'], ENT_QUOTES);
                 $year = htmlspecialchars($m['fecha'] ?: '----', ENT_QUOTES);
                 $poster = htmlspecialchars(fixImageUrl($m['portada_url']), ENT_QUOTES);
                 $languages = htmlspecialchars($m['audio'] ?: 'Desconocido', ENT_QUOTES);
 
+                $urlParams = 'id='.$movieId;
+                if ($count > 1) {
+                    $urlParams .= '&ids='.urlencode($allIds);
+                }
+
+                $countBadgeHtml = ($count > 1) ? '<div class="count-badge">'.$count.'</div>' : '';
+
                 echo '
                 <div class="movie-card-mobile">
                     <div>
-                        <a href="index_sistema.php?id='.$movieId.'" class="poster-container" style="display:block;">
+                        <a href="index_sistema.php?'.$urlParams.'" class="poster-container" style="display:block;">
                             <div class="watermark-badge">
                                 <img src="../images/empresa/logo.png" alt="Logo">
                             </div>
                             <img src="'.$poster.'" class="poster-img" alt="'.$movieName.'">
+                            '.$countBadgeHtml.'
                             <div class="lang-badge">'.$languages.'</div>
                         </a>
                         <div style="padding: 6px 8px 8px 8px;">
@@ -686,21 +750,34 @@ $nextUrl = '?' . http_build_query($nextParams);
     <div class="movies-grid-container">
         <?php
         if($currentShownCount > 0) {
-            foreach($itemsList as $m) {
+            $groupedItems = groupMoviesByName($itemsList);
+            foreach($groupedItems as $group) {
+                $m = $group['main'];
+                $count = count($group['items']);
+                $allIds = implode(',', array_column($group['items'], 'id_peliculas'));
+
                 $movieId = htmlspecialchars($m['id_peliculas'], ENT_QUOTES);
                 $movieName = htmlspecialchars($m['nombre'], ENT_QUOTES);
                 $year = htmlspecialchars($m['fecha'] ?: 'N/A', ENT_QUOTES);
                 $poster = htmlspecialchars(fixImageUrl($m['portada_url']), ENT_QUOTES);
                 $languages = htmlspecialchars($m['audio'] ?: 'Desconocido', ENT_QUOTES);
 
+                $urlParams = 'id='.$movieId;
+                if ($count > 1) {
+                    $urlParams .= '&ids='.urlencode($allIds);
+                }
+
+                $countBadgeHtml = ($count > 1) ? '<div class="count-badge">'.$count.'</div>' : '';
+
                 echo '
                 <div class="movie-card-grid">
                     <div>
-                        <a href="index_sistema.php?id='.$movieId.'" class="poster-container" style="display:block;">
+                        <a href="index_sistema.php?'.$urlParams.'" class="poster-container" style="display:block;">
                             <div class="watermark-badge">
                                 <img src="../images/empresa/logo.png" alt="Logo">
                             </div>
                             <img src="'.$poster.'" class="poster-img" alt="'.$movieName.'">
+                            '.$countBadgeHtml.'
                             <div class="lang-badge">'.$languages.'</div>
                         </a>
                         <div style="padding: 6px 8px 8px 8px;">

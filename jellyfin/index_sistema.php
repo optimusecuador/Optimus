@@ -68,10 +68,32 @@ function getLanguages($streams) {
 }
 
 $idLocal = trim($_GET['id'] ?? '');
+$idsRaw = trim($_GET['ids'] ?? '');
 
 if (empty($idLocal)) {
     echo '<script>alert("No se especificó ninguna película."); window.location.href="index.php";</script>';
     exit;
+}
+
+/* --- RECUPERAR TODAS LAS VERSIONES SI EXISTE EL PARÁMETRO ids --- */
+$availableVersions = [];
+if (!empty($idsRaw)) {
+    $idsArray = explode(',', $idsRaw);
+    $idsArray = array_map('trim', $idsArray);
+    $idsArray = array_filter($idsArray);
+
+    if (!empty($idsArray)) {
+        $placeholders = implode(',', array_fill(0, count($idsArray), '?'));
+        $types = str_repeat('s', count($idsArray));
+        $stmt_vers = $conexion->prepare("SELECT * FROM peliculas WHERE id_peliculas IN ($placeholders)");
+        $stmt_vers->bind_param($types, ...$idsArray);
+        $stmt_vers->execute();
+        $res_vers = $stmt_vers->get_result();
+        while ($vRow = $res_vers->fetch_assoc()) {
+            $availableVersions[] = $vRow;
+        }
+        $stmt_vers->close();
+    }
 }
 
 // RECUPERAR DATOS DE LA PELÍCULA DESDE LA BASE DE DATOS LOCAL
@@ -85,6 +107,11 @@ $stmt_db->close();
 if (!$pelicula_db) {
     echo '<script>alert("La película no existe en la base de datos local."); window.location.href="index.php";</script>';
     exit;
+}
+
+// Si no había lista de versiones en el parámetro 'ids', usamos al menos la película seleccionada
+if (empty($availableVersions)) {
+    $availableVersions[] = $pelicula_db;
 }
 
 $movieId = $pelicula_db['jellyfin_id'] ?? $pelicula_db['id_jellyfin'] ?? $idLocal;
@@ -462,6 +489,22 @@ if (!empty($mediaStreams)) {
     <div class="movie-title"><?= $movieName ?></div>
     <div class="movie-meta"><?= $year ?> &nbsp;•&nbsp; <?= $res ?></div>
 
+    <!-- SELECCIÓN DE VERSIÓN SI EXISTEN 2 O MÁS OPCIONES -->
+    <?php if (count($availableVersions) > 1): ?>
+        <label class="detail-label" for="versionSelect" style="color: #38bdf8;">Versiones disponibles (<?= count($availableVersions) ?>)</label>
+        <select id="versionSelect" class="detail-select" onchange="changeMovieVersion(this.value)" style="border-color: #38bdf8;">
+            <?php foreach ($availableVersions as $index => $v): 
+                $vId = $v['id_peliculas'];
+                $vAudio = !empty($v['audio']) ? $v['audio'] : 'Servidor '.($index + 1);
+                $selectedVer = ($vId == $idLocal) ? 'selected' : '';
+            ?>
+                <option value="<?= htmlspecialchars($vId) ?>" <?= $selectedVer ?>>
+                    Opción <?= ($index + 1) ?> - Audio: <?= htmlspecialchars($vAudio) ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+    <?php endif; ?>
+
     <label class="detail-label">Resumen</label>
     <div class="detail-overview"><?= $movieOverview ?></div>
 
@@ -507,6 +550,15 @@ const currentMovieId = '<?= $movieId ?>';
 const mediaSourceId = '<?= $mediaSourceId ?>';
 const serverUrl = '<?= $server ?>';
 const apiKey = '<?= $apikey ?>';
+const idsRawParam = '<?= htmlspecialchars($idsRaw, ENT_QUOTES) ?>';
+
+function changeMovieVersion(newId) {
+    let targetUrl = 'index_sistema.php?id=' + encodeURIComponent(newId);
+    if (idsRawParam) {
+        targetUrl += '&ids=' + encodeURIComponent(idsRawParam);
+    }
+    window.location.href = targetUrl;
+}
 
 let shakaPlayer = null;
 let shakaUI = null;

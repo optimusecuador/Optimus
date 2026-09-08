@@ -404,27 +404,21 @@ require('../conectar.php');
 function fixImageUrl($url) {
     if (empty($url)) return $url;
     
-    // Obtener la IP o Dominio del cliente, descartando el puerto si viniera pegado a $_SERVER['HTTP_HOST']
     $clientHost = $_SERVER['HTTP_HOST'];
     if (strpos($clientHost, ':') !== false) {
         $clientHost = explode(':', $clientHost)[0];
     }
     
-    // Analizar la URL guardada en la base de datos (portada_url)
     $parsed = parse_url($url);
     if (!$parsed || !isset($parsed['host'])) {
-        return $url; // Devuelve original si no tiene formato válido
+        return $url;
     }
     
     $scheme = isset($parsed['scheme']) ? $parsed['scheme'] . '://' : 'http://';
-    
-    // AQUÍ ESTABA EL ERROR: Necesitamos mantener el puerto original guardado en BD (ej: :30013 o :8096)
     $port = isset($parsed['port']) ? ':' . $parsed['port'] : '';
-    
     $path = isset($parsed['path']) ? $parsed['path'] : '';
     $query = isset($parsed['query']) ? '?' . $parsed['query'] : '';
     
-    // Ensamblar la URL combinando: Protocolo + IP_DEL_CLIENTE + PUERTO_DE_LA_BD + RUTA
     return $scheme . $clientHost . $port . $path . $query;
 }
 
@@ -450,8 +444,10 @@ $libraryId = $_GET['library'] ?? '';
 $genreFilter = $_GET['genre'] ?? '';
 $langFilter = $_GET['lang'] ?? '';
 $searchTerm = $_GET['search'] ?? '';
+$collectionFilter = $_GET['collection'] ?? '';
 $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
 $limitPerPage = 200;
+$startIndex = 0; // Inicialización por defecto para evitar warnings de variable indefinida
 
 /* --- 2. OBTENER LIBRERÍAS / CATEGORÍAS DESDE LA BD --- */
 $libraries = [];
@@ -491,6 +487,14 @@ if (!empty($searchTerm)) {
     $types .= "s";
 }
 
+if (!empty($collectionFilter) && $collectionFilter !== 'all') {
+    $whereClauses[] = "colecciones LIKE ?";
+    $params[] = "%" . $collectionFilter . "%";
+    $types .= "s";
+} elseif ($collectionFilter === 'all') {
+    $whereClauses[] = "colecciones IS NOT NULL AND colecciones != ''";
+}
+
 $sqlWhereString = implode(" AND ", $whereClauses);
 
 /* --- 4. OBTENER PELÍCULAS PARA SEGUIR VIENDO (REPRODUCCIÓN > 0) --- */
@@ -511,39 +515,72 @@ if ($resRecent) {
     }
 }
 
-/* --- 6. CONTAR TOTAL DE REGISTROS PARA PAGINACIÓN --- */
-$countSql = "SELECT COUNT(*) as total FROM peliculas WHERE " . $sqlWhereString;
-$stmtCount = $conexion->prepare($countSql);
-if (!empty($params)) {
-    $stmtCount->bind_param($types, ...$params);
+/* --- 6. MANEJO ESPECIAL DE MODO VISTA DE COLECCIONES (GROUP BY COLECCIÓN) --- */
+$isCollectionView = ($collectionFilter === 'all');
+$collectionsListGrouped = [];
+
+if ($isCollectionView) {
+    // Si se activa la vista general de colecciones, agrupamos por cada colección existente
+    $sqlCols = "SELECT * FROM peliculas WHERE colecciones IS NOT NULL AND colecciones != '' ORDER BY id_peliculas DESC";
+    $resCols = $conexion->query($sqlCols);
+    if ($resCols) {
+        while ($cRow = $resCols->fetch_assoc()) {
+            $rawCols = explode(',', $cRow['colecciones']);
+            foreach ($rawCols as $colName) {
+                $cName = trim($colName);
+                if (!empty($cName)) {
+                    if (!isset($collectionsListGrouped[$cName])) {
+                        $collectionsListGrouped[$cName] = [
+                            'nombre_coleccion' => $cName,
+                            'main' => $cRow,
+                            'count' => 0,
+                            'peliculas' => []
+                        ];
+                    }
+                    $collectionsListGrouped[$cName]['count']++;
+                    $collectionsListGrouped[$cName]['peliculas'][] = $cRow;
+                }
+            }
+        }
+    }
+    $totalRecords = count($collectionsListGrouped);
+    $totalPages = 1;
+    $startIndex = 0;
+} else {
+    /* --- 7. CONTAR TOTAL DE REGISTROS PARA PAGINACIÓN DE PELÍCULAS NORMALES --- */
+    $countSql = "SELECT COUNT(*) as total FROM peliculas WHERE " . $sqlWhereString;
+    $stmtCount = $conexion->prepare($countSql);
+    if (!empty($params)) {
+        $stmtCount->bind_param($types, ...$params);
+    }
+    $stmtCount->execute();
+    $totalRecords = $stmtCount->get_result()->fetch_assoc()['total'] ?? 0;
+    $stmtCount->close();
+
+    $totalPages = max(1, ceil($totalRecords / $limitPerPage));
+    $page = min($page, $totalPages);
+    $startIndex = ($page - 1) * $limitPerPage;
+
+    /* --- OBTENER LISTADO PAGINADO DE LA BIBLIOTECA DE FORMA ALEATORIA --- */
+    $dataSql = "SELECT * FROM peliculas WHERE " . $sqlWhereString . " ORDER BY RAND() LIMIT ?, ?";
+    $stmtData = $conexion->prepare($dataSql);
+
+    $queryParamsData = $params;
+    $queryParamsData[] = $startIndex;
+    $queryParamsData[] = $limitPerPage;
+    $currentTypes = $types . "ii";
+
+    $stmtData->bind_param($currentTypes, ...$queryParamsData);
+    $stmtData->execute();
+    $resultData = $stmtData->get_result();
+    $itemsList = [];
+    while ($row = $resultData->fetch_assoc()) {
+        $itemsList[] = $row;
+    }
+    $stmtData->close();
 }
-$stmtCount->execute();
-$totalRecords = $stmtCount->get_result()->fetch_assoc()['total'] ?? 0;
-$stmtCount->close();
 
-$totalPages = max(1, ceil($totalRecords / $limitPerPage));
-$page = min($page, $totalPages);
-$startIndex = ($page - 1) * $limitPerPage;
-
-/* --- 7. OBTENER LISTADO PAGINADO DE LA BIBLIOTECA DE FORMA ALEATORIA --- */
-$dataSql = "SELECT * FROM peliculas WHERE " . $sqlWhereString . " ORDER BY RAND() LIMIT ?, ?";
-$stmtData = $conexion->prepare($dataSql);
-
-$queryParamsData = $params;
-$queryParamsData[] = $startIndex;
-$queryParamsData[] = $limitPerPage;
-$currentTypes = $types . "ii";
-
-$stmtData->bind_param($currentTypes, ...$queryParamsData);
-$stmtData->execute();
-$resultData = $stmtData->get_result();
-$itemsList = [];
-while ($row = $resultData->fetch_assoc()) {
-    $itemsList[] = $row;
-}
-$stmtData->close();
-
-$currentShownCount = count($itemsList);
+$currentShownCount = $isCollectionView ? count($collectionsListGrouped) : count($itemsList);
 $endRecord = min($startIndex + $limitPerPage, $totalRecords);
 $startRecord = $totalRecords > 0 ? $startIndex + 1 : 0;
 
@@ -552,6 +589,7 @@ if(!empty($libraryId)) $queryParamsNav['library'] = $libraryId;
 if(!empty($genreFilter)) $queryParamsNav['genre'] = $genreFilter;
 if(!empty($langFilter)) $queryParamsNav['lang'] = $langFilter;
 if(!empty($searchTerm)) $queryParamsNav['search'] = $searchTerm;
+if(!empty($collectionFilter)) $queryParamsNav['collection'] = $collectionFilter;
 
 $prevParams = $queryParamsNav;
 $prevParams['page'] = $page - 1;
@@ -568,19 +606,32 @@ $nextUrl = '?' . http_build_query($nextParams);
 
 <!-- SECCIÓN PRINCIPAL: BIBLIOTECA Y CONTENIDOS -->
 <div class="panel-dark">
-    <div class="isp-title">Biblioteca Completa</div>
+    <div class="isp-title">
+        <?php 
+        if (!empty($collectionFilter) && $collectionFilter !== 'all') {
+            echo 'Colección: ' . htmlspecialchars($collectionFilter);
+        } elseif ($isCollectionView) {
+            echo 'Todas las Colecciones';
+        } else {
+            echo 'Biblioteca Completa';
+        }
+        ?>
+    </div>
 
-    <!-- Categorías de Librerías -->
+    <!-- Categorías de Librerías y Colecciones -->
     <div class="categories-bar">
         <?php 
         $langParam = !empty($langFilter) ? '&lang='.urlencode($langFilter) : '';
-        $isAllActive = empty($libraryId);
+        $isAllActive = empty($libraryId) && empty($collectionFilter);
+        $isColActive = ($collectionFilter === 'all');
         ?>
         <a href="?<?= !empty($langFilter) ? 'lang='.urlencode($langFilter) : '' ?>" class="category-chip" style="<?= $isAllActive ? 'background:#2563eb;' : 'background:#1f2937;' ?>">Todas</a>
         
+        <a href="?collection=all<?= $langParam ?>" class="category-chip" style="<?= $isColActive ? 'background:#8b5cf6;' : 'background:#4c1d95;' ?>">Colecciones</a>
+
         <?php
         foreach($libraries as $libCat) {
-            $active = ($libraryId == $libCat) ? 'background:#2563eb;' : 'background:#1f2937;';
+            $active = ($libraryId == $libCat && empty($collectionFilter)) ? 'background:#2563eb;' : 'background:#1f2937;';
             echo '<a href="?library='.urlencode($libCat).$langParam.'" class="category-chip" style="'.$active.'">'.htmlspecialchars($libCat).'</a>';
         }
         ?>
@@ -604,6 +655,7 @@ $nextUrl = '?' . http_build_query($nextParams);
         <?php 
         if(!empty($libraryId)) echo '<input type="hidden" name="library" value="'.htmlspecialchars($libraryId).'">'; 
         if(!empty($genreFilter)) echo '<input type="hidden" name="genre" value="'.htmlspecialchars($genreFilter).'">'; 
+        if(!empty($collectionFilter)) echo '<input type="hidden" name="collection" value="'.htmlspecialchars($collectionFilter).'">'; 
         ?>
         
         <select name="lang" class="clientes-input" onchange="this.form.submit()" style="max-width: 200px;">
@@ -749,46 +801,77 @@ $nextUrl = '?' . http_build_query($nextParams);
     <!-- GRID DE RESULTADOS -->
     <div class="movies-grid-container">
         <?php
-        if($currentShownCount > 0) {
-            $groupedItems = groupMoviesByName($itemsList);
-            foreach($groupedItems as $group) {
-                $m = $group['main'];
-                $count = count($group['items']);
-                $allIds = implode(',', array_column($group['items'], 'id_peliculas'));
+        if ($isCollectionView) {
+            if (!empty($collectionsListGrouped)) {
+                foreach ($collectionsListGrouped as $colGroup) {
+                    $cName = htmlspecialchars($colGroup['nombre_coleccion'], ENT_QUOTES);
+                    $m = $colGroup['main'];
+                    $count = $colGroup['count'];
+                    $poster = htmlspecialchars(fixImageUrl($m['portada_url']), ENT_QUOTES);
 
-                $movieId = htmlspecialchars($m['id_peliculas'], ENT_QUOTES);
-                $movieName = htmlspecialchars($m['nombre'], ENT_QUOTES);
-                $year = htmlspecialchars($m['fecha'] ?: 'N/A', ENT_QUOTES);
-                $poster = htmlspecialchars(fixImageUrl($m['portada_url']), ENT_QUOTES);
-                $languages = htmlspecialchars($m['audio'] ?: 'Desconocido', ENT_QUOTES);
-
-                $urlParams = 'id='.$movieId;
-                if ($count > 1) {
-                    $urlParams .= '&ids='.urlencode($allIds);
-                }
-
-                $countBadgeHtml = ($count > 1) ? '<div class="count-badge">'.$count.'</div>' : '';
-
-                echo '
-                <div class="movie-card-grid">
-                    <div>
-                        <a href="index_sistema.php?'.$urlParams.'" class="poster-container" style="display:block;">
-                            <div class="watermark-badge">
-                                <img src="../images/empresa/logo.png" alt="Logo">
+                    echo '
+                    <div class="movie-card-grid">
+                        <div>
+                            <a href="?collection='.urlencode($colGroup['nombre_coleccion']).'" class="poster-container" style="display:block;">
+                                <div class="watermark-badge">
+                                    <img src="../images/empresa/logo.png" alt="Logo">
+                                </div>
+                                <img src="'.$poster.'" class="poster-img" alt="'.$cName.'">
+                                <div class="count-badge">'.$count.'</div>
+                                <div class="lang-badge">Colección</div>
+                            </a>
+                            <div style="padding: 6px 8px 8px 8px;">
+                                <div class="movie-title-mobile" title="'.$cName.'">'.$cName.'</div>
+                                <div class="movie-meta-mobile">'.$count.' películas</div>
                             </div>
-                            <img src="'.$poster.'" class="poster-img" alt="'.$movieName.'">
-                            '.$countBadgeHtml.'
-                            <div class="lang-badge">'.$languages.'</div>
-                        </a>
-                        <div style="padding: 6px 8px 8px 8px;">
-                            <div class="movie-title-mobile" title="'.$movieName.'">'.$movieName.'</div>
-                            <div class="movie-meta-mobile">'.$year.'</div>
                         </div>
-                    </div>
-                </div>';
+                    </div>';
+                }
+            } else {
+                echo '<div style="color:#9ca3af; text-align:center; padding:30px; grid-column: 1 / -1;">No hay colecciones disponibles.</div>';
             }
         } else {
-            echo '<div style="color:#9ca3af; text-align:center; padding:30px; grid-column: 1 / -1;">No se encontraron resultados para el filtro seleccionado.</div>';
+            if ($currentShownCount > 0) {
+                $groupedItems = groupMoviesByName($itemsList);
+                foreach ($groupedItems as $group) {
+                    $m = $group['main'];
+                    $count = count($group['items']);
+                    $allIds = implode(',', array_column($group['items'], 'id_peliculas'));
+
+                    $movieId = htmlspecialchars($m['id_peliculas'], ENT_QUOTES);
+                    $movieName = htmlspecialchars($m['nombre'], ENT_QUOTES);
+                    $year = htmlspecialchars($m['fecha'] ?: 'N/A', ENT_QUOTES);
+                    $poster = htmlspecialchars(fixImageUrl($m['portada_url']), ENT_QUOTES);
+                    $languages = htmlspecialchars($m['audio'] ?: 'Desconocido', ENT_QUOTES);
+
+                    $urlParams = 'id='.$movieId;
+                    if ($count > 1) {
+                        $urlParams .= '&ids='.urlencode($allIds);
+                    }
+
+                    $countBadgeHtml = ($count > 1) ? '<div class="count-badge">'.$count.'</div>' : '';
+
+                    echo '
+                    <div class="movie-card-grid">
+                        <div>
+                            <a href="index_sistema.php?'.$urlParams.'" class="poster-container" style="display:block;">
+                                <div class="watermark-badge">
+                                    <img src="../images/empresa/logo.png" alt="Logo">
+                                </div>
+                                <img src="'.$poster.'" class="poster-img" alt="'.$movieName.'">
+                                '.$countBadgeHtml.'
+                                <div class="lang-badge">'.$languages.'</div>
+                            </a>
+                            <div style="padding: 6px 8px 8px 8px;">
+                                <div class="movie-title-mobile" title="'.$movieName.'">'.$movieName.'</div>
+                                <div class="movie-meta-mobile">'.$year.'</div>
+                            </div>
+                        </div>
+                    </div>';
+                }
+            } else {
+                echo '<div style="color:#9ca3af; text-align:center; padding:30px; grid-column: 1 / -1;">No se encontraron resultados para el filtro seleccionado.</div>';
+            }
         }
         ?>
     </div>

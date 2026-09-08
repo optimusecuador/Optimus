@@ -39,17 +39,64 @@ if ($es_publico) {
     $server = "http://" . $host_limpio . ":30013";
 }
 
-function fetchJellyfin($url, $apiKey) {
+function fetchJellyfin($url, $apiKey, $method = 'GET', $bodyData = null) {
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+    
+    $headers = [
         "X-Emby-Token: $apiKey",
         "Accept: application/json"
-    ]);
+    ];
+
+    if ($method === 'POST') {
+        curl_setopt($ch, CURLOPT_POST, true);
+        if ($bodyData !== null) {
+            $headers[] = "Content-Type: application/json";
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($bodyData));
+        }
+    }
+
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
     $response = curl_exec($ch);
     curl_close($ch);
     return json_decode($response, true);
+}
+
+/* --- PROCESO EN SEGUNDO PLANO: GUARDAR PROGRESO DE REPRODUCCIÓN (BD Y JELLYFIN) --- */
+if (isset($_POST['action']) && $_POST['action'] === 'save_progress') {
+    header('Content-Type: application/json');
+    $idMovieSave = trim($_POST['id_peliculas'] ?? '');
+    $jellyfinItemId = trim($_POST['jellyfin_id'] ?? '');
+    $currentTime = floatval($_POST['reproduccion'] ?? 0);
+    $isStopped = isset($_POST['stopped']) && $_POST['stopped'] === 'true';
+
+    if (!empty($idMovieSave)) {
+        // 1. Guardar en la base de datos MySQL local
+        $stmt_save = $conexion->prepare("UPDATE peliculas SET reproduccion = ? WHERE id_peliculas = ?");
+        $stmt_save->bind_param("ds", $currentTime, $idMovieSave);
+        $success = $stmt_save->execute();
+        $stmt_save->close();
+
+        // 2. Guardar en Jellyfin vía API si existe el ID de Jellyfin
+        if (!empty($jellyfinItemId)) {
+            $positionTicks = floor($currentTime * 10000000);
+            
+            $payload = [
+                'ItemId' => $jellyfinItemId,
+                'PositionTicks' => $positionTicks,
+                'IsPaused' => false
+            ];
+
+            $endpoint = $isStopped ? "$server/Sessions/Playing/Stopped" : "$server/Sessions/Playing/Progress";
+            fetchJellyfin($endpoint, $apikey, 'POST', $payload);
+        }
+
+        echo json_encode(['status' => $success ? 'success' : 'error']);
+    } else {
+        echo json_encode(['status' => 'invalid_id']);
+    }
+    exit;
 }
 
 function getLanguages($streams) {
@@ -65,6 +112,18 @@ function getLanguages($streams) {
         }
     }
     return !empty($langs) ? implode(' • ', $langs) : 'UND';
+}
+
+// Función auxiliar en PHP para formatear segundos a HH:MM:SS
+function formatTimePHP($seconds) {
+    $sec = floor($seconds);
+    $h = floor($sec / 3600);
+    $m = floor(($sec % 3600) / 60);
+    $s = $sec % 60;
+    if ($h > 0) {
+        return sprintf("%02d:%02d:%02d", $h, $m, $s);
+    }
+    return sprintf("%02d:%02d", $m, $s);
 }
 
 $idLocal = trim($_GET['id'] ?? '');
@@ -108,6 +167,10 @@ if (!$pelicula_db) {
     echo '<script>alert("La película no existe en la base de datos local."); window.location.href="index.php";</script>';
     exit;
 }
+
+// Obtener el tiempo de avance guardado (en segundos)
+$savedPlaybackTime = floatval($pelicula_db['reproduccion'] ?? 0);
+$formattedTimeText = formatTimePHP($savedPlaybackTime);
 
 // Si no había lista de versiones en el parámetro 'ids', usamos al menos la película seleccionada
 if (empty($availableVersions)) {
@@ -380,6 +443,13 @@ if (!empty($mediaStreams)) {
         border-color: var(--primary-color);
     }
 
+    .btn-play-container {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 10px;
+    }
+
     .btn-play-big {
         width: 100%;
         background: var(--primary-color);
@@ -388,7 +458,7 @@ if (!empty($mediaStreams)) {
         padding: 14px;
         border-radius: 10px;
         font-weight: 700;
-        font-size: 16px;
+        font-size: 15px;
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -404,6 +474,32 @@ if (!empty($mediaStreams)) {
     }
 
     .btn-play-big:active {
+        transform: scale(0.98);
+    }
+
+    .btn-restart {
+        width: 100%;
+        background: #374151;
+        color: #f3f4f6;
+        border: 1px solid rgba(255,255,255,0.1);
+        padding: 12px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: all 0.2s ease;
+    }
+
+    .btn-restart:hover {
+        background: #4b5563;
+        color: #ffffff;
+    }
+
+    .btn-restart:active {
         transform: scale(0.98);
     }
 
@@ -524,10 +620,25 @@ if (!empty($mediaStreams)) {
         <?php endforeach; ?>
     </select>
 
-    <button onclick="startPlayback()" class="btn-play-big">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-        Reproducir Película
-    </button>
+    <div class="btn-play-container">
+        <!-- BOTÓN PRINCIPAL CON TIEMPO DE CONTINUACIÓN -->
+        <button onclick="startPlayback(false)" class="btn-play-big">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            <?php if ($savedPlaybackTime > 5): ?>
+                Continuar Película (en <?= $formattedTimeText ?>)
+            <?php else: ?>
+                Reproducir Película
+            <?php endif; ?>
+        </button>
+
+        <!-- BOTÓN ADICIONAL PARA REPRODUCIR DESDE EL INICIO SI HAY UN TIEMPO GUARDADO -->
+        <?php if ($savedPlaybackTime > 5): ?>
+            <button onclick="startPlayback(true)" class="btn-restart">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                Reproducir desde el inicio
+            </button>
+        <?php endif; ?>
+    </div>
 </div>
 
 <!-- REPRODUCTOR DE VIDEO MODAL -->
@@ -546,11 +657,14 @@ if (!empty($mediaStreams)) {
 </div>
 
 <script>
+const currentLocalId = '<?= $idLocal ?>';
 const currentMovieId = '<?= $movieId ?>';
 const mediaSourceId = '<?= $mediaSourceId ?>';
 const serverUrl = '<?= $server ?>';
 const apiKey = '<?= $apikey ?>';
 const idsRawParam = '<?= htmlspecialchars($idsRaw, ENT_QUOTES) ?>';
+let savedPlaybackTime = <?= $savedPlaybackTime ?>;
+let forceStartFromZero = false;
 
 function changeMovieVersion(newId) {
     let targetUrl = 'index_sistema.php?id=' + encodeURIComponent(newId);
@@ -563,10 +677,54 @@ function changeMovieVersion(newId) {
 let shakaPlayer = null;
 let shakaUI = null;
 let isPlayingIntro = false;
+let saveInterval = null;
+
+/* --- LÓGICA DE GUARDADO DEL PROGRESO DE REPRODUCCIÓN (BD Y JELLYFIN) --- */
+function saveMovieProgress(currentTime, isStopped = false) {
+    if (isPlayingIntro || !currentLocalId) return;
+
+    const formData = new FormData();
+    formData.append('action', 'save_progress');
+    formData.append('id_peliculas', currentLocalId);
+    formData.append('jellyfin_id', currentMovieId);
+    formData.append('reproduccion', currentTime);
+    if (isStopped) {
+        formData.append('stopped', 'true');
+    }
+
+    fetch('index_sistema.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        if(data.status === 'success') {
+            savedPlaybackTime = currentTime;
+        }
+    })
+    .catch(err => console.warn('Error al guardar el progreso:', err));
+}
+
+function startProgressSaving(video) {
+    stopProgressSaving();
+    saveInterval = setInterval(() => {
+        if (video && !video.paused && video.currentTime > 0) {
+            saveMovieProgress(video.currentTime);
+        }
+    }, 10000);
+}
+
+function stopProgressSaving() {
+    if (saveInterval) {
+        clearInterval(saveInterval);
+        saveInterval = null;
+    }
+}
 
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 function resetVideoElement(video) {
+    stopProgressSaving();
     video.pause();
     video.removeAttribute('src');
     video.load();
@@ -603,7 +761,8 @@ function exitFullScreen() {
     }
 }
 
-function startPlayback() {
+function startPlayback(fromStart = false) {
+    forceStartFromZero = fromStart;
     const modal = document.getElementById('moviePlayerModal');
     const wrapper = document.getElementById('playerWrapper');
     const video = document.getElementById('moviePlayer');
@@ -715,15 +874,44 @@ async function playMainMovie() {
 
     const hlsUrl = `${serverUrl}/Videos/${currentMovieId}/master.m3u8?${streamParams.toString()}`;
 
+    // Determinar el segundo inicial
+    const startPos = forceStartFromZero ? 0 : (savedPlaybackTime > 5 ? savedPlaybackTime : 0);
+
+    video.onpause = () => {
+        if (!isPlayingIntro && video.currentTime > 0) {
+            saveMovieProgress(video.currentTime);
+        }
+    };
+
+    video.onended = () => {
+        if (!isPlayingIntro) {
+            saveMovieProgress(0, true);
+        }
+    };
+
     if (isIOS || video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = hlsUrl;
         video.load();
-        video.play().catch(e => {
+
+        if (startPos > 0) {
+            video.currentTime = startPos;
+        }
+
+        video.play().then(() => {
+            startProgressSaving(video);
+        }).catch(e => {
             console.warn("Fallo HLS nativo en iOS, intentando MP4 directo...", e);
             const directStreamUrl = `${serverUrl}/Videos/${currentMovieId}/stream.mp4?${streamParams.toString()}`;
             video.src = directStreamUrl;
             video.load();
-            video.play().catch(err => {
+
+            if (startPos > 0) {
+                video.currentTime = startPos;
+            }
+
+            video.play().then(() => {
+                startProgressSaving(video);
+            }).catch(err => {
                 console.error("Error crítico en iOS:", err);
                 alert("Error al reproducir la película en iOS.");
             });
@@ -733,14 +921,27 @@ async function playMainMovie() {
 
         try {
             await shakaPlayer.load(hlsUrl);
+
+            if (startPos > 0) {
+                video.currentTime = startPos;
+            }
+
             await video.play();
+            startProgressSaving(video);
         } catch (e) {
             console.warn("Fallo en HLS con Shaka. Ejecutando fallback MP4...", e);
             
             const directStreamUrl = `${serverUrl}/Videos/${currentMovieId}/stream.mp4?${streamParams.toString()}`;
             video.src = directStreamUrl;
             video.load();
-            video.play().catch(err => {
+
+            if (startPos > 0) {
+                video.currentTime = startPos;
+            }
+
+            video.play().then(() => {
+                startProgressSaving(video);
+            }).catch(err => {
                 console.error("Error crítico:", err);
                 alert("Error al reproducir la película.");
             });
@@ -756,6 +957,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function closeMoviePlayer() {
     const video = document.getElementById('moviePlayer');
+
+    if (!isPlayingIntro && video && video.currentTime > 0) {
+        saveMovieProgress(video.currentTime, true);
+    }
 
     exitFullScreen();
 

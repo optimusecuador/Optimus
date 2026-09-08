@@ -143,7 +143,7 @@ function getAudioTracksJson($movie, $apiKey, $serverBaseUrl, $streamingParams) {
     return !empty($tracks) ? json_encode($tracks, JSON_UNESCAPED_UNICODE) : '';
 }
 
-/* --- OBTENER ID DE USUARIO Y LIBRERÍA --- */
+/* --- OBTENER ID DE USUARIO Y LIBRERÍA (CON MAPEO DE NOMBRES) --- */
 $userData = fetchJellyfin("$server/Users", $apikey);
 $userId = $userData[0]['Id'] ?? '';
 $libraries = !empty($userId) ? fetchJellyfin("$server/Users/".$userId."/Views", $apikey) : [];
@@ -161,6 +161,37 @@ if (isset($libraries['Items'])) {
     }
     if (empty($libraryId) && isset($libraries['Items'][0])) {
         $libraryId = $libraries['Items'][0]['Id'];
+    }
+}
+
+/* --- OBTENER MAPEO DE COLECCIONES (BoxSet) EN JELLYFIN --- */
+$peliculaColeccionesMap = [];
+if (!empty($userId)) {
+    $boxSetUrl = "$server/Users/$userId/Items?Recursive=true&IncludeItemTypes=BoxSet&Fields=ItemIds";
+    $boxSetData = fetchJellyfin($boxSetUrl, $apikey);
+    if (!empty($boxSetData['Items'])) {
+        foreach ($boxSetData['Items'] as $boxSet) {
+            $nombreColeccion = $boxSet['Name'] ?? '';
+            if (empty($nombreColeccion)) continue;
+
+            // Obtener películas contenidas en la colección
+            $itemsColUrl = "$server/Users/$userId/Items?ParentId=" . $boxSet['Id'] . "&Recursive=true&IncludeItemTypes=Movie";
+            $itemsColData = fetchJellyfin($itemsColUrl, $apikey);
+
+            if (!empty($itemsColData['Items'])) {
+                foreach ($itemsColData['Items'] as $colMovie) {
+                    $mId = $colMovie['Id'] ?? '';
+                    if (!empty($mId)) {
+                        if (!isset($peliculaColeccionesMap[$mId])) {
+                            $peliculaColeccionesMap[$mId] = [];
+                        }
+                        if (!in_array($nombreColeccion, $peliculaColeccionesMap[$mId])) {
+                            $peliculaColeccionesMap[$mId][] = $nombreColeccion;
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -239,9 +270,10 @@ if (!empty($allMoviesList)) {
             // Guardar ID activo de Jellyfin
             $idsEnJellyfin[] = $idPel;
 
-            // Nombre de librería en vez de ID
+            // Obtener el nombre de la librería en vez del ID hash de Jellyfin
             $rawCat = $libraryId ?: ($m['ParentId'] ?? 'general');
-            $idCat = $libreriasMap[$rawCat] ?? $rawCat;
+            $nombreLibreria = $libreriasMap[$rawCat] ?? $rawCat;
+            $idCat = $nombreLibreria; // Se asigna el nombre traducido en id_categoria
             
             $nombre = $m['Name'] ?? '';
             $desc = $m['Overview'] ?? '';
@@ -285,17 +317,18 @@ if (!empty($allMoviesList)) {
             $reproduccion = (string) $reproduccionSegundos;
 
             // --- CAMPOS ADICIONALES: LIBRERÍA Y COLECCIONES ---
-            $libreria = $idCat;
+            $libreria = $nombreLibreria;
             
-            $coleccionesArr = [];
+            // Extraer colecciones del mapa BoxSet o del array nativo de la película
+            $coleccionesList = $peliculaColeccionesMap[$idPel] ?? [];
             if (!empty($m['Collections']) && is_array($m['Collections'])) {
                 foreach ($m['Collections'] as $col) {
-                    if (!empty($col['Name'])) {
-                        $coleccionesArr[] = $col['Name'];
+                    if (!empty($col['Name']) && !in_array($col['Name'], $coleccionesList)) {
+                        $coleccionesList[] = $col['Name'];
                     }
                 }
             }
-            $colecciones = implode(', ', $coleccionesArr);
+            $colecciones = implode(', ', $coleccionesList);
 
             $stmt->bind_param(
                 "sssssssssssssss", 

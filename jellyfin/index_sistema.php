@@ -666,6 +666,27 @@ const idsRawParam = '<?= htmlspecialchars($idsRaw, ENT_QUOTES) ?>';
 let savedPlaybackTime = <?= $savedPlaybackTime ?>;
 let forceStartFromZero = false;
 
+/* --- DETECCIÓN DEL TIPO DE DISPOSITIVO (TV / PC vs MÓVIL) --- */
+function obtenerTipoDispositivo() {
+    const ua = navigator.userAgent.toLowerCase();
+    const esTactil = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+    // 1. Detectar si es TV Box, Android TV, Smart TV o Apple TV
+    const esTV = /tv|smarttv|googletv|androidtv|large screen|hbbtv|appletv|box/i.test(ua);
+    if (esTV || (!esTactil && /android/i.test(ua))) {
+        return 'HIGH_QUALITY'; // TV Box o TV
+    }
+
+    // 2. Detectar si es Móvil o Tablet (Android / iOS)
+    const esMovil = /android|iphone|ipad|ipod|mobile/i.test(ua);
+    if (esMovil) {
+        return 'MOBILE'; // Teléfono celular o Tablet
+    }
+
+    // 3. Si no es ni Móvil ni TV, se trata de una PC / Laptop
+    return 'HIGH_QUALITY'; // Computadora PC / Laptop
+}
+
 function changeMovieVersion(newId) {
     let targetUrl = 'index_sistema.php?id=' + encodeURIComponent(newId);
     if (idsRawParam) {
@@ -856,17 +877,31 @@ async function playMainMovie() {
     const subIndex = document.getElementById('subtitleStreamSelect').value;
     const sessionId = Math.random().toString(36).substring(2, 15);
 
-    // Parámetros forzados: 720p (MaxHeight 720, MaxWidth 1280), 1.5M ancho de banda y 1500 de audio (150000)
+    // Obtener configuración de calidad según el dispositivo
+    const tipoDispositivo = obtenerTipoDispositivo();
+    
+    let maxHeight = '720';
+    let maxWidth = '1280';
+    let maxBitrate = '1500000'; // 1.5 Mbps para Celulares
+    let audioBitrate = '150000'; // 150k para Celulares
+
+    if (tipoDispositivo === 'HIGH_QUALITY') {
+        maxHeight = '1080';
+        maxWidth = '1920';
+        maxBitrate = '3000000'; // 3.0 Mbps para TV Box, Televisores y PC
+        audioBitrate = '1500000'; // 1500k para TV Box, Televisores y PC
+    }
+
     const streamParams = new URLSearchParams({
         'api_key': apiKey,
         'PlaySessionId': sessionId,
         'MediaSourceId': mediaSourceId,
         'VideoCodec': 'h264',
         'AudioCodec': 'aac',
-        'MaxHeight': '720',
-        'MaxWidth': '1280',
-        'maxStreamingBitrate': '1500000',
-        'AudioBitrate': '150000'
+        'MaxHeight': maxHeight,
+        'MaxWidth': maxWidth,
+        'maxStreamingBitrate': maxBitrate,
+        'AudioBitrate': audioBitrate
     });
 
     if (audioIndex !== "") streamParams.append('AudioStreamIndex', audioIndex);

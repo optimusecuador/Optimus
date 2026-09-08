@@ -148,12 +148,15 @@ $userData = fetchJellyfin("$server/Users", $apikey);
 $userId = $userData[0]['Id'] ?? '';
 $libraries = !empty($userId) ? fetchJellyfin("$server/Users/".$userId."/Views", $apikey) : [];
 $libraryId = '';
+$libreriasMap = [];
 
 if (isset($libraries['Items'])) {
     foreach ($libraries['Items'] as $lib) {
-        if (($lib['CollectionType'] ?? '') === 'movies') {
+        if (!empty($lib['Id']) && !empty($lib['Name'])) {
+            $libreriasMap[$lib['Id']] = $lib['Name'];
+        }
+        if (($lib['CollectionType'] ?? '') === 'movies' && empty($libraryId)) {
             $libraryId = $lib['Id'];
-            break;
         }
     }
     if (empty($libraryId) && isset($libraries['Items'][0])) {
@@ -171,7 +174,7 @@ do {
     $queryParams = [
         'Recursive' => 'true',
         'IncludeItemTypes' => 'Movie',
-        'Fields' => 'MediaSources,MediaStreams,ProductionYear,Overview,Genres,UserData',
+        'Fields' => 'MediaSources,MediaStreams,ProductionYear,Overview,Genres,UserData,Collections',
         'StartIndex' => $startIndex,
         'Limit' => $limitPerBatch
     ];
@@ -209,8 +212,9 @@ if (!is_dir($directorio_portadas)) {
 if (!empty($allMoviesList)) {
     $sqlSync = "INSERT INTO peliculas (
                     id_peliculas, id_categoria, nombre, descripcion, generos, 
-                    fecha, pelicula_url, pelicula_url_publico, portada_url, estreno, audio, pelicula_audio, reproduccion
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    fecha, pelicula_url, pelicula_url_publico, portada_url, estreno, audio, pelicula_audio, reproduccion,
+                    libreria, colecciones
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE 
                     id_categoria = VALUES(id_categoria),
                     nombre = VALUES(nombre),
@@ -223,7 +227,9 @@ if (!empty($allMoviesList)) {
                     estreno = VALUES(estreno),
                     audio = VALUES(audio),
                     pelicula_audio = VALUES(pelicula_audio),
-                    reproduccion = VALUES(reproduccion)";
+                    reproduccion = VALUES(reproduccion),
+                    libreria = VALUES(libreria),
+                    colecciones = VALUES(colecciones)";
 
     if ($stmt = $conexion->prepare($sqlSync)) {
         foreach ($allMoviesList as $m) {
@@ -233,7 +239,10 @@ if (!empty($allMoviesList)) {
             // Guardar ID activo de Jellyfin
             $idsEnJellyfin[] = $idPel;
 
-            $idCat = $libraryId ?: 'general';
+            // Nombre de librería en vez de ID
+            $rawCat = $libraryId ?: ($m['ParentId'] ?? 'general');
+            $idCat = $libreriasMap[$rawCat] ?? $rawCat;
+            
             $nombre = $m['Name'] ?? '';
             $desc = $m['Overview'] ?? '';
             
@@ -275,10 +284,24 @@ if (!empty($allMoviesList)) {
             $reproduccionSegundos = intval($playbackTicks / 10000000);
             $reproduccion = (string) $reproduccionSegundos;
 
+            // --- CAMPOS ADICIONALES: LIBRERÍA Y COLECCIONES ---
+            $libreria = $idCat;
+            
+            $coleccionesArr = [];
+            if (!empty($m['Collections']) && is_array($m['Collections'])) {
+                foreach ($m['Collections'] as $col) {
+                    if (!empty($col['Name'])) {
+                        $coleccionesArr[] = $col['Name'];
+                    }
+                }
+            }
+            $colecciones = implode(', ', $coleccionesArr);
+
             $stmt->bind_param(
-                "sssssssssssss", 
+                "sssssssssssssss", 
                 $idPel, $idCat, $nombre, $desc, $generos, 
-                $fecha, $peliculaUrl, $peliculaUrlPublico, $portadaUrl, $estreno, $audioLangs, $peliculaAudio, $reproduccion
+                $fecha, $peliculaUrl, $peliculaUrlPublico, $portadaUrl, $estreno, $audioLangs, $peliculaAudio, $reproduccion,
+                $libreria, $colecciones
             );
             
             if ($stmt->execute()) {

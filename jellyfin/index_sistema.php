@@ -546,18 +546,27 @@ if (!empty($mediaStreams)) {
 
     .video-watermark {
         position: absolute;
-        bottom: 60px;
-        right: 35px;
-        height: 100px;
+        bottom: 20px;
+        right: 20px;
+        height: 80px;
         width: auto;
         object-fit: contain;
         opacity: 0.6;
         pointer-events: none;
-        z-index: 1000001;
+        z-index: 2147483647;
         filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.5));
+    }
+
+    @media (max-width: 768px) {
+        .video-watermark {
+            bottom: 15px;
+            right: 15px;
+            height: 64px;
+        }
     }
     
     .shaka-video-container {
+        position: relative;
         width: 100%;
         height: 100%;
     }
@@ -651,8 +660,8 @@ if (!empty($mediaStreams)) {
     <div id="playerWrapper" style="position:relative; width:100%; height:100%; display:flex; justify-content:center; align-items:center; overflow:hidden;">
         <div id="shaka-container" class="shaka-video-container">
             <video id="moviePlayer" controls playsinline autoplay style="width:100%; height:100%; background:black; outline:none;"></video>
+            <img src="../images/empresa/logo.png" alt="Watermark" class="video-watermark">
         </div>
-        <img src="../images/empresa/logo.png" alt="Watermark" class="video-watermark">
     </div>
 </div>
 
@@ -785,11 +794,11 @@ function exitFullScreen() {
 function startPlayback(fromStart = false) {
     forceStartFromZero = fromStart;
     const modal = document.getElementById('moviePlayerModal');
-    const wrapper = document.getElementById('playerWrapper');
+    const container = document.getElementById('shaka-container');
     const video = document.getElementById('moviePlayer');
 
     modal.style.display = 'block';
-    requestFullScreen(wrapper, video);
+    requestFullScreen(container, video);
 
     if (shakaPlayer) {
         shakaPlayer.destroy().then(() => {

@@ -4,11 +4,10 @@
 // =========================================================================
 require('../conectar.php');
 
-// IMPORTAR PHPMAILER DESDE LA RUTA DE LA CARPERTA SRC
-// IMPORTAR PHPMAILER MEDIANTE RUTA RELATIVA
-require_once 'generar_automatico/PHPMailer/src/Exception.php';
-require_once 'generar_automatico/PHPMailer/src/PHPMailer.php';
-require_once 'generar_automatico/PHPMailer/src/SMTP.php';
+// IMPORTAR PHPMAILER USANDO RUTAS RELATIVAS (CON ../ AL INICIO)
+require_once '../generar_automatico/PHPMailer/src/Exception.php';
+require_once '../generar_automatico/PHPMailer/src/PHPMailer.php';
+require_once '../generar_automatico/PHPMailer/src/SMTP.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -27,7 +26,7 @@ $mensajeAuth = '';
 
 // Si existe un identificador guardado, validar contra la tabla peliculas_usuarios
 if (!empty($dispositivoId)) {
-    $stmtCheck = $conexion->prepare("SELECT * FROM peliculas_usuarios WHERE identificador = ? LIMIT 1");
+    $stmtCheck = $conexion->prepare("SELECT * FROM peliculas_usuarios WHERE identificador = ? AND verificado = 1 LIMIT 1");
     if ($stmtCheck) {
         $stmtCheck->bind_param("s", $dispositivoId);
         $stmtCheck->execute();
@@ -44,6 +43,44 @@ if (!$verificado && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actio
     $correoIngresado = filter_var($_POST['email_registro'] ?? '', FILTER_VALIDATE_EMAIL);
     
     if ($correoIngresado) {
+        // --- RECUPERAR CREDENCIALES DE YAHOO Y SERVIDOR DE LA BD ---
+        $mailenviar = "";
+        $contrasena = "";
+        $logo_mail = "";
+        
+        // Se usa $conexion (variable de conectar.php)
+        $sql69 = "SELECT * FROM mail ORDER BY mail ASC";
+        $result69 = mysqli_query($conexion, $sql69); 
+        if ($result69) {
+            while($crow69 = mysqli_fetch_assoc($result69)) {
+                $cuentas = $crow69['cuentas'];
+                $cuentas2 = substr($cuentas, 2); 
+                $cuentastexto = $crow69['ip'].$cuentas2;
+                $logo_mail = $crow69['logo']; 
+                $mailenviar = $crow69['mail'];
+                $contrasena = $crow69['contrasena'];
+            }
+        }
+
+        // --- DETECCIÓN DINÁMICA DE SERVIDOR (PÚBLICO VS LOCAL) ---
+        $clientIP = getClientIP();
+        $httpHost = $_SERVER['HTTP_HOST'] ?? '';
+
+        // Validar si la petición proviene de un rango IP privado o si se accedió vía IP local
+        if (
+            filter_var($clientIP, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false ||
+            strpos($httpHost, '10.') === 0 || 
+            strpos($httpHost, '192.168.') === 0 || 
+            strpos($httpHost, '172.') === 0 ||
+            strpos($httpHost, 'localhost') !== false
+        ) {
+            // Acceso por Red Local / IP Privada
+            $ip_servidor = "10.9.0.250";
+        } else {
+            // Acceso por IP Pública / Dominio Externo
+            $ip_servidor = "sistema-ubuntu.netbird.cloud";
+        }
+
         // Generar un token único temporal de verificación
         $tokenVerificacion = bin2hex(random_bytes(16));
         
@@ -53,32 +90,48 @@ if (!$verificado && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actio
             setcookie('dispositivo_mac_token', $dispositivoId, time() + (86400 * 365), "/");
         }
 
-        // Enlace hacia el archivo de verificación
-        $linkVerificacion = "http://sistema-ubuntu.netbird.cloud/optimus/peliculas/verificacion.php?token=" . urlencode($tokenVerificacion) . "&email=" . urlencode($correoIngresado) . "&mac=" . urlencode($dispositivoId);
+        // --- CORRECCIÓN Y CONSTRUCCIÓN DE LA URL DE VERIFICACIÓN ---
+        $dominioHost = $ip_servidor;
+        if (!empty($ip_servidor)) {
+            $parsedHost = parse_url($ip_servidor, PHP_URL_HOST);
+            if ($parsedHost) {
+                $dominioHost = $parsedHost;
+            } else {
+                $dominioHost = preg_replace('#^https?://#', '', strtok($ip_servidor, '/'));
+            }
+        }
 
-        // CONFIGURACIÓN Y ENVÍO MEDIANTE PHPMAILER
+        // Construcción limpia de la URL final
+        $linkVerificacion = "http://" . $dominioHost . "/optimus/peliculas/verificacion.php?token=" . urlencode($tokenVerificacion) . "&email=" . urlencode($correoIngresado) . "&mac=" . urlencode($dispositivoId);
+
+        // CONFIGURACIÓN Y ENVÍO MEDIANTE PHPMAILER (SERVICIO YAHOO)
         $mail = new PHPMailer(true);
 
         try {
-            // Configuración del Servidor SMTP
+            // Configuración Servidor SMTP Yahoo
             $mail->isSMTP();
-            $mail->Host       = 'smtp.gmail.com';                 // Servidor SMTP (cambia según tu proveedor)
+            $mail->Host       = 'smtp.mail.yahoo.com';
             $mail->SMTPAuth   = true;
-            $mail->Username   = 'tu_correo@gmail.com';            // Tu usuario SMTP
-            $mail->Password   = 'tu_contraseña_o_app_password';   // Tu contraseña SMTP
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;   // o PHPMailer::ENCRYPTION_SMTPS
-            $mail->Port       = 587;                              // Puerto SMTP (587 o 465)
+            $mail->Username   = $mailenviar;                          // Correo extraído de la BD
+            $mail->Password   = $contrasena;                          // Contraseña extraída de la BD
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;          // SSL requerido por Yahoo
+            $mail->Port       = 465;                                  // Puerto SSL para Yahoo
             $mail->CharSet    = 'UTF-8';
 
             // Destinatarios
-            $mail->setFrom('no-reply@sistema-ubuntu.netbird.cloud', 'Streaming App');
+            $mail->setFrom($mailenviar, 'Streaming App');
             $mail->addAddress($correoIngresado);
 
             // Contenido del Correo
             $mail->isHTML(true);
             $mail->Subject = 'Verificación de Dispositivo - Streaming';
+            
+            // Imagen del logo si se recuperó de la BD
+            $imgLogoHtml = !empty($logo_mail) ? "<img src='{$logo_mail}' alt='Logo' style='max-height: 50px; margin-bottom: 15px;'><br>" : "";
+
             $mail->Body    = "
                 <div style='font-family: Arial, sans-serif; background-color: #0b0f19; color: #ffffff; padding: 20px; border-radius: 8px;'>
+                    {$imgLogoHtml}
                     <h2 style='color: #38bdf8;'>Verificación de Dispositivo</h2>
                     <p>Hola,</p>
                     <p>Para verificar tu dispositivo e ingresar a la plataforma, haz clic en el siguiente botón:</p>
@@ -124,14 +177,12 @@ if (!$verificado && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actio
         user-select: none;
     }
 
-    /* Envoltorio principal para PC */
     .app-container {
         max-width: 1400px;
         margin: 0 auto;
         width: 100%;
     }
 
-    /* --- ENCABEZADO Y LOGO --- */
     .app-header {
         display: flex;
         align-items: center;
@@ -144,7 +195,6 @@ if (!$verificado && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actio
         object-fit: contain;
     }
 
-    /* --- PANELES --- */
     .panel-dark {
         background: #111827;
         border-radius: 12px;
@@ -175,7 +225,6 @@ if (!$verificado && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actio
         color: #e5e7eb;
     }
 
-    /* --- CONTENEDORES HORIZONTALES (Swipe / Scroll) --- */
     .mobile-scroll-container {
         display: flex;
         gap: 12px;
@@ -200,7 +249,6 @@ if (!$verificado && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actio
         border-radius: 10px;
     }
 
-    /* --- MARCA DE AGUA Y SUPERPOSICIONES SOBRE LA PORTADA --- */
     .poster-container {
         position: relative;
         width: 100%;
@@ -251,7 +299,6 @@ if (!$verificado && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actio
         border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
-    /* CÍRCULO EN LA PARTE INFERIOR IZQUIERDA PARA CONTEO DE PELÍCULAS */
     .count-badge {
         position: absolute;
         bottom: 28px;
@@ -272,7 +319,6 @@ if (!$verificado && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actio
         border: 1.5px solid #ffffff;
     }
 
-    /* --- TARJETAS MÓVILES / RECIENTES --- */
     .movie-card-mobile {
         flex: 0 0 130px;
         max-width: 130px;
@@ -314,7 +360,6 @@ if (!$verificado && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actio
         margin-bottom: 2px;
     }
 
-    /* --- GRID ADAPTATIVO PARA BIBLIOTECA COMPLETA --- */
     .movies-grid-container {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
@@ -346,7 +391,6 @@ if (!$verificado && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actio
         cursor: pointer;
     }
 
-    /* --- BUSCADOR Y FORMULARIO --- */
     .search-form {
         display: flex;
         gap: 8px;
@@ -390,7 +434,6 @@ if (!$verificado && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actio
         background: #1d4ed8;
     }
 
-    /* --- BARRAS DE CATEGORÍAS Y GÉNEROS --- */
     .categories-bar {
         display: flex;
         gap: 8px;
@@ -415,7 +458,6 @@ if (!$verificado && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actio
         opacity: 0.85;
     }
 
-    /* --- PAGINACIÓN --- */
     .pagination-info {
         font-size: 12px;
         color: #9ca3af;
@@ -499,14 +541,14 @@ if (!$verificado && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['actio
 
 <div class="app-container">
 
-<!-- SECCIÓN INICIAL DE VERIFICACIÓN / REGISTRO SI EL DISPOSITIVO NO ESTÁ REGISTRADO -->
+<!-- SECCIÓN INICIAL DE VERIFICACIÓN SI EL DISPOSITIVO NO ESTÁ REGISTRADO -->
 <?php if (!$verificado): ?>
-<div class="panel-dark" style="border: 2px solid #2563eb; background: #0f172a;">
-    <div class="isp-title" style="color: #60a5fa; margin-bottom: 8px;">
-        🔒 Registro y Verificación de Dispositivo
+<div class="panel-dark" style="border: 2px solid #eab308; background: #0f172a;">
+    <div class="isp-title" style="color: #facc15; margin-bottom: 8px;">
+        ⚠️ Modo Limitado (Dispositivo no verificado)
     </div>
     <p style="font-size: 13px; color: #9ca3af; margin-top: 0; margin-bottom: 15px;">
-        Tu dispositivo actual aún no se encuentra verificado en nuestro sistema. Ingresa tu correo electrónico para enviarte un enlace de autorización.
+        Actualmente estás viendo una demo limitada a <strong>50 películas</strong>. Para acceder a todo el catálogo sin restricción, ingresa tu correo y verifica tu dispositivo.
     </p>
 
     <?= $mensajeAuth ?>
@@ -566,8 +608,10 @@ $langFilter = $_GET['lang'] ?? '';
 $searchTerm = $_GET['search'] ?? '';
 $collectionFilter = $_GET['collection'] ?? '';
 $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
-$limitPerPage = 200;
-$startIndex = 0; // Inicialización por defecto para evitar warnings de variable indefinida
+
+// CONTROL DE LÍMITE DE PELÍCULAS SEGÚN VERIFICACIÓN
+$limitPerPage = $verificado ? 200 : 50; 
+$startIndex = 0;
 
 /* --- 2. OBTENER LIBRERÍAS / CATEGORÍAS DESDE LA BD --- */
 $libraries = [];
@@ -617,30 +661,31 @@ if (!empty($collectionFilter) && $collectionFilter !== 'all') {
 
 $sqlWhereString = implode(" AND ", $whereClauses);
 
-/* --- 4. OBTENER PELÍCULAS PARA SEGUIR VIENDO (REPRODUCCIÓN > 0) --- */
+/* --- 4. OBTENER PELÍCULAS PARA SEGUIR VIENDO --- */
 $continueWatchingMovies = [];
-$resContinue = $conexion->query("SELECT * FROM peliculas WHERE CAST(reproduccion AS UNSIGNED) > 0 ORDER BY CAST(reproduccion AS UNSIGNED) DESC LIMIT 20");
+$limitContinue = $verificado ? 20 : 5;
+$resContinue = $conexion->query("SELECT * FROM peliculas WHERE CAST(reproduccion AS UNSIGNED) > 0 ORDER BY CAST(reproduccion AS UNSIGNED) DESC LIMIT " . $limitContinue);
 if ($resContinue) {
     while ($rowC = $resContinue->fetch_assoc()) {
         $continueWatchingMovies[] = $rowC;
     }
 }
 
-/* --- 5. OBTENER PELÍCULAS RECIENTES DE FORMA ALEATORIA --- */
+/* --- 5. OBTENER PELÍCULAS RECIENTES --- */
 $recentMovies = [];
-$resRecent = $conexion->query("SELECT * FROM peliculas ORDER BY RAND() LIMIT 20");
+$limitRecent = $verificado ? 20 : 10;
+$resRecent = $conexion->query("SELECT * FROM peliculas ORDER BY RAND() LIMIT " . $limitRecent);
 if ($resRecent) {
     while ($row = $resRecent->fetch_assoc()) {
         $recentMovies[] = $row;
     }
 }
 
-/* --- 6. MANEJO ESPECIAL DE MODO VISTA DE COLECCIONES (GROUP BY COLECCIÓN) --- */
+/* --- 6. MANEJO ESPECIAL DE MODO VISTA DE COLECCIONES --- */
 $isCollectionView = ($collectionFilter === 'all');
 $collectionsListGrouped = [];
 
 if ($isCollectionView) {
-    // Si se activa la vista general de colecciones, agrupamos por cada colección existente
     $sqlCols = "SELECT * FROM peliculas WHERE colecciones IS NOT NULL AND colecciones != '' ORDER BY id_peliculas DESC";
     $resCols = $conexion->query($sqlCols);
     if ($resCols) {
@@ -663,25 +708,34 @@ if ($isCollectionView) {
             }
         }
     }
+    
+    // Si no está verificado, limitar también el total de colecciones mostradas
+    if (!$verificado) {
+        $collectionsListGrouped = array_slice($collectionsListGrouped, 0, 50, true);
+    }
+    
     $totalRecords = count($collectionsListGrouped);
     $totalPages = 1;
     $startIndex = 0;
 } else {
-    /* --- 7. CONTAR TOTAL DE REGISTROS PARA PAGINACIÓN DE PELÍCULAS NORMALES --- */
+    /* --- 7. CONTAR Y OBTENER RESULTADOS PAGINADOS --- */
     $countSql = "SELECT COUNT(*) as total FROM peliculas WHERE " . $sqlWhereString;
     $stmtCount = $conexion->prepare($countSql);
     if (!empty($params)) {
         $stmtCount->bind_param($types, ...$params);
     }
     $stmtCount->execute();
-    $totalRecords = $stmtCount->get_result()->fetch_assoc()['total'] ?? 0;
+    $rawTotal = $stmtCount->get_result()->fetch_assoc()['total'] ?? 0;
     $stmtCount->close();
+
+    // Restringir el máximo total de registros según el estado de verificación
+    $totalRecords = $verificado ? $rawTotal : min(50, $rawTotal);
 
     $totalPages = max(1, ceil($totalRecords / $limitPerPage));
     $page = min($page, $totalPages);
     $startIndex = ($page - 1) * $limitPerPage;
 
-    /* --- OBTENER LISTADO PAGINADO DE LA BIBLIOTECA DE FORMA ALEATORIA --- */
+    /* --- OBTENER LISTADO PAGINADO DE LA BIBLIOTECA --- */
     $dataSql = "SELECT * FROM peliculas WHERE " . $sqlWhereString . " ORDER BY RAND() LIMIT ?, ?";
     $stmtData = $conexion->prepare($dataSql);
 
@@ -901,7 +955,7 @@ $nextUrl = '?' . http_build_query($nextParams);
 
     <!-- INFORMACIÓN DE REGISTROS -->
     <div class="pagination-info">
-        <span>Mostrando registros <strong><?= $startRecord ?> - <?= $endRecord ?></strong> de un total de <strong><?= $totalRecords ?></strong></span>
+        <span>Mostrando registros <strong><?= $startRecord ?> - <?= $endRecord ?></strong> de un total de <strong><?= $totalRecords ?></strong> <?= !$verificado ? '(Límite sin verificación)' : '' ?></span>
         <?php if($page < $totalPages): ?>
             <span style="color: #3b82f6; font-weight: bold;">Página <?= $page ?> de <?= $totalPages ?></span>
         <?php else: ?>

@@ -1,3 +1,105 @@
+<?php
+// =========================================================================
+// SECCIÓN DE VERIFICACIÓN / REGISTRO POR CORREO (AL INICIAR TODO)
+// =========================================================================
+require('../conectar.php');
+
+// IMPORTAR PHPMAILER DESDE LA RUTA DE LA CARPERTA SRC
+// IMPORTAR PHPMAILER MEDIANTE RUTA RELATIVA
+require_once 'generar_automatico/PHPMailer/src/Exception.php';
+require_once 'generar_automatico/PHPMailer/src/PHPMailer.php';
+require_once 'generar_automatico/PHPMailer/src/SMTP.php';
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
+// Función helper para obtener la IP del cliente (alternativa a MAC en la web)
+function getClientIP() {
+    if (!empty($_SERVER['HTTP_CLIENT_IP'])) return $_SERVER['HTTP_CLIENT_IP'];
+    if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) return $_SERVER['HTTP_X_FORWARDED_FOR'];
+    return $_SERVER['REMOTE_ADDR'] ?? '';
+}
+
+// Intentar recuperar el identificador local guardado en la cookie del navegador
+$dispositivoId = $_COOKIE['dispositivo_mac_token'] ?? '';
+$verificado = false;
+$mensajeAuth = '';
+
+// Si existe un identificador guardado, validar contra la tabla peliculas_usuarios
+if (!empty($dispositivoId)) {
+    $stmtCheck = $conexion->prepare("SELECT * FROM peliculas_usuarios WHERE identificador = ? LIMIT 1");
+    if ($stmtCheck) {
+        $stmtCheck->bind_param("s", $dispositivoId);
+        $stmtCheck->execute();
+        $resCheck = $stmtCheck->get_result();
+        if ($resCheck && $resCheck->num_rows > 0) {
+            $verificado = true;
+        }
+        $stmtCheck->close();
+    }
+}
+
+// Procesar el envío del formulario de registro de correo
+if (!$verificado && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_registro_email'])) {
+    $correoIngresado = filter_var($_POST['email_registro'] ?? '', FILTER_VALIDATE_EMAIL);
+    
+    if ($correoIngresado) {
+        // Generar un token único temporal de verificación
+        $tokenVerificacion = bin2hex(random_bytes(16));
+        
+        // Generar un id temporal para identificar este dispositivo
+        if (empty($dispositivoId)) {
+            $dispositivoId = 'DEV_' . md5(getClientIP() . $_SERVER['HTTP_USER_AGENT'] . microtime());
+            setcookie('dispositivo_mac_token', $dispositivoId, time() + (86400 * 365), "/");
+        }
+
+        // Enlace hacia el archivo de verificación
+        $linkVerificacion = "http://sistema-ubuntu.netbird.cloud/optimus/peliculas/verificacion.php?token=" . urlencode($tokenVerificacion) . "&email=" . urlencode($correoIngresado) . "&mac=" . urlencode($dispositivoId);
+
+        // CONFIGURACIÓN Y ENVÍO MEDIANTE PHPMAILER
+        $mail = new PHPMailer(true);
+
+        try {
+            // Configuración del Servidor SMTP
+            $mail->isSMTP();
+            $mail->Host       = 'smtp.gmail.com';                 // Servidor SMTP (cambia según tu proveedor)
+            $mail->SMTPAuth   = true;
+            $mail->Username   = 'tu_correo@gmail.com';            // Tu usuario SMTP
+            $mail->Password   = 'tu_contraseña_o_app_password';   // Tu contraseña SMTP
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;   // o PHPMailer::ENCRYPTION_SMTPS
+            $mail->Port       = 587;                              // Puerto SMTP (587 o 465)
+            $mail->CharSet    = 'UTF-8';
+
+            // Destinatarios
+            $mail->setFrom('no-reply@sistema-ubuntu.netbird.cloud', 'Streaming App');
+            $mail->addAddress($correoIngresado);
+
+            // Contenido del Correo
+            $mail->isHTML(true);
+            $mail->Subject = 'Verificación de Dispositivo - Streaming';
+            $mail->Body    = "
+                <div style='font-family: Arial, sans-serif; background-color: #0b0f19; color: #ffffff; padding: 20px; border-radius: 8px;'>
+                    <h2 style='color: #38bdf8;'>Verificación de Dispositivo</h2>
+                    <p>Hola,</p>
+                    <p>Para verificar tu dispositivo e ingresar a la plataforma, haz clic en el siguiente botón:</p>
+                    <p style='margin: 25px 0;'>
+                        <a href='{$linkVerificacion}' style='background-color: #2563eb; color: #ffffff; padding: 12px 20px; text-decoration: none; border-radius: 6px; font-weight: bold;'>Verificar mi Dispositivo</a>
+                    </p>
+                    <p style='font-size: 12px; color: #9ca3af;'>Si no puedes hacer clic en el botón, copia y pega este enlace en tu navegador:<br>{$linkVerificacion}</p>
+                </div>
+            ";
+            $mail->AltBody = "Hola,\n\nPara verificar tu dispositivo e ingresar a la plataforma, haz clic en el siguiente enlace:\n\n" . $linkVerificacion;
+
+            $mail->send();
+            $mensajeAuth = '<div style="background: #065f46; color: #a7f3d0; padding: 12px; border-radius: 8px; margin-bottom: 15px;">Se ha enviado un correo de verificación a <strong>'.htmlspecialchars($correoIngresado).'</strong>. Por favor revisa tu bandeja de entrada o spam y haz clic en el enlace.</div>';
+        } catch (Exception $e) {
+            $mensajeAuth = '<div style="background: #991b1b; color: #fecaca; padding: 12px; border-radius: 8px; margin-bottom: 15px;">Error al enviar el correo: '.htmlspecialchars($mail->ErrorInfo).'</div>';
+        }
+    } else {
+        $mensajeAuth = '<div style="background: #991b1b; color: #fecaca; padding: 12px; border-radius: 8px; margin-bottom: 15px;">Por favor, ingresa un correo electrónico válido.</div>';
+    }
+}
+?>
 <!doctype html>
 <html>
 <head>
@@ -397,9 +499,27 @@
 
 <div class="app-container">
 
-<?php
-require('../conectar.php');
+<!-- SECCIÓN INICIAL DE VERIFICACIÓN / REGISTRO SI EL DISPOSITIVO NO ESTÁ REGISTRADO -->
+<?php if (!$verificado): ?>
+<div class="panel-dark" style="border: 2px solid #2563eb; background: #0f172a;">
+    <div class="isp-title" style="color: #60a5fa; margin-bottom: 8px;">
+        🔒 Registro y Verificación de Dispositivo
+    </div>
+    <p style="font-size: 13px; color: #9ca3af; margin-top: 0; margin-bottom: 15px;">
+        Tu dispositivo actual aún no se encuentra verificado en nuestro sistema. Ingresa tu correo electrónico para enviarte un enlace de autorización.
+    </p>
 
+    <?= $mensajeAuth ?>
+
+    <form method="POST" action="" class="search-form">
+        <input type="hidden" name="action_registro_email" value="1">
+        <input type="email" name="email_registro" class="clientes-input" placeholder="Correo Electrónico para verificación..." required style="max-width: 400px;">
+        <button type="submit" class="primary-btn">Enviar Verificación</button>
+    </form>
+</div>
+<?php endif; ?>
+
+<?php
 /* --- FUNCIÓN DEFINITIVA PARA RUTAS DE IMÁGENES MANTENIENDO EL PUERTO ORIGINAL --- */
 function fixImageUrl($url) {
     if (empty($url)) return $url;

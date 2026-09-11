@@ -1,7 +1,9 @@
-package com.example.global
+package com.example.optimus
 
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.net.VpnService
 import android.os.Bundle
 import android.view.View
 import android.webkit.WebChromeClient
@@ -10,13 +12,15 @@ import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.example.global.R
+import android.os.Build
+import com.example.optimus.R // <-- Asegúrate de que esta línea esté presente
 
 class MainActivity : AppCompatActivity() {
 
@@ -27,6 +31,16 @@ class MainActivity : AppCompatActivity() {
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var customChromeClient: WebChromeClient? = null
+
+    // Lanzador para solicitar el permiso de VPN al sistema Android
+    private val vpnPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            // El usuario aceptó el permiso, procedemos a iniciar NetBird con la Key
+            startNetBirdService()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -129,12 +143,31 @@ class MainActivity : AppCompatActivity() {
                     myWebView.visibility = View.VISIBLE
                     myWebView.loadUrl("http://100.117.94.55/optimus/peliculas/index.php")
                 } else {
-                    // Ping fallido: mostrar pantalla de Netbird
+                    // Ping fallido: mostrar pantalla de Netbird y solicitar permisos de VPN
                     myWebView.visibility = View.GONE
                     layoutErrorNetbird.visibility = View.VISIBLE
+                    checkAndRequestVpnPermission()
                 }
             }
         }
+    }
+
+    private fun checkAndRequestVpnPermission() {
+        val intent = VpnService.prepare(this)
+        if (intent != null) {
+            // Lanza el diálogo del sistema pidiendo permiso para crear conexiones VPN
+            vpnPermissionLauncher.launch(intent)
+        } else {
+            // Ya cuenta con el permiso concedido previamente
+            startNetBirdService()
+        }
+    }
+
+    private fun startNetBirdService() {
+        val serviceIntent = Intent(this, NetBirdVpnService::class.java).apply {
+            putExtra("SETUP_KEY", "00798ACD-BD90-49A3-938F-C93B09A09A3B")
+        }
+        startService(serviceIntent)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

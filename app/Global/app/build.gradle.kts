@@ -3,13 +3,13 @@ plugins {
 }
 
 android {
-    namespace = "com.example.global"
+    namespace = "com.example.optimus"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.example.global"
+        applicationId = "com.example.optimus"
         minSdk = 24
         targetSdk = 37
         versionCode = 1
@@ -40,4 +40,9 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
+    // Importar el archivo .aar local
+
+    implementation(files("libs/libnetbird.aar"))
+    // Dependencias comunes que NetBird suele requerir (por ejemplo, corrutinas o soporteandroidx si aplica)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
 }

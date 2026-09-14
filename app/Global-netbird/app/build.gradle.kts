@@ -40,11 +40,9 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
+    // Importar el archivo .aar local
 
-    // Importante para lifecycleScope y corrutinas
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-
-    // Para compilar el .aar compilado de Tailscale
-    implementation(files("libs/libtailscale_v3.aar"))
+    implementation(files("libs/libnetbird.aar"))
+    // Dependencias comunes que NetBird suele requerir (por ejemplo, corrutinas o soporteandroidx si aplica)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
 }

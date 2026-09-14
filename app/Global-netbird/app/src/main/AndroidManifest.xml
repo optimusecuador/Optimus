@@ -2,10 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permisos de Red y Servicios en Segundo Plano -->
+    <!-- Permisos necesarios para la red y el servicio VPN -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
     <application
         android:allowBackup="true"
@@ -18,29 +19,28 @@
         android:theme="@style/Theme.Optimus"
         android:usesCleartextTraffic="true">
 
-        <activity
-            android:name="com.example.optimus.MainActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
-            android:exported="true"
-            android:theme="@style/Theme.Optimus">
-            <!-- ESA LÍNEA DE ARRIBA (configChanges) ES OBLIGATORIA PARA EL VIDEO -->
-
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-
-        <!-- Declaración del servicio VPN de Tailscale -->
+        <!-- Servicio VPN obligatorio requerido por Android para levantar la interfaz tun -->
         <service
-            android:name=".TailscaleService"
-            android:exported="false"
-            android:permission="android.permission.BIND_VPN_SERVICE">
+            android:name="com.example.optimus.NetBirdVpnService"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>
         </service>
+
+        <activity
+            android:name="com.example.optimus.MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Optimus"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
+            <!-- ESA LÍNEA DE ARRIBA (configChanges) ES OBLIGATORIA PARA EL VIDEO -->
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
     </application>
 

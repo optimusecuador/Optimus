@@ -1,6 +1,5 @@
 package com.example.optimus
 
-
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
@@ -13,17 +12,15 @@ import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.net.InetSocketAddress
-import java.net.Socket
-
+import android.os.Build
+import com.example.optimus.R // <-- Asegúrate de que esta línea esté presente
 
 class MainActivity : AppCompatActivity() {
 
@@ -35,13 +32,13 @@ class MainActivity : AppCompatActivity() {
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var customChromeClient: WebChromeClient? = null
 
+    // Lanzador para solicitar el permiso de VPN al sistema Android
     private val vpnPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == RESULT_OK) {
-            startTailscaleService()
-        } else {
-            checkServerAndLoad()
+            // El usuario aceptó el permiso, procedemos a iniciar NetBird con la Key
+            startNetBirdService()
         }
     }
 
@@ -54,7 +51,7 @@ class MainActivity : AppCompatActivity() {
         layoutErrorNetbird = findViewById(R.id.layoutErrorNetbird)
         btnRedLocal = findViewById(R.id.btnRedLocal)
 
-        // Configuración del WebView
+        // Configuración de WebView
         myWebView.settings.javaScriptEnabled = true
         myWebView.settings.domStorageEnabled = true
         myWebView.settings.mediaPlaybackRequiresUserGesture = false
@@ -113,62 +110,64 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        // Acción del botón de red local
+        // Configurar acción del botón "Continuar con Red Local"
         btnRedLocal.setOnClickListener {
             layoutErrorNetbird.visibility = View.GONE
             myWebView.visibility = View.VISIBLE
             myWebView.loadUrl("http://10.9.0.250/optimus/jellyfin/index.php")
         }
 
-        // Iniciar VPN y conectar
-        prepareAndStartVpn()
-    }
-
-    private fun prepareAndStartVpn() {
-        val vpnIntent = VpnService.prepare(this)
-        if (vpnIntent != null) {
-            vpnPermissionLauncher.launch(vpnIntent)
-        } else {
-            startTailscaleService()
-        }
-    }
-
-    private fun startTailscaleService() {
-        val intent = Intent(this, TailscaleService::class.java)
-        startService(intent)
-
-        // Esperar 4 segundos a que el Reverse Proxy de Go (127.0.0.1:8085) se levante
-        lifecycleScope.launch {
-            delay(4000)
-            checkServerAndLoad()
-        }
+        // Ejecutar Ping al iniciar
+        checkServerAndLoad()
     }
 
     private fun checkServerAndLoad() {
+        // Lanzar tarea en hilo secundario (IO)
         lifecycleScope.launch(Dispatchers.IO) {
-            // Probar el socket local del Proxy Reverso en el puerto 8085
+            val ipPrincipal = "100.117.94.55"
             val isReachable = try {
-                val socket = Socket()
-                socket.connect(InetSocketAddress("127.0.0.1", 8085), 3000)
-                socket.close()
-                true
+                // Ejecuta un ping nativo en el sistema (1 paquete, maximo 2 segundos de espera)
+                val process = Runtime.getRuntime().exec("/system/bin/ping -c 1 -W 2 $ipPrincipal")
+                val status = process.waitFor()
+                status == 0 // Si el status es 0, el ping fue exitoso
             } catch (e: Exception) {
                 e.printStackTrace()
                 false
             }
 
+            // Volver al hilo principal para actualizar la UI
             withContext(Dispatchers.Main) {
                 if (isReachable) {
+                    // Ping exitoso: mostrar WebView y cargar IP remota
                     layoutErrorNetbird.visibility = View.GONE
                     myWebView.visibility = View.VISIBLE
-                    // Redirigir a través del túnel reverso local
-                    myWebView.loadUrl("http://127.0.0.1:8085/optimus/peliculas/index.php")
+                    myWebView.loadUrl("http://100.117.94.55/optimus/peliculas/index.php")
                 } else {
+                    // Ping fallido: mostrar pantalla de Netbird y solicitar permisos de VPN
                     myWebView.visibility = View.GONE
                     layoutErrorNetbird.visibility = View.VISIBLE
+                    checkAndRequestVpnPermission()
                 }
             }
         }
+    }
+
+    private fun checkAndRequestVpnPermission() {
+        val intent = VpnService.prepare(this)
+        if (intent != null) {
+            // Lanza el diálogo del sistema pidiendo permiso para crear conexiones VPN
+            vpnPermissionLauncher.launch(intent)
+        } else {
+            // Ya cuenta con el permiso concedido previamente
+            startNetBirdService()
+        }
+    }
+
+    private fun startNetBirdService() {
+        val serviceIntent = Intent(this, NetBirdVpnService::class.java).apply {
+            putExtra("SETUP_KEY", "00798ACD-BD90-49A3-938F-C93B09A09A3B")
+        }
+        startService(serviceIntent)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

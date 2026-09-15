@@ -22,6 +22,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Optimus"
+rootProject.name = "vpn"
 include(":app")
-include(":vpn")
+ 
